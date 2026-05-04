@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Stack de Demanda de Camiones</title>
+
+  <!-- D3 -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+
+  <!-- Estilos -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <div id="chart-container">
+    <div id="header-date-container"></div>
+    <div id="chart"></div>
+    <div id="panel"></div>
+  </div>
+  <div id="gantt-scroll-container">
+    <div id="gantt-chart"></div>
+  </div>
+
+
+  <div id="filter-config-panel" class="hidden">
+    <div id="filter-config-header">
+      <span>Filtros</span>
+      <button id="filter-config-close">Salir</button>
+    </div>
+    <div id="filter-config-content" class="compact-grid">
+      <div class="filter-group">
+        <label for="filter-plantagrupo">Planta / Grupo</label>
+        <select id="filter-plantagrupo"></select>
+      </div>
+
+      <div class="filter-group">
+        <label for="filter-fecha">Fecha</label>
+        <select id="filter-fecha"></select>
+      </div>
+
+      <div class="filter-group">
+        <label for="filter-codobra">CodObra</label>
+        <input list="codobras-list" id="filter-codobra" placeholder="-- Buscar --" autocomplete="off">
+        <datalist id="codobras-list"></datalist>
+      </div>
+
+      <div class="filter-group checkbox-group">
+        <input type="checkbox" id="filter-green" title="Filtrar Verdes (Confirmados Mono)">
+        <label for="filter-green" style="margin-bottom: 0;">Mostrar solo Verdes en gantt (1 camión)</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel de Configuración Estética -->
+  <div id="settings-panel" class="hidden">
+    <div id="settings-header">
+      <span>Configuración Visual</span>
+      <button id="settings-close">Cerrar</button>
+    </div>
+    <div id="settings-content" class="compact-grid">
+      <div class="filter-group">
+        <label for="range-stroke-width">Grosor Línea</label>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input type="range" id="range-stroke-width" min="0.1" max="2" step="0.1">
+          <span id="val-stroke-width" style="font-size: 11px; width: 25px;">-</span>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label for="range-opacity">Op. Líneas</label>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input type="range" id="range-opacity" min="0.1" max="1" step="0.1">
+          <span id="val-opacity" style="font-size: 11px; width: 25px;">-</span>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label for="range-triangle-opacity">Op. Triángulos</label>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input type="range" id="range-triangle-opacity" min="0.1" max="1" step="0.1">
+          <span id="val-triangle-opacity" style="font-size: 11px; width: 25px;">-</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="help-modal" class="hidden">
+    <div id="help-modal-content">
+      <div id="help-modal-header">
+        <span>Ayuda e Interacción</span>
+        <button id="help-modal-close">Cerrar</button>
+      </div>
+      <div id="help-modal-body">
+        <div class="shortcut-list">
+          <p><b>H</b> Abrir/Cerrar esta Ventana de Ayuda</p>
+          <p><b>P</b> Abrir Panel de Filtros</p>
+          <p><b>C</b> Configuración Visual (Grosor/Opacidad)</p>
+          <p><b>S / ESC</b> Cerrar Paneles Activos</p>
+          <p><b>L</b> Limpiar búsqueda de Obra y mostrar todas en combobox</p>
+        </div>
+        <hr>
+        <div class="interaction-tips">
+          <p><strong>Click en Pedido</strong>: Resalta en rojo todos los pedidos de la misma Obra y sincroniza el panel
+            de búsqueda.</p>
+          <p><strong>Filtro Verde</strong>: El checkbox en el Panel de Filtros (P) filtra la vista Gantt por camiones de
+            1 viaje (verdes).</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts del gráfico -->
+  <script src="js/config.js"></script>
+  <script src="js/dataUtils.js"></script>
+  <script src="js/stackUtils.js"></script>
+  <script src="js/chartUtils.js"></script>
+  <script src="js/interaction.js"></script>
+  <script src="js/main.js"></script>
+
+</body>
+
+</html>

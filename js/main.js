@@ -1,0 +1,577 @@
+/* ================== MAIN ================== */
+const width = 1260;
+const height = 490;
+const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+
+const panel = d3.select("#panel");
+const { svg, g, innerW, innerH } = createSVG("#chart", width, height, margin);
+
+svg.on("mouseleave", () => resetInteraction({
+  cursor: d3.select(".cursor"),
+  layers: d3.selectAll("g.pedido"),
+  overlay: d3.select(".overlay"),
+  panel,
+  band: window.currentBand
+}));
+
+let pedidos, layers, area, scales, band, ganttPanel;
+window.appCache = {};
+
+Promise.all([
+  fetch(`data/Pedidos.json?v=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
+  fetch(`data/colores.json?v=${Date.now()}`, { cache: "no-store" }).then(r => r.json()).catch(() => []),
+  fetch(`data/plantas.json?v=${Date.now()}`, { cache: "no-store" }).then(r => r.json()).catch(() => ({}))
+])
+  .then(([data, coloresData, plantasData]) => {
+    window.plantasData = plantasData;
+    window.pedidoColorsMap = new Map(coloresData.map(c => [c.id, c.color]));
+    /* ===== META INFO ===== */
+    const rawReportDate = data.DiaReporte;
+    const meta = {
+      DiaReporte: formatFecha(rawReportDate),
+      HoraReporte: data.HoraReporte
+    };
+
+    // Load ALL orders without initial filtering by date
+    const fullPedidos = Object.entries(data.pedidos)
+      .filter(([id]) => id !== "dummy")
+      .map(([id, p]) => {
+        const pedidoNeg = extendPedidoNegocio(p, id, plantasData);
+        const XG = extendPedidoXG(pedidoNeg, CFG.granularidadMin);
+        const MaxCamiones = XG.demanda.length
+          ? Math.max(...XG.demanda)
+          : 0;
+        return { ...pedidoNeg, XG, MaxCamiones };
+      });
+
+    // Helpers for dynamic styling based on date
+    function getTomorrow(yyyymmdd) {
+      if (!yyyymmdd || yyyymmdd.length !== 8) return null;
+      const y = Number(yyyymmdd.slice(0, 4));
+      const m = Number(yyyymmdd.slice(4, 6)) - 1;
+      const d = Number(yyyymmdd.slice(6, 8));
+      const dt = new Date(y, m, d);
+      dt.setDate(dt.getDate() + 1);
+      return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, "0")}${String(dt.getDate()).padStart(2, "0")}`;
+    }
+
+    const tomorrowStr = getTomorrow(rawReportDate);
+
+    function getDateStyles(dateStr) {
+      if (dateStr === rawReportDate) return { bg: "#ff8c00", text: "#fff", label: " (Hoy)" };
+      if (dateStr === tomorrowStr) return { bg: "#28a745", text: "#fff", label: " (Mañana)" };
+      if (dateStr > tomorrowStr) return { bg: "#add8e6", text: "#000", label: "" };
+      return { bg: "#eee", text: "#555", label: "" };
+    }
+
+    // Populate Date Filter (Synchronized pair)
+    const uniqueDates = [...new Set(fullPedidos.map(p => p["Fecha Pedido"]))].sort();
+    const filterFechaPanel = document.getElementById("filter-fecha");
+
+    // Create header select
+    const dateContainer = document.getElementById("header-date-container");
+    dateContainer.innerHTML = `
+      <label for="header-filter-fecha">Despacho:</label>
+      <select id="header-filter-fecha"></select>
+    `;
+    const filterFechaHeader = document.getElementById("header-filter-fecha");
+
+    function populateDateSelect(selectEl, customDates = null) {
+      const datesToUse = customDates || uniqueDates;
+      const currentVal = selectEl.value;
+      selectEl.innerHTML = "";
+      datesToUse.forEach(date => {
+        const opt = document.createElement("option");
+        const styles = getDateStyles(date);
+        opt.value = date;
+        opt.textContent = (selectEl.id === "header-filter-fecha" ? "Despacho: " : "") + formatFecha(date) + styles.label;
+        opt.style.backgroundColor = styles.bg;
+        opt.style.color = styles.text;
+        selectEl.appendChild(opt);
+      });
+      // Restore value if still valid
+      if (datesToUse.includes(currentVal)) {
+        selectEl.value = currentVal;
+      }
+    }
+
+    populateDateSelect(filterFechaPanel);
+    populateDateSelect(filterFechaHeader);
+
+    const initialDate = uniqueDates.includes(rawReportDate) ? rawReportDate : (uniqueDates[0] || "");
+    filterFechaPanel.value = initialDate;
+    filterFechaHeader.value = initialDate;
+
+    function updateSelectStyle(selectEl) {
+      const styles = getDateStyles(selectEl.value);
+      selectEl.style.backgroundColor = styles.bg;
+      selectEl.style.color = styles.text;
+    }
+    updateSelectStyle(filterFechaHeader);
+
+    function enrichPedidosForDate(pedidosForDay) {
+      const plantToScope = {};
+      Object.entries(plantasData).forEach(([code, p]) => {
+        plantToScope[code] = p.grupo_despacho || code;
+      });
+      const obraScopeCounts = {};
+      pedidosForDay.forEach(p => {
+        const scope = plantToScope[p.Planta] || p.Planta;
+        const key = `${p.CodObra}_${scope}`;
+        obraScopeCounts[key] = (obraScopeCounts[key] || 0) + 1;
+      });
+      pedidosForDay.forEach(p => {
+        const scope = plantToScope[p.Planta] || p.Planta;
+        const key = `${p.CodObra}_${scope}`;
+        p.CantPedidosObra = obraScopeCounts[key];
+      });
+    }
+
+    const grupos = {};
+    Object.entries(plantasData).forEach(([code, p]) => {
+      const g = p.grupo_despacho;
+      if (g) {
+        if (!grupos[g]) grupos[g] = [];
+        grupos[g].push(code);
+      }
+    });
+
+    function updateFiltersForDate() {
+      const filterSelect = document.getElementById("filter-plantagrupo");
+      // Always populate the plant list based on "Hoy" (Report Date)
+      const reportDatePedidos = fullPedidos.filter(p => p["Fecha Pedido"] === rawReportDate);
+      filterSelect.innerHTML = "";
+      const plantVolumes = {};
+      let totalVolumen = 0;
+      reportDatePedidos.forEach(p => {
+        const vol = p.CantProgramada || 0;
+        plantVolumes[p.Planta] = (plantVolumes[p.Planta] || 0) + vol;
+        totalVolumen += vol;
+      });
+      const totalHeader = document.createElement("optgroup");
+      totalHeader.label = `TOTAL GENERAL (${formatM3(totalVolumen)} m³)`;
+      filterSelect.appendChild(totalHeader);
+
+      const groupVolumes = {};
+      Object.keys(grupos).forEach(gName => {
+        groupVolumes[gName] = grupos[gName].reduce((acc, pCode) => acc + (plantVolumes[pCode] || 0), 0);
+      });
+
+      const uniquePlantas = [...new Set(reportDatePedidos.map(p => p.Planta))].sort();
+      const ungrouped = uniquePlantas.filter(p => !plantasData[p]?.grupo_despacho);
+
+      Object.keys(grupos).sort().forEach(gName => {
+        const plantsInGroup = grupos[gName].filter(p => uniquePlantas.includes(p));
+        if (plantsInGroup.length === 0) return;
+        const gOpt = document.createElement("option");
+        gOpt.value = `Grupo:${gName}`;
+        gOpt.textContent = `Grupo: ${gName} (${formatM3(groupVolumes[gName])} m³)`;
+        gOpt.style.fontWeight = "bold";
+        filterSelect.appendChild(gOpt);
+        plantsInGroup.sort().forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = `Planta:${p}`;
+          const name = plantasData[p]?.nombre || "";
+          const pVol = plantVolumes[p] || 0;
+          opt.textContent = `\u00A0\u00A0\u00A0${name ? `${p} - ${name} (${formatM3(pVol)} m³)` : `${p} (${formatM3(pVol)} m³)`}`;
+          filterSelect.appendChild(opt);
+        });
+      });
+
+      if (ungrouped.length > 0) {
+        const otherGroup = document.createElement("optgroup");
+        const otherVol = ungrouped.reduce((acc, p) => acc + (plantVolumes[p] || 0), 0);
+        otherGroup.label = `Otras Plantas (${formatM3(otherVol)} m³)`;
+        ungrouped.forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = `Planta:${p}`;
+          const name = plantasData[p]?.nombre || "";
+          opt.textContent = name ? `${p} - ${name} (${formatM3(plantVolumes[p] || 0)} m³)` : `${p} (${formatM3(plantVolumes[p] || 0)} m³)`;
+          otherGroup.appendChild(opt);
+        });
+        filterSelect.appendChild(otherGroup);
+      }
+
+      let savedFilter = localStorage.getItem("filterPlantaGrupo");
+      if (!savedFilter || ![...filterSelect.options].some(o => o.value === savedFilter)) {
+        const rmExists = Object.keys(grupos).includes("RM") && grupos["RM"].some(p => uniquePlantas.includes(p));
+        savedFilter = rmExists ? "Grupo:RM" : (filterSelect.options[0]?.value || "");
+      }
+      filterSelect.value = savedFilter;
+      return savedFilter;
+    }
+
+    const filterSelect = document.getElementById("filter-plantagrupo");
+    const codObraInput = document.getElementById("filter-codobra");
+    const codObraList = document.getElementById("codobras-list");
+    const filterCheck = d3.select("#filter-green");
+
+    function renderDateOptionsForFilter(filterKey) {
+      let allowedPlants = [];
+      if (filterKey.startsWith("Grupo:")) {
+        allowedPlants = grupos[filterKey.split(":")[1]] || [];
+      } else {
+        allowedPlants = [filterKey.split(":")[1]];
+      }
+
+      const datesForFilter = [...new Set(
+        fullPedidos
+          .filter(p => allowedPlants.includes(p.Planta))
+          .map(p => p["Fecha Pedido"])
+      )].sort();
+
+      const currentDate = filterFechaPanel.value;
+      populateDateSelect(filterFechaPanel, datesForFilter);
+      populateDateSelect(filterFechaHeader, datesForFilter);
+
+      // If current date is gone, pick report date or first
+      if (!datesForFilter.includes(currentDate)) {
+        const fallback = datesForFilter.includes(rawReportDate) ? rawReportDate : (datesForFilter[0] || "");
+        filterFechaPanel.value = fallback;
+        filterFechaHeader.value = fallback;
+      }
+      updateSelectStyle(filterFechaHeader);
+    }
+
+    function handleDateChange(e) {
+      const newDate = e.target.value;
+      filterFechaPanel.value = newDate;
+      filterFechaHeader.value = newDate;
+      updateSelectStyle(filterFechaHeader);
+      window.appCache = {};
+      const newSaved = updateFiltersForDate();
+      renderDateOptionsForFilter(newSaved);
+      renderDashboard(newSaved);
+    }
+    filterFechaPanel.addEventListener("change", handleDateChange);
+    filterFechaHeader.addEventListener("change", handleDateChange);
+
+    filterSelect.addEventListener("change", (e) => {
+      const val = e.target.value;
+      localStorage.setItem("filterPlantaGrupo", val);
+      if (codObraInput) codObraInput.value = "";
+
+      const currentDate = filterFechaPanel.value;
+      let allowedPlants = [];
+      if (val.startsWith("Grupo:")) {
+        allowedPlants = grupos[val.split(":")[1]] || [];
+      } else {
+        allowedPlants = [val.split(":")[1]];
+      }
+
+      // Check if the NEW plant has orders on the CURRENT date
+      const hasOrdersCurrentDate = fullPedidos.some(p =>
+        p["Fecha Pedido"] === currentDate && allowedPlants.includes(p.Planta)
+      );
+
+      if (!hasOrdersCurrentDate) {
+        // Only force back to Today if the new selection is inactive on the current date
+        filterFechaPanel.value = rawReportDate;
+        filterFechaHeader.value = rawReportDate;
+        updateSelectStyle(filterFechaHeader);
+      }
+
+      renderDateOptionsForFilter(val);
+      renderDashboard(val);
+    });
+
+    codObraInput.addEventListener("input", (e) => {
+      const val = e.target.value;
+      const selectedId = val ? val.split(" - ")[0].trim() : "";
+      d3.selectAll(".pedido").select("path.area").style("fill", d => {
+        if (selectedId && String(d.CodObra) === selectedId) return "red";
+        if (d.Confirmado !== "SI") return AREACOLORS.unconfirmed;
+        if (d.MaxCamiones === 1 && d.CantPedidosObra === 1) return AREACOLORS.singleOrder;
+        return "none";
+      });
+      if (selectedId) {
+        const matchingPedidos = pedidos.filter(p => String(p.CodObra) === selectedId).sort((a, b) => a.XG.offset - b.XG.offset);
+        if (matchingPedidos.length > 0) {
+          const first = matchingPedidos[0];
+          window.selectPedido(first, false, true);
+          if (window.moveCursorTo) {
+            const midT = first.XG.offset + Math.floor(first.XG.finrel / 2);
+            window.moveCursorTo(midT);
+          }
+        }
+      } else {
+        window.selectPedido(null, false, true);
+        if (window.moveCursorTo) window.moveCursorTo(null);
+      }
+    });
+
+    filterCheck.on("change", () => {
+      const filtered = filterCheck.property("checked")
+        ? pedidos.filter(p => p.Confirmado === "SI" && p.MaxCamiones === 1)
+        : pedidos;
+      ganttPanel.show(filtered);
+    });
+
+    function renderDashboard(filterKey) {
+      svg.selectAll(".chart-header").remove();
+      g.selectAll("*").remove();
+      if (window.currentGanttPanel) {
+        d3.select("#gantt-chart").selectAll("*").remove();
+      }
+      const selectedDate = filterFechaPanel.value;
+      meta.DiaDespacho = formatFecha(selectedDate);
+      meta.styles = getDateStyles(selectedDate);
+
+      const cacheKey = `${selectedDate}_${filterKey}`;
+      let subsetPedidos = [];
+      let currentMetrics, curHoraMax, curOcupacionMax;
+
+      if (window.appCache[cacheKey]) {
+        const cached = window.appCache[cacheKey];
+        subsetPedidos = cached.pedidos;
+        currentMetrics = cached.metrics;
+        curHoraMax = cached.horaMax;
+        curOcupacionMax = cached.ocupacionMax;
+      } else {
+        let permitidas = [];
+        if (filterKey.startsWith("Grupo:")) {
+          permitidas = grupos[filterKey.split(":")[1]] || [];
+        } else {
+          permitidas = [filterKey.split(":")[1]];
+        }
+        subsetPedidos = fullPedidos
+          .filter(p => p["Fecha Pedido"] === selectedDate && permitidas.includes(p.Planta))
+          .map(p => ({ ...p }));
+        enrichPedidosForDate(subsetPedidos);
+        const results = buildStack(subsetPedidos);
+        currentMetrics = results.metrics;
+        curHoraMax = results.horaMax;
+        curOcupacionMax = results.ocupacionMax;
+        window.appCache[cacheKey] = { pedidos: subsetPedidos, metrics: currentMetrics, horaMax: curHoraMax, ocupacionMax: curOcupacionMax };
+      }
+
+      pedidos = subsetPedidos;
+      const xMin = CFG.horaInicio * (60 / CFG.granularidadMin);
+      const xMax = CFG.horaFin * (60 / CFG.granularidadMin);
+      const yMax = Math.ceil(curOcupacionMax / CFG.yStep) * CFG.yStep;
+      scales = createScales({ xMin, xMax, yMax, innerW, innerH });
+
+      drawGrids(g, scales, curHoraMax, CFG.granularidadMin, innerW, innerH, yMax);
+      drawAxes(g, scales, curHoraMax, CFG.granularidadMin, innerH);
+      drawTopOverlay(svg, g, meta, scales, currentMetrics, width, filterKey);
+
+      band = drawBand(g, scales, innerH, CFG.granularidadMin);
+      ganttPanel = drawGanttPanel({ container: "#gantt-chart", scales, margin, rowHeight: 10 });
+      window.currentBand = band;
+      window.currentGanttPanel = ganttPanel;
+
+      area = createArea(scales);
+      layers = drawLayers(g, pedidos, area, scales);
+
+      const filteredForGantt = filterCheck.property("checked")
+        ? pedidos.filter(p => p.Confirmado === "SI" && p.MaxCamiones === 1)
+        : pedidos.slice(); // Create a shallow copy before sorting
+
+      // Force flat chronological sort by start time, overriding the stack's color grouping
+      filteredForGantt.sort((a, b) => a.XG.offset - b.XG.offset);
+      
+      ganttPanel.show(filteredForGantt);
+
+      setupInteraction(
+        svg, g, layers, () => pedidos, scales, band, CFG.granularidadMin,
+        panel, innerW, innerH, ganttPanel, currentMetrics, margin, colorPedido
+      );
+
+      codObraList.innerHTML = "";
+      const codObraMap = new Map();
+      subsetPedidos.forEach(p => { if (p.CodObra) codObraMap.set(p.CodObra, p.Obra || ""); });
+      Array.from(codObraMap.keys()).sort((a, b) => a - b).forEach(cod => {
+        const opt = document.createElement("option");
+        opt.value = codObraMap.get(cod) ? `${cod} - ${codObraMap.get(cod)}` : cod;
+        codObraList.appendChild(opt);
+      });
+      codObraInput.dispatchEvent(new Event('input'));
+    }
+
+    const initialSaved = updateFiltersForDate(filterFechaPanel.value);
+    renderDateOptionsForFilter(initialSaved);
+    renderDashboard(initialSaved);
+  });
+
+function drawTopOverlay(svg, g, meta, scales, metrics, width, filterKey = "") {
+  const TRI_Y = -6;
+  const VAL_Y = -12;
+  const HORA_X = 16;
+  const HORA_Y = -2;
+
+  const headerG = svg.append("g").attr("class", "chart-header").attr("transform", "translate(10,14)");
+  headerG.append("text").attr("x", margin.left - 50).attr("y", 0).attr("font-size", 10).attr("fill", "#000")
+    .text(`@ ${meta.DiaReporte} ${meta.HoraReporte}`);
+
+  const txt = headerG.append("text").attr("x", width - margin.right).attr("y", 0).attr("text-anchor", "end");
+  if (filterKey) {
+    const isGrupo = filterKey.startsWith("Grupo:");
+    const name = filterKey.split(":")[1];
+    let labelText = name;
+    if (!isGrupo && window.plantasData && window.plantasData[name]) labelText += ` - ${window.plantasData[name].nombre}`;
+    txt.append("tspan").attr("font-size", 12).attr("fill", "#333").attr("font-weight", 600).text(`${labelText}  `);
+  }
+
+  txt.append("tspan").attr("font-size", 12).attr("fill", "#333").attr("font-weight", 600).text(`Volumen: ${formatM3(metrics.volumenT)} m3`);
+  txt.append("tspan").attr("font-size", 10).attr("fill", "#000").text(`, Confirmado: ${formatM3(metrics.volConfirmado)}`);
+
+  const markerG = g.append("g").attr("class", "markers-top").style("pointer-events", "none");
+  const items = [{ key: "maxGlobal", color: "#d62728" }, { key: "maxAM", color: "#1f77b4" }, { key: "min12_14", color: "#2ca02c" }, { key: "maxPM14", color: "#1f77b4" }];
+  const data = items.map(d => ({ ...d, ...metrics[d.key] })).filter(d => d.slot != null);
+
+  markerG.selectAll("path.top-marker").data(data).enter().append("path").attr("class", "top-marker")
+    .attr("d", d3.symbol().type(d3.symbolTriangle).size(45))
+    .attr("transform", d => `translate(${scales.x(d.slot)}, ${TRI_Y}) rotate(180)`)
+    .attr("fill", d => d.color);
+
+  markerG.selectAll("text.top-marker-hour").data(data).enter().append("text").attr("class", "top-marker-hour")
+    .attr("x", d => scales.x(d.slot) + HORA_X).attr("y", HORA_Y).attr("text-anchor", "middle").attr("font-size", 9)
+    .attr("fill", d => d.color).text(d => d.hora);
+
+  markerG.selectAll("text.top-marker-value").data(data).enter().append("text").attr("class", "top-marker-value")
+    .attr("x", d => scales.x(d.slot)).attr("y", VAL_Y).attr("text-anchor", "middle").attr("font-size", 10)
+    .attr("font-weight", 600).attr("fill", d => d.color).text(d => d.value);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const filterPanel = document.getElementById("filter-config-panel");
+  const filterHeader = document.getElementById("filter-config-header");
+  const filterCloseBtn = document.getElementById("filter-config-close");
+  const settingsPanel = document.getElementById("settings-panel");
+  const settingsHeader = document.getElementById("settings-header");
+  const settingsCloseBtn = document.getElementById("settings-close");
+  const helpModal = document.getElementById("help-modal");
+  const helpCloseBtn = document.getElementById("help-modal-close");
+
+  if (helpCloseBtn) { helpCloseBtn.addEventListener("click", () => helpModal.classList.add("hidden")); }
+
+  let activeDragPanel = null;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  // Initialize sliders
+  const strokeSlider = document.getElementById("range-stroke-width");
+  const strokeVal = document.getElementById("val-stroke-width");
+  if (strokeSlider) {
+    strokeSlider.value = CFG.lineStrokeWidth;
+    strokeVal.textContent = CFG.lineStrokeWidth;
+    strokeSlider.addEventListener("input", (e) => {
+      const val = parseFloat(e.target.value);
+      strokeVal.textContent = val;
+      CFG.lineStrokeWidth = val;
+      localStorage.setItem("lineStrokeWidth", val);
+      if (typeof updateVisualStyles === "function") updateVisualStyles();
+    });
+  }
+
+  const opacitySlider = document.getElementById("range-opacity");
+  const opacityVal = document.getElementById("val-opacity");
+  if (opacitySlider) {
+    opacitySlider.value = CFG.lineOpacity;
+    opacityVal.textContent = CFG.lineOpacity;
+    opacitySlider.addEventListener("input", (e) => {
+      const val = parseFloat(e.target.value);
+      opacityVal.textContent = val;
+      CFG.lineOpacity = val;
+      localStorage.setItem("lineOpacity", val);
+      if (typeof updateVisualStyles === "function") updateVisualStyles();
+    });
+  }
+
+  const triangleOpacitySlider = document.getElementById("range-triangle-opacity");
+  const triangleOpacityVal = document.getElementById("val-triangle-opacity");
+  if (triangleOpacitySlider) {
+    triangleOpacitySlider.value = CFG.triangleOpacity;
+    triangleOpacityVal.textContent = CFG.triangleOpacity;
+    triangleOpacitySlider.addEventListener("input", (e) => {
+      const val = parseFloat(e.target.value);
+      triangleOpacityVal.textContent = val;
+      CFG.triangleOpacity = val;
+      localStorage.setItem("triangleOpacity", val);
+      if (typeof updateVisualStyles === "function") updateVisualStyles();
+    });
+  }
+
+  function resetFilters() {
+    const codObraInput = document.getElementById("filter-codobra");
+    if (codObraInput && codObraInput.value !== "") {
+      codObraInput.value = "";
+      codObraInput.dispatchEvent(new Event("input"));
+    }
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "L" || e.key === "l") {
+      e.preventDefault();
+      resetFilters();
+      const codObraInput = document.getElementById("filter-codobra");
+      if (codObraInput) codObraInput.focus();
+      return;
+    }
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    if (e.key === "P" || e.key === "p") {
+      if (filterPanel.classList.contains("hidden")) {
+        const gantt = document.getElementById("gantt-scroll-container");
+        if (gantt) {
+          const rect = gantt.getBoundingClientRect();
+          filterPanel.style.top = `${rect.top}px`;
+          filterPanel.style.left = `${rect.left}px`;
+        }
+        filterPanel.classList.remove("hidden");
+      }
+    } else if (e.key === "C" || e.key === "c") {
+      if (settingsPanel && settingsPanel.classList.contains("hidden")) {
+        const gantt = document.getElementById("gantt-scroll-container");
+        if (gantt) {
+          const rect = gantt.getBoundingClientRect();
+          settingsPanel.style.top = `${rect.top}px`;
+          const panelWidth = settingsPanel.offsetWidth || 480;
+          settingsPanel.style.left = `${rect.right - panelWidth}px`;
+        }
+        settingsPanel.classList.remove("hidden");
+      }
+    } else if (e.key === "H" || e.key === "h") {
+      helpModal.classList.toggle("hidden");
+    } else if (e.key === "S" || e.key === "s" || e.key === "Escape") {
+      filterPanel.classList.add("hidden");
+      if (settingsPanel) settingsPanel.classList.add("hidden");
+      helpModal.classList.add("hidden");
+      resetFilters();
+    }
+  });
+
+  filterCloseBtn.addEventListener("click", () => {
+    filterPanel.classList.add("hidden");
+    resetFilters();
+  });
+
+  if (settingsCloseBtn) {
+    settingsCloseBtn.addEventListener("click", () => {
+      settingsPanel.classList.add("hidden");
+    });
+  }
+
+  function startDrag(e, panel) {
+    activeDragPanel = panel;
+    const rect = panel.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    document.body.style.userSelect = "none";
+  }
+
+  filterHeader.addEventListener("mousedown", (e) => startDrag(e, filterPanel));
+  if (settingsHeader) {
+    settingsHeader.addEventListener("mousedown", (e) => startDrag(e, settingsPanel));
+  }
+
+  document.addEventListener("mousemove", (e) => {
+    if (!activeDragPanel) return;
+    activeDragPanel.style.left = `${e.clientX - offsetX}px`;
+    activeDragPanel.style.top = `${e.clientY - offsetY}px`;
+  });
+
+  document.addEventListener("mouseup", () => {
+    activeDragPanel = null;
+    document.body.style.userSelect = "";
+  });
+});
