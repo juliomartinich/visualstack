@@ -244,3 +244,72 @@ function decomposePedidosIntoVoyages(pedidos, granularidadMin) {
   });
   return voyages;
 }
+
+/* ==== * Construcción del stack para Plantas (Cargas discretas) * ====*/
+function buildPlantLoadStack(pedidos, granularidadMin) {
+  let totalM3 = 0;
+  let totalM3Confirmados = 0;
+  let totalM3NoConfirmados = 0;
+
+  pedidos.sort((a, b) => {
+    const getPriority = (p) => {
+      if ((p.CantProgramada ?? 0) > 100) return 0;
+      if (p.ColorPedido == 8) return 1;
+      if (p.Confirmado !== "SI") return 5;
+      if (p.MaxCamiones > 1) return 2;
+      if (p.CantPedidosObra === 1) return 4;
+      return 3;
+    };
+    const prioA = getPriority(a);
+    const prioB = getPriority(b);
+    if (prioA !== prioB) return prioA - prioB;
+    return (a.XG?.offset ?? 0) - (b.XG?.offset ?? 0);
+  });
+
+  const horaMax = Math.max(0, d3.max(pedidos, p => {
+    const numViajes = p.CantCargas || 1;
+    const freqSlots = Math.floor((p.Frecuencia || 0) / granularidadMin);
+    return (p.XG?.offset ?? 0) + (numViajes - 1) * freqSlots + 1;
+  }) || 0);
+
+  const ocupacionCargas = Array(horaMax + 1).fill(0);
+
+  pedidos.forEach(pedido => {
+    const cant = pedido.CantProgramada ?? 0;
+    totalM3 += cant;
+    if (pedido.Confirmado === "SI") {
+      totalM3Confirmados += cant;
+    } else {
+      totalM3NoConfirmados += cant;
+    }
+
+    const numViajes = pedido.CantCargas || 1;
+    const freqSlots = Math.floor((pedido.Frecuencia || 0) / granularidadMin);
+    
+    const bloquesXY = [];
+
+    for (let i = 0; i < numViajes; i++) {
+      const x = pedido.XG.offset + i * freqSlots;
+      if (x < 0 || x > horaMax) continue;
+
+      const y0 = ocupacionCargas[x] || 0;
+      const y1 = y0 + 1; // Altura de 1 carga
+      
+      bloquesXY.push({ x, y0, y1, v: 1 });
+      ocupacionCargas[x] = y1;
+    }
+
+    pedido.STK_PLANTAS = { bloquesXY };
+  });
+
+  const ocupacionMax = d3.max(ocupacionCargas) || 0;
+  const metrics = {
+    volumenT: totalM3,
+    volConfirmado: totalM3Confirmados,
+    volNoConfirmado: totalM3NoConfirmados,
+    envolvente: ocupacionCargas,
+    ...computeGlobalMetrics(ocupacionCargas, granularidadMin)
+  };
+
+  return { horaMax, ocupacionMax, metrics };
+}

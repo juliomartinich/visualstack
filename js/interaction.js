@@ -3,11 +3,20 @@
 /* ==== DETECCIÓN DE PEDIDO EXTENDIDO ACTIVO =====*/
 function findActiveLayer(capasReversa, t, my, scales) {
   for (const capa of capasReversa) {
-    const seg = capa.STK.segmentosXY.find(s => s.x === t);
-    if (!seg || seg.v === 0) continue;
-
-    if (my >= scales.y(seg.y1) && my <= scales.y(seg.y0)) {
-      return capa;
+    if (capa.STK && capa.STK.segmentosXY) {
+      const seg = capa.STK.segmentosXY.find(s => s.x === t);
+      if (seg && seg.v > 0) {
+        if (my >= scales.y(seg.y1) && my <= scales.y(seg.y0)) {
+          return capa;
+        }
+      }
+    } else if (capa.STK_PLANTAS && capa.STK_PLANTAS.bloquesXY) {
+      const seg = capa.STK_PLANTAS.bloquesXY.find(s => s.x === t);
+      if (seg && seg.v > 0) {
+        if (my >= scales.y(seg.y1) && my <= scales.y(seg.y0)) {
+          return capa;
+        }
+      }
     }
   }
   return null;
@@ -42,25 +51,49 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, strokeColor
     .select(layers.nodes()[idx])
     .select("path.area");
 
-  const main = overlay.selectAll("path.main").data([null]);
-
   const paletteColor = window.pedidoColorsMap?.get(activa.ColorPedido) || strokeColor;
 
-  main.enter()
-    .append("path")
-    .attr("class", "main")
-    .merge(main)
-    .attr("d", baseArea.attr("d"))
-    .attr("fill", paletteColor)
-    .attr("fill-opacity", 0.45)
-    .attr("stroke", strokeColor)
-    .attr("stroke-width", 1.3)
-    .attr("stroke-linecap", "round");
+  if (!baseArea.empty()) {
+    const main = overlay.selectAll("path.main").data([null]);
+
+    main.enter()
+      .append("path")
+      .attr("class", "main")
+      .merge(main)
+      .attr("d", baseArea.attr("d"))
+      .attr("fill", paletteColor)
+      .attr("fill-opacity", 0.45)
+      .attr("stroke", strokeColor)
+      .attr("stroke-width", 1.3)
+      .attr("stroke-linecap", "round");
+  } else {
+    overlay.selectAll("path.main").remove();
+  }
+
+  const baseRects = d3.select(layers.nodes()[idx]).selectAll("path.carga");
+  if (!baseRects.empty()) {
+    const activeRects = overlay.selectAll("path.main-carga").data(baseRects.data());
+    
+    activeRects.enter()
+      .append("path")
+      .attr("class", "main-carga")
+      .merge(activeRects)
+      .attr("d", (d, i) => baseRects.nodes()[i].getAttribute("d"))
+      .attr("fill", paletteColor)
+      .attr("fill-opacity", 0.7)
+      .attr("stroke", strokeColor)
+      .attr("stroke-width", 1.5);
+      
+    activeRects.exit().remove();
+  } else {
+    overlay.selectAll("path.main-carga").remove();
+  }
 
   /* ==== DESCARGAS – OVERLAY =====*/
+  const descargas = (activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
   const tris = overlay
     .selectAll("path.descarga-activa")
-    .data(activa.STK.descargasXY ?? [], d => d.key);
+    .data(descargas, d => d.key);
 
   tris.enter()
     .append("path")
@@ -394,7 +427,7 @@ function drawBand(g, scales, innerH, granularidad) {
 
       const tris = fgG
         .selectAll("path.descarga-activa")
-        .data(pedido.STK.descargasXY ?? [], d => d.key);
+        .data((pedido.STK && pedido.STK.descargasXY) ? pedido.STK.descargasXY : [], d => d.key);
 
       tris.enter()
         .append("path")

@@ -378,7 +378,8 @@ Promise.all([
       meta.DiaDespacho = formatFecha(selectedDate);
       meta.styles = getDateStyles(selectedDate);
 
-      const cacheKey = `${selectedDate}_${filterKey}`;
+      const currentGraphView = document.querySelector('input[name="viewGraph"]:checked')?.value || 'camiones';
+      const cacheKey = `${selectedDate}_${filterKey}_${currentGraphView}`;
       let subsetPedidos = [];
       let currentMetrics, curHoraMax, curOcupacionMax;
 
@@ -399,7 +400,11 @@ Promise.all([
           .filter(p => p["Fecha Pedido"] === selectedDate && permitidas.includes(p.Planta))
           .map(p => ({ ...p }));
         enrichPedidosForDate(subsetPedidos);
-        const results = buildStack(subsetPedidos);
+        
+        const results = currentGraphView === "plantas" 
+          ? buildPlantLoadStack(subsetPedidos, CFG.granularidadMin)
+          : buildStack(subsetPedidos);
+          
         currentMetrics = results.metrics;
         curHoraMax = results.horaMax;
         curOcupacionMax = results.ocupacionMax;
@@ -409,7 +414,12 @@ Promise.all([
       pedidos = subsetPedidos;
       const xMin = CFG.horaInicio * (60 / CFG.granularidadMin);
       const xMax = CFG.horaFin * (60 / CFG.granularidadMin);
-      const yMax = Math.ceil(curOcupacionMax / CFG.yStep) * CFG.yStep;
+      let yMax;
+      if (currentGraphView === "plantas") {
+        yMax = Math.max(10, Math.ceil(curOcupacionMax / 2) * 2 + 2); // Un poco de padding
+      } else {
+        yMax = Math.ceil(curOcupacionMax / CFG.yStep) * CFG.yStep;
+      }
       scales = createScales({ xMin, xMax, yMax, innerW, innerH });
 
       drawGrids(g, scales, curHoraMax, CFG.granularidadMin, innerW, innerH, yMax);
@@ -422,7 +432,11 @@ Promise.all([
       window.currentGanttPanel = ganttPanel;
 
       area = createArea(scales);
-      layers = drawLayers(g, pedidos, area, scales);
+      if (currentGraphView === "plantas") {
+        layers = drawPlantLoads(g, pedidos, scales, CFG.granularidadMin);
+      } else {
+        layers = drawLayers(g, pedidos, area, scales);
+      }
 
       let filteredForGantt = filterCheck.property("checked")
         ? pedidos.filter(p => p.Confirmado === "SI" && p.MaxCamiones === 1)
