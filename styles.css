@@ -237,14 +237,46 @@ body {
   left: 50px;
   width: 480px;
   /* Ancho ajustado para horizontal */
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.95);
   border: 1px solid #ddd;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
   z-index: 1000;
   border-radius: 12px;
+}
+
+.horizontal-group {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 15px;
+  grid-column: 1 / span 2;
+  margin-bottom: 4px;
+}
+
+.horizontal-group label {
+  margin-bottom: 0 !important;
+  min-width: 100px;
+}
+
+.radio-group {
   display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  gap: 15px;
+  background: #f0f0f0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.radio-group input[type="radio"] {
+  margin-right: 4px;
+  cursor: pointer;
+}
+
+.radio-group label {
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 0 !important;
 }
 
 #filter-config-panel.hidden,
@@ -255,7 +287,7 @@ body {
 #filter-config-header,
 #settings-header {
   padding: 8px 12px;
-  background: rgba(248, 249, 250, 0.5);
+  background: rgba(248, 249, 250, 0.9);
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   cursor: move;
   display: flex;
@@ -310,7 +342,7 @@ body {
 
 .filter-group label {
   grid-column: 1;
-  text-align: right;
+  text-align: left;
   font-size: 11px;
   font-weight: 700;
   color: #444;

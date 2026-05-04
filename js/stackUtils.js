@@ -198,3 +198,49 @@ function computeGlobalMetrics(ocupacion, granularidadMin) {
     }
   };
 }
+
+/* desglosa pedidos en viajes individuales para vista de plantas */
+function decomposePedidosIntoVoyages(pedidos, granularidadMin) {
+  const voyages = [];
+  pedidos.forEach(p => {
+    const numViajes = p.CantCargas || 1;
+    const cycleTime = (p.TiempoCarga || 0) + (p.Frecuencia || 0) + 2 * (p.TiempoViaje || 0);
+    const cycleSlots = Math.ceil(cycleTime / granularidadMin);
+    const freqSlots = Math.floor((p.Frecuencia || 0) / granularidadMin);
+    const cargaSlots = Math.ceil((p.TiempoCarga || 0) / granularidadMin);
+    const viajeSlots = Math.ceil((p.TiempoViaje || 0) / granularidadMin);
+    
+    for (let i = 0; i < numViajes; i++) {
+      const voyageOffset = p.XG.offset + i * freqSlots;
+      const descargaRelativa = cargaSlots + viajeSlots;
+
+      // Clonamos el objeto y ajustamos su ID y XG
+      const voyage = {
+        ...p,
+        id: `${p.id}_v${i}`,
+        parentPedidoId: p.id,
+        viajeIndex: i + 1,
+        XG: {
+          ...p.XG,
+          offset: voyageOffset,
+          finrel: cycleSlots,
+          demanda: [], // no relevante para gantt individual
+          descargarel: [descargaRelativa] 
+        }
+      };
+      
+      // Ajustar hito de descarga para el viaje
+      voyage.STK = {
+        segmentosXY: [], // no usado en gantt individual
+        descargasXY: [{ 
+          key: 0, 
+          x: voyageOffset + descargaRelativa, 
+          y: 0 
+        }] 
+      };
+      
+      voyages.push(voyage);
+    }
+  });
+  return voyages;
+}

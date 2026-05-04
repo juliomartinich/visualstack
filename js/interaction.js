@@ -14,7 +14,11 @@ function findActiveLayer(capasReversa, t, my, scales) {
 }
 
 function scrollToGanttRow(pedidoId) {
-  const row = d3.select(`#gantt-row-${pedidoId}`);
+  let row = d3.select(`#gantt-row-${pedidoId}`);
+  // Si no se encuentra (posiblemente en modo despachos), buscar el primer viaje (_v0)
+  if (row.empty()) {
+    row = d3.select(`#gantt-row-${pedidoId}_v0`);
+  }
   if (row.empty()) return;
 
   const gContainer = document.getElementById("gantt-scroll-container");
@@ -232,16 +236,18 @@ function setupInteraction(
 
     // 2. Highlighting (Area & Band)
     if (isFocusChange) {
-      layers.classed("inactive", d => d.id !== focus.id)
-        .classed("active", d => d.id === focus.id);
+      const parentId = focus.parentPedidoId || focus.id;
+
+      layers.classed("inactive", d => d.id !== parentId)
+        .classed("active", d => d.id === parentId);
 
       const strokeColor = colorPedido(focus);
       drawActiveArea({ overlay, layers, getCapas, activa: focus, scales, strokeColor });
       band.show(focus, strokeColor);
 
-      // Highlight en Gantt
-      d3.selectAll(".gantt-row").classed("inactive", d => d.id !== focus.id)
-        .classed("active", d => d.id === focus.id);
+      // Highlight en Gantt (highlight all voyages of the same parent)
+      d3.selectAll(".gantt-row").classed("inactive", d => (d.parentPedidoId || d.id) !== parentId)
+        .classed("active", d => (d.parentPedidoId || d.id) === parentId);
     }
 
     // 3. Tooltip logic (Render & Position)

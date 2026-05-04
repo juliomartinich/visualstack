@@ -1,4 +1,15 @@
 /* ================== MAIN ================== */
+// Cookie helpers
+function setCookie(name, value, days = 400) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/';
+}
+function getCookie(name) {
+  return document.cookie.split('; ').reduce((r, v) => {
+    const parts = v.split('=');
+    return parts[0] === name ? decodeURIComponent(parts[1]) : r;
+  }, '');
+}
 const width = 1260;
 const height = 490;
 const margin = { top: 20, right: 20, bottom: 40, left: 50 };
@@ -413,9 +424,14 @@ Promise.all([
       area = createArea(scales);
       layers = drawLayers(g, pedidos, area, scales);
 
-      const filteredForGantt = filterCheck.property("checked")
+      let filteredForGantt = filterCheck.property("checked")
         ? pedidos.filter(p => p.Confirmado === "SI" && p.MaxCamiones === 1)
         : pedidos.slice(); // Create a shallow copy before sorting
+
+      const currentGanttView = document.querySelector('input[name="viewGantt"]:checked')?.value || 'pedidos';
+      if (currentGanttView === 'despachos') {
+        filteredForGantt = decomposePedidosIntoVoyages(filteredForGantt, CFG.granularidadMin);
+      }
 
       // Force flat chronological sort by start time, overriding the stack's color grouping
       filteredForGantt.sort((a, b) => a.XG.offset - b.XG.offset);
@@ -439,6 +455,22 @@ Promise.all([
     }
 
     const initialSaved = updateFiltersForDate(filterFechaPanel.value);
+
+    // View Mode Radios
+    const savedGraphView = getCookie("viewGraph") || "camiones";
+    const savedGanttView = getCookie("viewGantt") || "pedidos";
+    
+    document.querySelector(`input[name="viewGraph"][value="${savedGraphView}"]`).checked = true;
+    document.querySelector(`input[name="viewGantt"][value="${savedGanttView}"]`).checked = true;
+
+    const viewRadios = document.querySelectorAll('input[name="viewGraph"], input[name="viewGantt"]');
+    viewRadios.forEach(radio => {
+      radio.addEventListener("change", (e) => {
+        setCookie(e.target.name, e.target.value);
+        renderDashboard(localStorage.getItem("filterPlantaGrupo") || initialSaved);
+      });
+    });
+
     renderDateOptionsForFilter(initialSaved);
     renderDashboard(initialSaved);
   });

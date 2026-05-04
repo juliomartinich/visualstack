@@ -30,6 +30,26 @@
       <button id="filter-config-close">Salir</button>
     </div>
     <div id="filter-config-content" class="compact-grid">
+      <div class="filter-group horizontal-group">
+        <label>Vista Gráfico</label>
+        <div class="radio-group">
+          <input type="radio" id="view-graph-camiones" name="viewGraph" value="camiones" checked>
+          <label for="view-graph-camiones">Camiones</label>
+          <input type="radio" id="view-graph-plantas" name="viewGraph" value="plantas">
+          <label for="view-graph-plantas">Plantas</label>
+        </div>
+      </div>
+
+      <div class="filter-group horizontal-group">
+        <label>Vista Gantt</label>
+        <div class="radio-group">
+          <input type="radio" id="view-gantt-pedidos" name="viewGantt" value="pedidos" checked>
+          <label for="view-gantt-pedidos">Pedidos</label>
+          <input type="radio" id="view-gantt-despachos" name="viewGantt" value="despachos">
+          <label for="view-gantt-despachos">Despachos</label>
+        </div>
+      </div>
+
       <div class="filter-group">
         <label for="filter-plantagrupo">Planta / Grupo</label>
         <select id="filter-plantagrupo"></select>
