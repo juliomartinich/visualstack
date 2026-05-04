@@ -20,19 +20,26 @@ function buildStack(pedidos) {
 
   pedidos.sort((a, b) => {
     const getPriority = (p) => {
-      if (p.Confirmado !== "SI") return 3;   // Arriba (Púrpura)
-      if (p.MaxCamiones > 1) return 0;       // Abajo (Azul)
-
-      // Solo quedan los confirmados de 1 camión
-      if (p.CantPedidosObra === 1) return 2; // Arriba del verde (Verde Oscuro)
-      return 1;                              // Entre azul y verde oscuro (Verde)
+      // 1. Masivos (> 100 m3)
+      if ((p.CantProgramada ?? 0) > 100) return 0;
+      // 2. Color 8
+      if (p.ColorPedido == 8) return 1;
+      // 3. No confirmados (Al final)
+      if (p.Confirmado !== "SI") return 5;
+      
+      // 4. Confirmados (Azules > 1 camión)
+      if (p.MaxCamiones > 1) return 2;
+      
+      // 5. Verdes (1 camión)
+      if (p.CantPedidosObra === 1) return 4; // Verde Oscuro
+      return 3;                              // Verde Claro
     };
 
     const prioA = getPriority(a);
     const prioB = getPriority(b);
     if (prioA !== prioB) return prioA - prioB;
 
-    // A igual prioridad, por hora de inicio
+    // A igual prioridad, por hora de inicio (offset)
     return (a.XG?.offset ?? 0) - (b.XG?.offset ?? 0);
   });
 

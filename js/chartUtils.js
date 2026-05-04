@@ -76,8 +76,13 @@ function createArea(scales) {
     .y1(d => scales.y(d.y1));
 }
 
-/* ==== * Color por pedido * ===================== */
 function colorPedido(pedido) {
+  if (pedido.CantProgramada > 100) {
+    return COLORS.multi;
+  }
+  if (pedido.ColorPedido == 8) {
+    return COLORS.color8;
+  }
   if (pedido.Confirmado !== "SI") {
     return COLORS.unconfirmed;
   }
@@ -132,7 +137,8 @@ function drawLayers(g, pedidos, area, scales) {
     .attr("class", "area")
     .attr("d", d => area(d.STK.segmentosXY))
     .style("fill", d => {
-      const col = colorPedido(d);
+      if (d.CantProgramada > 100) return AREACOLORS.masivo;
+      if (d.ColorPedido == 8) return AREACOLORS.color8;
       if (d.Confirmado !== "SI") return AREACOLORS.unconfirmed;
       if (d.MaxCamiones === 1 && d.CantPedidosObra === 1) return AREACOLORS.singleOrder;
       return "none";

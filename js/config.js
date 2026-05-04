@@ -14,10 +14,13 @@ const COLORS = {
     mono: "rgba(40,167,69,0.7)",         // Verde estándar
     multi: "rgba(0,0,139,0.7)",        // Azul dark
     singleOrder: "rgba(0,100,0,0.8)",   // Verde oscuro
-    unconfirmed: "purple"
+    unconfirmed: "purple",
+    color8: "rgba(139, 69, 19, 0.8)"    // Marrón (SaddleBrown)
 };
 
 const AREACOLORS = {
     singleOrder: "rgba(0,100,0,0.2)",
-    unconfirmed: "rgba(128, 0, 128, 0.2)"
+    unconfirmed: "rgba(128, 0, 128, 0.2)",
+    masivo: "rgba(169, 169, 169, 0.3)", // Gris (DarkGray)
+    color8: "rgba(139, 69, 19, 0.2)"    // Marrón pálido
 };
