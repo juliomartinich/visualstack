@@ -22,8 +22,8 @@ function buildStack(pedidos) {
     const getPriority = (p) => {
       // 1. Masivos (> 100 m3)
       if ((p.CantProgramada ?? 0) > 100) return 0;
-      // 2. Color 8
-      if (p.ColorPedido == 8) return 1;
+      // 2. Color 11 y 12
+      if (p.ColorPedido == 11 || p.ColorPedido == 12) return 1;
       // 3. No confirmados (Al final)
       if (p.Confirmado !== "SI") return 5;
       
@@ -254,7 +254,7 @@ function buildPlantLoadStack(pedidos, granularidadMin) {
   pedidos.sort((a, b) => {
     const getPriority = (p) => {
       if ((p.CantProgramada ?? 0) > 100) return 0;
-      if (p.ColorPedido == 8) return 1;
+      if (p.ColorPedido == 11 || p.ColorPedido == 12) return 1;
       if (p.Confirmado !== "SI") return 5;
       if (p.MaxCamiones > 1) return 2;
       if (p.CantPedidosObra === 1) return 4;

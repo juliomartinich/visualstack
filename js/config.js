@@ -15,12 +15,12 @@ const COLORS = {
     multi: "rgba(0,0,139,0.7)",        // Azul dark
     singleOrder: "rgba(0,100,0,0.8)",   // Verde oscuro
     unconfirmed: "purple",
-    color8: "rgba(139, 69, 19, 0.8)"    // Marrón (SaddleBrown)
+    color11_12: "rgba(139, 69, 19, 0.8)"    // Marrón (SaddleBrown)
 };
 
 const AREACOLORS = {
     singleOrder: "rgba(0,100,0,0.2)",
     unconfirmed: "rgba(128, 0, 128, 0.2)",
     masivo: "rgba(180, 180, 180, 0.4)", // Gris claro más visible
-    color8: "rgba(139, 69, 19, 0.2)"    // Marrón pálido
+    color11_12: "rgba(139, 69, 19, 0.2)"    // Marrón pálido
 };

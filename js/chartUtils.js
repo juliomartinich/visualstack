@@ -80,8 +80,8 @@ function colorPedido(pedido) {
   if (pedido.CantProgramada > 100) {
     return COLORS.multi;
   }
-  if (pedido.ColorPedido == 8) {
-    return COLORS.color8;
+  if (pedido.ColorPedido == 11 || pedido.ColorPedido == 12) {
+    return COLORS.color11_12;
   }
   if (pedido.Confirmado !== "SI") {
     return COLORS.unconfirmed;
@@ -100,7 +100,7 @@ function colorPedido(pedido) {
 /* ==== * Color de Área * ===================== */
 function getAreaColor(pedido) {
   if (pedido.CantProgramada > 100) return AREACOLORS.masivo;
-  if (pedido.ColorPedido == 8) return AREACOLORS.color8;
+  if (pedido.ColorPedido == 11 || pedido.ColorPedido == 12) return AREACOLORS.color11_12;
   if (pedido.Confirmado !== "SI") return AREACOLORS.unconfirmed;
   if (pedido.MaxCamiones === 1 && pedido.CantPedidosObra === 1) return AREACOLORS.singleOrder;
   return "none";
@@ -144,13 +144,13 @@ function drawLayers(g, pedidos, area, scales) {
 
   layers.append("path")
     .attr("class", "area")
-    .attr("d", d => area(d.STK.segmentosXY))
+    .attr("d", d => area(d.STK?.segmentosXY || []))
     .style("fill", d => getAreaColor(d))
     .style("stroke", "none");
 
   layers.append("path")
     .attr("class", "line-top")
-    .attr("d", d => lineTopClosed(d.STK.segmentosXY, scales))
+    .attr("d", d => lineTopClosed(d.STK?.segmentosXY || [], scales))
     .attr("fill", "none")
     .attr("stroke", d => colorPedido(d))
     .attr("stroke-width", CFG.lineStrokeWidth)
@@ -165,7 +165,7 @@ function drawLayers(g, pedidos, area, scales) {
   };
 
   layers.each(function (pedido) {
-    const descs = pedido.STK.descargasXY;
+    const descs = pedido.STK?.descargasXY || [];
     if (!Array.isArray(descs) || descs.length === 0) return;
 
     d3.select(this)
@@ -289,7 +289,7 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
       rowsG.each(function (pedido) {
         d3.select(this)
           .selectAll("path.gantt-descarga")
-          .data(pedido.STK.descargasXY ?? [], d => d.key)
+          .data(pedido.STK?.descargasXY ?? [], d => d.key)
           .join("path")
           .attr("class", "gantt-descarga")
           .attr("d", d3.symbol().type(d3.symbolTriangle).size(20))
