@@ -401,9 +401,11 @@ Promise.all([
           .map(p => ({ ...p }));
         enrichPedidosForDate(subsetPedidos);
         
-        const results = currentGraphView === "plantas" 
-          ? buildPlantLoadStack(subsetPedidos, CFG.granularidadMin)
-          : buildStack(subsetPedidos);
+        let results = buildStack(subsetPedidos);
+        
+        if (currentGraphView === "plantas") {
+          results = buildPlantLoadStack(subsetPedidos, CFG.granularidadMin);
+        }
           
         currentMetrics = results.metrics;
         curHoraMax = results.horaMax;

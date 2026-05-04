@@ -287,25 +287,9 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
 
       // Descargas
       rowsG.each(function (pedido) {
-        const offset = pedido.XG?.offset ?? 0;
-        const numViajes = pedido.CantCargas || 1;
-        const freqSlots = Math.floor((pedido.Frecuencia || 0) / CFG.granularidadMin);
-        const cargaSlots = Math.ceil((pedido.TiempoCarga || 0) / CFG.granularidadMin);
-        const viajeSlots = Math.ceil((pedido.TiempoViaje || 0) / CFG.granularidadMin);
-        
-        const descargasX = [];
-        for (let i = 0; i < numViajes; i++) {
-          const startSlot = i * freqSlots;
-          const descargaRelativeSlot = startSlot + cargaSlots + viajeSlots;
-          descargasX.push({
-            key: i,
-            x: offset + descargaRelativeSlot
-          });
-        }
-
         d3.select(this)
           .selectAll("path.gantt-descarga")
-          .data(descargasX, d => d.key)
+          .data(pedido.STK?.descargasXY ?? [], d => d.key)
           .join("path")
           .attr("class", "gantt-descarga")
           .attr("d", d3.symbol().type(d3.symbolTriangle).size(20))

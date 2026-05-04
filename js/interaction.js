@@ -2,15 +2,17 @@
 
 /* ==== DETECCIÓN DE PEDIDO EXTENDIDO ACTIVO =====*/
 function findActiveLayer(capasReversa, t, my, scales) {
+  const currentGraphView = document.querySelector('input[name="viewGraph"]:checked')?.value || 'camiones';
+
   for (const capa of capasReversa) {
-    if (capa.STK && capa.STK.segmentosXY) {
+    if (currentGraphView === 'camiones' && capa.STK && capa.STK.segmentosXY) {
       const seg = capa.STK.segmentosXY.find(s => s.x === t);
       if (seg && seg.v > 0) {
         if (my >= scales.y(seg.y1) && my <= scales.y(seg.y0)) {
           return capa;
         }
       }
-    } else if (capa.STK_PLANTAS && capa.STK_PLANTAS.bloquesXY) {
+    } else if (currentGraphView === 'plantas' && capa.STK_PLANTAS && capa.STK_PLANTAS.bloquesXY) {
       const seg = capa.STK_PLANTAS.bloquesXY.find(s => s.x === t);
       if (seg && seg.v > 0) {
         if (my >= scales.y(seg.y1) && my <= scales.y(seg.y0)) {
@@ -90,7 +92,8 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, strokeColor
   }
 
   /* ==== DESCARGAS – OVERLAY =====*/
-  const descargas = (activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
+  const currentGraphView = document.querySelector('input[name="viewGraph"]:checked')?.value || 'camiones';
+  const descargas = (currentGraphView === 'camiones' && activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
   const tris = overlay
     .selectAll("path.descarga-activa")
     .data(descargas, d => d.key);
@@ -425,9 +428,10 @@ function drawBand(g, scales, innerH, granularidad) {
         .attr("fill", color)
         .attr("opacity", 0.8);
 
+      const currentGraphView = document.querySelector('input[name="viewGraph"]:checked')?.value || 'camiones';
       const tris = fgG
         .selectAll("path.descarga-activa")
-        .data((pedido.STK && pedido.STK.descargasXY) ? pedido.STK.descargasXY : [], d => d.key);
+        .data((currentGraphView === 'camiones' && pedido.STK && pedido.STK.descargasXY) ? pedido.STK.descargasXY : [], d => d.key);
 
       tris.enter()
         .append("path")
