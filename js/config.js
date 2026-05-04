@@ -21,6 +21,6 @@ const COLORS = {
 const AREACOLORS = {
     singleOrder: "rgba(0,100,0,0.2)",
     unconfirmed: "rgba(128, 0, 128, 0.2)",
-    masivo: "rgba(169, 169, 169, 0.3)", // Gris (DarkGray)
+    masivo: "rgba(180, 180, 180, 0.4)", // Gris claro más visible
     color8: "rgba(139, 69, 19, 0.2)"    // Marrón pálido
 };

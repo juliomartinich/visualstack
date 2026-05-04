@@ -329,9 +329,7 @@ Promise.all([
       const selectedId = val ? val.split(" - ")[0].trim() : "";
       d3.selectAll(".pedido").select("path.area").style("fill", d => {
         if (selectedId && String(d.CodObra) === selectedId) return "red";
-        if (d.Confirmado !== "SI") return AREACOLORS.unconfirmed;
-        if (d.MaxCamiones === 1 && d.CantPedidosObra === 1) return AREACOLORS.singleOrder;
-        return "none";
+        return getAreaColor(d);
       });
       if (selectedId) {
         const matchingPedidos = pedidos.filter(p => String(p.CodObra) === selectedId).sort((a, b) => a.XG.offset - b.XG.offset);

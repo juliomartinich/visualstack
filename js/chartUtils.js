@@ -97,6 +97,15 @@ function colorPedido(pedido) {
   return COLORS.mono;
 }
 
+/* ==== * Color de Área * ===================== */
+function getAreaColor(pedido) {
+  if (pedido.CantProgramada > 100) return AREACOLORS.masivo;
+  if (pedido.ColorPedido == 8) return AREACOLORS.color8;
+  if (pedido.Confirmado !== "SI") return AREACOLORS.unconfirmed;
+  if (pedido.MaxCamiones === 1 && pedido.CantPedidosObra === 1) return AREACOLORS.singleOrder;
+  return "none";
+}
+
 /* ==== dibuja parte superior del area con los bordes verticales =====*/
 function lineTopClosed(segmentos, scales) {
   const { x, y } = scales;
@@ -136,13 +145,7 @@ function drawLayers(g, pedidos, area, scales) {
   layers.append("path")
     .attr("class", "area")
     .attr("d", d => area(d.STK.segmentosXY))
-    .style("fill", d => {
-      if (d.CantProgramada > 100) return AREACOLORS.masivo;
-      if (d.ColorPedido == 8) return AREACOLORS.color8;
-      if (d.Confirmado !== "SI") return AREACOLORS.unconfirmed;
-      if (d.MaxCamiones === 1 && d.CantPedidosObra === 1) return AREACOLORS.singleOrder;
-      return "none";
-    })
+    .style("fill", d => getAreaColor(d))
     .style("stroke", "none");
 
   layers.append("path")
