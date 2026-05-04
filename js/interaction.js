@@ -93,7 +93,7 @@ function renderTooltip(panel, activa, t, granularidad) {
       <div class="tooltip-grid">
         <div class="full-row product-row"><span>Producto</span><b>${p.Producto}</b></div>
         <span>Hora requerida cliente</span><b>${p.HoraInicio}</b>
-        <span>Tiempo de Carga</span><b>${p.TiempoCarga} min</b>
+        <span>Tiempo de Carga + Prep</span><b>${p.TiempoCarga} min</b>
         <span>Tiempo de Viaje</span><b>${p.TiempoViaje} min</b>
         <span>Frecuencia / Estadía</span><b>${p.Frecuencia} min</b>
 

@@ -206,7 +206,10 @@ Promise.all([
       headerFilterSelect.innerHTML = filterSelect.innerHTML;
       // Clean up header filter labels for better space usage if needed
       [...headerFilterSelect.options].forEach(opt => {
-        opt.textContent = opt.textContent.replace(/^\u00A0\u00A0\u00A0/, ""); // Remove indentation
+        // Remove indentation and volume info like (123 m³)
+        opt.textContent = opt.textContent
+          .replace(/^\u00A0\u00A0\u00A0/, "")
+          .replace(/\s*\([^)]+m³\)/, "");
       });
 
       let savedFilter = localStorage.getItem("filterPlantaGrupo");
