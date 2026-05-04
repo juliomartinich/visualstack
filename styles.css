@@ -443,7 +443,8 @@ body {
   /* Ocultamos label si el select ya dice Despacho o es obvio */
 }
 
-#header-filter-fecha {
+#header-filter-fecha,
+#header-filter-plantagrupo {
   border: none;
   border-radius: 4px;
   font-size: 12px;
@@ -455,6 +456,12 @@ body {
   transition: transform 0.1s;
 }
 
-#header-filter-fecha:hover {
+#header-filter-fecha:hover,
+#header-filter-plantagrupo:hover {
   transform: scale(1.02);
+}
+
+#header-filter-plantagrupo {
+  background-color: #fff;
+  color: #333;
 }

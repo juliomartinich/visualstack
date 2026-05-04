@@ -68,13 +68,17 @@ Promise.all([
     const uniqueDates = [...new Set(fullPedidos.map(p => p["Fecha Pedido"]))].sort();
     const filterFechaPanel = document.getElementById("filter-fecha");
 
-    // Create header select
+    // Create header selects
     const dateContainer = document.getElementById("header-date-container");
     dateContainer.innerHTML = `
       <label for="header-filter-fecha">Despacho:</label>
-      <select id="header-filter-fecha"></select>
+      <select id="header-filter-fecha" title="Cambiar Fecha"></select>
+      <div style="margin-right: 12px;"></div>
+      <label for="header-filter-plantagrupo">Planta:</label>
+      <select id="header-filter-plantagrupo" title="Cambiar Planta"></select>
     `;
     const filterFechaHeader = document.getElementById("header-filter-fecha");
+    const filterPlantaHeader = document.getElementById("header-filter-plantagrupo");
 
     function populateDateSelect(selectEl, customDates = null) {
       const datesToUse = customDates || uniqueDates;
@@ -102,12 +106,16 @@ Promise.all([
     filterFechaPanel.value = initialDate;
     filterFechaHeader.value = initialDate;
 
-    function updateSelectStyle(selectEl) {
-      const styles = getDateStyles(selectEl.value);
-      selectEl.style.backgroundColor = styles.bg;
-      selectEl.style.color = styles.text;
+    function updateSelectStyle(dateSelect, plantSelect) {
+      const styles = getDateStyles(dateSelect.value);
+      dateSelect.style.backgroundColor = styles.bg;
+      dateSelect.style.color = styles.text;
+      if (plantSelect) {
+        plantSelect.style.backgroundColor = styles.bg;
+        plantSelect.style.color = styles.text;
+      }
     }
-    updateSelectStyle(filterFechaHeader);
+    updateSelectStyle(filterFechaHeader, filterPlantaHeader);
 
     function enrichPedidosForDate(pedidosForDay) {
       const plantToScope = {};
@@ -138,9 +146,11 @@ Promise.all([
 
     function updateFiltersForDate() {
       const filterSelect = document.getElementById("filter-plantagrupo");
+      const headerFilterSelect = document.getElementById("header-filter-plantagrupo");
       // Always populate the plant list based on "Hoy" (Report Date)
       const reportDatePedidos = fullPedidos.filter(p => p["Fecha Pedido"] === rawReportDate);
       filterSelect.innerHTML = "";
+      headerFilterSelect.innerHTML = "";
       const plantVolumes = {};
       let totalVolumen = 0;
       reportDatePedidos.forEach(p => {
@@ -192,12 +202,20 @@ Promise.all([
         filterSelect.appendChild(otherGroup);
       }
 
+      // Sync header filter with the same options (simple version for header)
+      headerFilterSelect.innerHTML = filterSelect.innerHTML;
+      // Clean up header filter labels for better space usage if needed
+      [...headerFilterSelect.options].forEach(opt => {
+        opt.textContent = opt.textContent.replace(/^\u00A0\u00A0\u00A0/, ""); // Remove indentation
+      });
+
       let savedFilter = localStorage.getItem("filterPlantaGrupo");
       if (!savedFilter || ![...filterSelect.options].some(o => o.value === savedFilter)) {
         const rmExists = Object.keys(grupos).includes("RM") && grupos["RM"].some(p => uniquePlantas.includes(p));
         savedFilter = rmExists ? "Grupo:RM" : (filterSelect.options[0]?.value || "");
       }
       filterSelect.value = savedFilter;
+      headerFilterSelect.value = savedFilter;
       return savedFilter;
     }
 
@@ -230,14 +248,14 @@ Promise.all([
         filterFechaPanel.value = fallback;
         filterFechaHeader.value = fallback;
       }
-      updateSelectStyle(filterFechaHeader);
+      updateSelectStyle(filterFechaHeader, filterPlantaHeader);
     }
 
     function handleDateChange(e) {
       const newDate = e.target.value;
       filterFechaPanel.value = newDate;
       filterFechaHeader.value = newDate;
-      updateSelectStyle(filterFechaHeader);
+      updateSelectStyle(filterFechaHeader, filterPlantaHeader);
       window.appCache = {};
       const newSaved = updateFiltersForDate();
       renderDateOptionsForFilter(newSaved);
@@ -248,6 +266,7 @@ Promise.all([
 
     filterSelect.addEventListener("change", (e) => {
       const val = e.target.value;
+      filterPlantaHeader.value = val;
       localStorage.setItem("filterPlantaGrupo", val);
       if (codObraInput) codObraInput.value = "";
 
@@ -268,7 +287,37 @@ Promise.all([
         // Only force back to Today if the new selection is inactive on the current date
         filterFechaPanel.value = rawReportDate;
         filterFechaHeader.value = rawReportDate;
-        updateSelectStyle(filterFechaHeader);
+        updateSelectStyle(filterFechaHeader, filterPlantaHeader);
+      }
+
+      renderDateOptionsForFilter(val);
+      renderDashboard(val);
+    });
+
+    filterPlantaHeader.addEventListener("change", (e) => {
+      const val = e.target.value;
+      filterSelect.value = val;
+      localStorage.setItem("filterPlantaGrupo", val);
+      if (codObraInput) codObraInput.value = "";
+
+      const currentDate = filterFechaPanel.value;
+      let allowedPlants = [];
+      if (val.startsWith("Grupo:")) {
+        allowedPlants = grupos[val.split(":")[1]] || [];
+      } else {
+        allowedPlants = [val.split(":")[1]];
+      }
+
+      // Check if the NEW plant has orders on the CURRENT date
+      const hasOrdersCurrentDate = fullPedidos.some(p =>
+        p["Fecha Pedido"] === currentDate && allowedPlants.includes(p.Planta)
+      );
+
+      if (!hasOrdersCurrentDate) {
+        // Only force back to Today if the new selection is inactive on the current date
+        filterFechaPanel.value = rawReportDate;
+        filterFechaHeader.value = rawReportDate;
+        updateSelectStyle(filterFechaHeader, filterPlantaHeader);
       }
 
       renderDateOptionsForFilter(val);
@@ -394,23 +443,16 @@ Promise.all([
   });
 
 function drawTopOverlay(svg, g, meta, scales, metrics, width, filterKey = "") {
-  const TRI_Y = -6;
-  const VAL_Y = -12;
-  const HORA_X = 16;
-  const HORA_Y = -2;
+  const TRI_Y = 2;   // Pegado al borde superior (adentro)
+  const TEXT_Y = 11; // Alineación vertical para el texto
+  const HORA_X = 8;  // Offset a la derecha
+  const VAL_X = -8;  // Offset a la izquierda
 
   const headerG = svg.append("g").attr("class", "chart-header").attr("transform", "translate(10,14)");
   headerG.append("text").attr("x", margin.left - 50).attr("y", 0).attr("font-size", 10).attr("fill", "#000")
     .text(`@ ${meta.DiaReporte} ${meta.HoraReporte}`);
 
   const txt = headerG.append("text").attr("x", width - margin.right).attr("y", 0).attr("text-anchor", "end");
-  if (filterKey) {
-    const isGrupo = filterKey.startsWith("Grupo:");
-    const name = filterKey.split(":")[1];
-    let labelText = name;
-    if (!isGrupo && window.plantasData && window.plantasData[name]) labelText += ` - ${window.plantasData[name].nombre}`;
-    txt.append("tspan").attr("font-size", 12).attr("fill", "#333").attr("font-weight", 600).text(`${labelText}  `);
-  }
 
   txt.append("tspan").attr("font-size", 12).attr("fill", "#333").attr("font-weight", 600).text(`Volumen: ${formatM3(metrics.volumenT)} m3`);
   txt.append("tspan").attr("font-size", 10).attr("fill", "#000").text(`, Confirmado: ${formatM3(metrics.volConfirmado)}`);
@@ -425,12 +467,12 @@ function drawTopOverlay(svg, g, meta, scales, metrics, width, filterKey = "") {
     .attr("fill", d => d.color);
 
   markerG.selectAll("text.top-marker-hour").data(data).enter().append("text").attr("class", "top-marker-hour")
-    .attr("x", d => scales.x(d.slot) + HORA_X).attr("y", HORA_Y).attr("text-anchor", "middle").attr("font-size", 9)
-    .attr("fill", d => d.color).text(d => d.hora);
+    .attr("x", d => scales.x(d.slot) + HORA_X).attr("y", TEXT_Y).attr("text-anchor", "start").attr("font-size", 10)
+    .attr("font-weight", 600).attr("fill", d => d.color).text(d => d.hora);
 
   markerG.selectAll("text.top-marker-value").data(data).enter().append("text").attr("class", "top-marker-value")
-    .attr("x", d => scales.x(d.slot)).attr("y", VAL_Y).attr("text-anchor", "middle").attr("font-size", 10)
-    .attr("font-weight", 600).attr("fill", d => d.color).text(d => d.value);
+    .attr("x", d => scales.x(d.slot) + VAL_X).attr("y", TEXT_Y).attr("text-anchor", "end").attr("font-size", 11)
+    .attr("font-weight", 700).attr("fill", d => d.color).text(d => d.value);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
