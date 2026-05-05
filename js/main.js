@@ -154,6 +154,12 @@ Promise.all([
         const scope = plantToScope[p.Planta] || p.Planta;
         const key = `${p.CodObra}_${scope}`;
         p.CantPedidosObra = obraScopeCounts[key];
+
+        // Derivar posiciones de tiempo para la banda inferior (común a todas las vistas)
+        p.descargasBandXY = (p.XG?.descargarel ?? []).map(idx => ({
+          key: idx,
+          x: (p.XG?.offset ?? 0) + idx
+        }));
       });
     }
 

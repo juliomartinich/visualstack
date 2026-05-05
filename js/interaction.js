@@ -454,7 +454,7 @@ function drawBand(g, scales, innerH, granularidad) {
         .attr("fill", color)
         .attr("opacity", 0.8);
 
-      const descargasXY = pedido.STK?.descargasXY || [];
+      const descargasXY = pedido.descargasBandXY || [];
       const tris = fgG
         .selectAll("path.descarga-activa")
         .data(descargasXY, d => d.key);
