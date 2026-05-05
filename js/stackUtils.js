@@ -411,12 +411,21 @@ function buildColasStack(pedidos, granularidadMin) {
     globalOcupacion[v.xServe] = Math.max(globalOcupacion[v.xServe] || 0, v.boca + 1);
   });
 
+  const maxDelayByTime = Array(horaMax + 1).fill(0);
+  voyages.forEach(v => {
+    const delay = v.xServe - v.xArrive;
+    if (delay > maxDelayByTime[v.xArrive]) {
+      maxDelayByTime[v.xArrive] = delay;
+    }
+  });
+
   const ocupacionMax = d3.max(globalOcupacion) || 2;
   const metrics = {
     volumenT: totalM3,
     volConfirmado: totalM3Confirmados,
     volNoConfirmado: totalM3NoConfirmados,
     envolvente: globalOcupacion,
+    maxDelayByTime: maxDelayByTime,
     ...computeGlobalMetrics(globalOcupacion, granularidadMin)
   };
 

@@ -89,6 +89,65 @@ function drawCapacityLine(g, capacity, scales, innerW) {
     .text(`Capacidad: ${capacity} boca(s)`);
 }
 
+function drawDelayCurve(g, data, scales, granularidadMin) {
+  if (!data || data.length === 0 || !scales.yDelay) return;
+  
+  const line = d3.line()
+    .x((d, i) => scales.x(i))
+    .y(d => scales.yDelay(d * granularidadMin))
+    .curve(d3.curveMonotoneX);
+
+  g.append("path")
+    .datum(data)
+    .attr("class", "delay-curve")
+    .attr("d", line)
+    .attr("fill", "none")
+    .attr("stroke", "red")
+    .attr("stroke-width", 2)
+    .attr("opacity", 0.8);
+    
+  // Área bajo la curva
+  const area = d3.area()
+    .x((d, i) => scales.x(i))
+    .y0(scales.yDelay(0))
+    .y1(d => scales.yDelay(d * granularidadMin))
+    .curve(d3.curveMonotoneX);
+    
+  g.append("path")
+    .datum(data)
+    .attr("class", "delay-area")
+    .attr("d", area)
+    .attr("fill", "red")
+    .attr("opacity", 0.05);
+}
+
+function drawSecondaryAxis(g, scales, innerW, label) {
+  if (!scales.yDelay) return;
+  
+  const axisG = g.append("g")
+    .attr("class", "axis axis-y-secondary")
+    .attr("transform", `translate(${innerW}, 0)`)
+    .call(
+      d3.axisLeft(scales.yDelay)
+        .ticks(5)
+        .tickSize(5)
+        .tickFormat(d => d === 0 ? "" : d)
+    );
+    
+  axisG.selectAll("line").attr("stroke", "red");
+  axisG.selectAll("path").attr("stroke", "red");
+  axisG.selectAll("text").attr("fill", "red").style("font-size", "9px");
+
+  axisG.append("text")
+    .attr("x", -8)
+    .attr("y", 12) // Un poco más abajo para que esté dentro del área
+    .attr("fill", "red")
+    .attr("text-anchor", "end")
+    .attr("font-size", "10px")
+    .attr("font-weight", "bold")
+    .text(label);
+}
+
 /* ==== * Área stack * ===================== */
 function createArea(scales) {
   return d3.area()

@@ -483,6 +483,17 @@ Promise.all([
           }
         });
         drawCapacityLine(g, capacity, scales, innerW);
+
+        // Curva de Delay (Eje secundario)
+        if (currentMetrics.maxDelayByTime) {
+          const maxDelayMin = (d3.max(currentMetrics.maxDelayByTime) || 10) * CFG.granularidadMin;
+          scales.yDelay = d3.scaleLinear()
+            .domain([0, maxDelayMin])
+            .range([innerH * 0.35, 10]); // Del 35% de la altura hacia arriba
+          
+          drawDelayCurve(g, currentMetrics.maxDelayByTime, scales, CFG.granularidadMin);
+          drawSecondaryAxis(g, scales, innerW, "Delay Max [min]");
+        }
       } else {
         area = createArea(scales);
         layers = drawLayers(g, pedidos, area, scales);
