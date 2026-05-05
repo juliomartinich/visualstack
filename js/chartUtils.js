@@ -77,8 +77,7 @@ function drawCapacityLine(g, capacity, scales, innerW) {
     .attr("x2", innerW)
     .attr("y2", yPos)
     .attr("stroke", "#aaa")
-    .attr("stroke-width", 1.5)
-    .attr("stroke-dasharray", "4,4");
+    .attr("stroke-width", 2.5);
     
   g.append("text")
     .attr("class", "capacity-label")
@@ -291,10 +290,10 @@ function drawColasLoads(g, pedidos, scales, granularidadMin) {
           return link({ source: [x1, y1], target: [x2, y2] });
         })
         .attr("fill", "none")
-        .attr("stroke", colorPedido(pedido))
+        .attr("stroke", "saddlebrown")
         .attr("stroke-width", 1.5)
         .attr("stroke-dasharray", "3,3")
-        .attr("opacity", 0.7);
+        .attr("opacity", 0.5);
     }
 
     // Bloques
@@ -319,11 +318,19 @@ function drawColasLoads(g, pedidos, scales, granularidadMin) {
           p.closePath();
           return p.toString();
         })
-        .attr("fill", d => d.type === 'wait' ? "transparent" : getAreaColor(pedido))
+        .attr("fill", d => {
+          if (d.type === 'wait') return "transparent";
+          if (d.delayed) return "saddlebrown";
+          return getAreaColor(pedido);
+        })
         .attr("stroke", colorPedido(pedido))
         .attr("stroke-width", 1)
         .attr("stroke-dasharray", d => d.type === 'wait' ? "2,2" : "none")
-        .attr("opacity", d => d.type === 'wait' ? 0.6 : 0.9);
+        .attr("opacity", d => {
+          if (d.type === 'wait') return 0.6;
+          if (d.delayed) return 0.6;
+          return 0.9;
+        });
     }
   });
 

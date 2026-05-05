@@ -88,8 +88,8 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, strokeColor
       .attr("class", "main-carga")
       .merge(activeRects)
       .attr("d", (d, i) => baseRects.nodes()[i].getAttribute("d"))
-      .attr("fill", paletteColor)
-      .attr("fill-opacity", 0.7)
+      .attr("fill", d => d.delayed ? "saddlebrown" : paletteColor)
+      .attr("fill-opacity", d => d.delayed ? 0.5 : 0.7)
       .attr("stroke", strokeColor)
       .attr("stroke-width", 1.5);
       
@@ -108,9 +108,10 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, strokeColor
       .merge(activeConexiones)
       .attr("d", (d, i) => baseConexiones.nodes()[i].getAttribute("d"))
       .attr("fill", "none")
-      .attr("stroke", paletteColor)
+      .attr("stroke", "saddlebrown")
       .attr("stroke-width", 2.5)
-      .attr("stroke-dasharray", "3,3");
+      .attr("stroke-dasharray", "3,3")
+      .attr("opacity", 0.5);
       
     activeConexiones.exit().remove();
   } else {

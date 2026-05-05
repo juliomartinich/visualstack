@@ -395,7 +395,7 @@ function buildColasStack(pedidos, granularidadMin) {
       queueLevels[v.xArrive] = ql + 1;
 
       v.pedido.STK_COLAS.bloquesXY.push({ x: v.xArrive, y0: v.yWait, y1: v.yWait + 1, v: 1, type: 'wait' });
-      v.pedido.STK_COLAS.bloquesXY.push({ x: v.xServe, y0: v.boca, y1: v.boca + 1, v: 1, type: 'serve' });
+      v.pedido.STK_COLAS.bloquesXY.push({ x: v.xServe, y0: v.boca, y1: v.boca + 1, v: 1, type: 'serve', delayed: true });
 
       v.pedido.STK_COLAS.conexionesXY.push({
         x1: v.xArrive + 1,
