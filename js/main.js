@@ -94,6 +94,9 @@ Promise.all([
         <div style="width:5px;"></div>
         <label for="header-view-plantas" style="margin:0; cursor:pointer; display:inline-block; pointer-events:auto;">Plantas</label>
         <input type="radio" id="header-view-plantas" name="headerViewGraph" value="plantas">
+        <div style="width:5px;"></div>
+        <label for="header-view-colas" style="margin:0; cursor:pointer; display:inline-block; pointer-events:auto;">Colas</label>
+        <input type="radio" id="header-view-colas" name="headerViewGraph" value="colas">
       </div>
     `;
     const filterFechaHeader = document.getElementById("header-filter-fecha");
@@ -409,15 +412,18 @@ Promise.all([
           .map(p => ({ ...p }));
         enrichPedidosForDate(subsetPedidos);
         
-        let results = buildStack(subsetPedidos);
-        
-        if (currentGraphView === "plantas") {
-          results = buildPlantLoadStack(subsetPedidos, CFG.granularidadMin);
+        let stackResult;
+        if (currentGraphView === 'plantas') {
+          stackResult = buildPlantLoadStack(subsetPedidos, CFG.granularidadMin);
+        } else if (currentGraphView === 'colas') {
+          stackResult = buildColasStack(subsetPedidos, CFG.granularidadMin);
+        } else {
+          stackResult = buildStack(subsetPedidos);
         }
-          
-        currentMetrics = results.metrics;
-        curHoraMax = results.horaMax;
-        curOcupacionMax = results.ocupacionMax;
+        
+        currentMetrics = stackResult.metrics;
+        curHoraMax = stackResult.horaMax;
+        curOcupacionMax = stackResult.ocupacionMax;
         window.appCache[cacheKey] = { pedidos: subsetPedidos, metrics: currentMetrics, horaMax: curHoraMax, ocupacionMax: curOcupacionMax };
       }
 
@@ -425,7 +431,7 @@ Promise.all([
       const xMin = CFG.horaInicio * (60 / CFG.granularidadMin);
       const xMax = CFG.horaFin * (60 / CFG.granularidadMin);
       let yMax;
-      if (currentGraphView === "plantas") {
+      if (currentGraphView === "plantas" || currentGraphView === "colas") {
         yMax = Math.max(10, Math.ceil(curOcupacionMax / 2) * 2 + 2); // Un poco de padding
       } else {
         yMax = Math.ceil(curOcupacionMax / CFG.yStep) * CFG.yStep;
@@ -441,10 +447,12 @@ Promise.all([
       window.currentBand = band;
       window.currentGanttPanel = ganttPanel;
 
-      area = createArea(scales);
-      if (currentGraphView === "plantas") {
+      if (currentGraphView === 'plantas') {
         layers = drawPlantLoads(g, pedidos, scales, CFG.granularidadMin);
+      } else if (currentGraphView === 'colas') {
+        layers = drawColasLoads(g, pedidos, scales, CFG.granularidadMin);
       } else {
+        area = createArea(scales);
         layers = drawLayers(g, pedidos, area, scales);
       }
 

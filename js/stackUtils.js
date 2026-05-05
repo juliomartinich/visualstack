@@ -26,10 +26,10 @@ function buildStack(pedidos) {
       if (p.ColorPedido == 11 || p.ColorPedido == 12) return 1;
       // 3. No confirmados (Al final)
       if (p.Confirmado !== "SI") return 5;
-      
+
       // 4. Confirmados (Azules > 1 camión)
       if (p.MaxCamiones > 1) return 2;
-      
+
       // 5. Verdes (1 camión)
       if (p.CantPedidosObra === 1) return 4; // Verde Oscuro
       return 3;                              // Verde Claro
@@ -43,60 +43,60 @@ function buildStack(pedidos) {
     return (a.XG?.offset ?? 0) - (b.XG?.offset ?? 0);
   });
 
-const horaMax = Math.max(0, d3.max(pedidos, p => (p.XG?.offset ?? 0) + (p.XG?.finrel ?? 0)) || 0);
-const ocupacion = Array(horaMax + 1).fill(0);
+  const horaMax = Math.max(0, d3.max(pedidos, p => (p.XG?.offset ?? 0) + (p.XG?.finrel ?? 0)) || 0);
+  const ocupacion = Array(horaMax + 1).fill(0);
 
-pedidos.forEach(pedido => {
-  // métricas de m3 
-  const cant = pedido.CantProgramada ?? 0;
-  totalM3 += cant;
-  if (pedido.Confirmado === "SI") {
-    totalM3Confirmados += cant;
-  } else {
-    totalM3NoConfirmados += cant;
-  }
-
-  // calculo las areas apiladas (stacked)
-  const segmentosXY = [];
-  (pedido.XG.demanda || []).forEach((v, i) => {
-    const x = pedido.XG.offset + i;
-    if (x < 0 || x > horaMax) return; // Enmark timeframe
-
-    const y0 = ocupacion[x] || 0;
-    const y1 = y0 + v;
-    segmentosXY.push({ x, y0, y1, v });
-    if (v > 0) {
-      ocupacion[x] = y1;
+  pedidos.forEach(pedido => {
+    // métricas de m3 
+    const cant = pedido.CantProgramada ?? 0;
+    totalM3 += cant;
+    if (pedido.Confirmado === "SI") {
+      totalM3Confirmados += cant;
+    } else {
+      totalM3NoConfirmados += cant;
     }
-  });
 
-  // derivar descargas gráficas
-  const descargasXY = [];
-  (pedido.XG.descargarel ?? []).forEach(idx => {
-    const x = pedido.XG.offset + idx;
-    if (x < 0 || x > horaMax) return; // Enmark timeframe
+    // calculo las areas apiladas (stacked)
+    const segmentosXY = [];
+    (pedido.XG.demanda || []).forEach((v, i) => {
+      const x = pedido.XG.offset + i;
+      if (x < 0 || x > horaMax) return; // Enmark timeframe
 
-    const seg = segmentosXY.find(s => s.x === x && s.v > 0);
-    if (!seg) return;
-    descargasXY.push({
-      key: idx,   // clave estable
-      x,          // slot absoluto
-      y: seg.y1   // techo del stack
+      const y0 = ocupacion[x] || 0;
+      const y1 = y0 + v;
+      segmentosXY.push({ x, y0, y1, v });
+      if (v > 0) {
+        ocupacion[x] = y1;
+      }
     });
+
+    // derivar descargas gráficas
+    const descargasXY = [];
+    (pedido.XG.descargarel ?? []).forEach(idx => {
+      const x = pedido.XG.offset + idx;
+      if (x < 0 || x > horaMax) return; // Enmark timeframe
+
+      const seg = segmentosXY.find(s => s.x === x && s.v > 0);
+      if (!seg) return;
+      descargasXY.push({
+        key: idx,   // clave estable
+        x,          // slot absoluto
+        y: seg.y1   // techo del stack
+      });
+    });
+
+    /* enriquecimiento directo del pedido */
+    pedido.STK = { segmentosXY, descargasXY };
   });
 
-  /* enriquecimiento directo del pedido */
-  pedido.STK = { segmentosXY, descargasXY };
-});
-
-const ocupacionMax = d3.max(ocupacion);
-const metrics = {
-  volumenT: totalM3,
-  volConfirmado: totalM3Confirmados,
-  volNoConfirmado: totalM3NoConfirmados,
-  envolvente: ocupacion,
-  ...computeGlobalMetrics(ocupacion, CFG.granularidadMin)
-};
+  const ocupacionMax = d3.max(ocupacion);
+  const metrics = {
+    volumenT: totalM3,
+    volConfirmado: totalM3Confirmados,
+    volNoConfirmado: totalM3NoConfirmados,
+    envolvente: ocupacion,
+    ...computeGlobalMetrics(ocupacion, CFG.granularidadMin)
+  };
 
   return { horaMax, ocupacionMax, metrics };
 }
@@ -209,7 +209,7 @@ function decomposePedidosIntoVoyages(pedidos, granularidadMin) {
     const freqSlots = Math.floor((p.Frecuencia || 0) / granularidadMin);
     const cargaSlots = Math.ceil((p.TiempoCarga || 0) / granularidadMin);
     const viajeSlots = Math.ceil((p.TiempoViaje || 0) / granularidadMin);
-    
+
     for (let i = 0; i < numViajes; i++) {
       const voyageOffset = p.XG.offset + i * freqSlots;
       const descargaRelativa = cargaSlots + viajeSlots;
@@ -225,20 +225,20 @@ function decomposePedidosIntoVoyages(pedidos, granularidadMin) {
           offset: voyageOffset,
           finrel: cycleSlots,
           demanda: [], // no relevante para gantt individual
-          descargarel: [descargaRelativa] 
+          descargarel: [descargaRelativa]
         }
       };
-      
+
       // Ajustar hito de descarga para el viaje
       voyage.STK = {
         segmentosXY: [], // no usado en gantt individual
-        descargasXY: [{ 
-          key: 0, 
-          x: voyageOffset + descargaRelativa, 
-          y: 0 
-        }] 
+        descargasXY: [{
+          key: 0,
+          x: voyageOffset + descargaRelativa,
+          y: 0
+        }]
       };
-      
+
       voyages.push(voyage);
     }
   });
@@ -285,7 +285,7 @@ function buildPlantLoadStack(pedidos, granularidadMin) {
 
     const numViajes = pedido.CantCargas || 1;
     const freqSlots = Math.floor((pedido.Frecuencia || 0) / granularidadMin);
-    
+
     const bloquesXY = [];
 
     for (let i = 0; i < numViajes; i++) {
@@ -294,7 +294,7 @@ function buildPlantLoadStack(pedidos, granularidadMin) {
 
       const y0 = ocupacionCargas[x] || 0;
       const y1 = y0 + 1; // Altura de 1 carga
-      
+
       bloquesXY.push({ x, y0, y1, v: 1 });
       ocupacionCargas[x] = y1;
     }
@@ -313,3 +313,101 @@ function buildPlantLoadStack(pedidos, granularidadMin) {
 
   return { horaMax, ocupacionMax, metrics };
 }
+
+/* ==== * Construcción del stack para Colas (Lógica FIFO) * ====*/
+function buildColasStack(pedidos, granularidadMin) {
+  let totalM3 = 0;
+  let totalM3Confirmados = 0;
+  let totalM3NoConfirmados = 0;
+
+  const bocasDisp = 2; // Por defecto 2 bocas
+  const getPriority = (p) => {
+    if ((p.CantProgramada ?? 0) > 100) return 0;
+    if (p.ColorPedido == 11 || p.ColorPedido == 12) return 1;
+    if (p.Confirmado !== "SI") return 5;
+    if (p.MaxCamiones > 1) return 2;
+    if (p.CantPedidosObra === 1) return 4;
+    return 3;
+  };
+
+  const voyages = [];
+  pedidos.forEach(p => {
+    const cant = p.CantProgramada ?? 0;
+    totalM3 += cant;
+    if (p.Confirmado === "SI") totalM3Confirmados += cant;
+    else totalM3NoConfirmados += cant;
+
+    const numViajes = p.CantCargas || 1;
+    const freqSlots = Math.floor((p.Frecuencia || 0) / granularidadMin);
+
+    for (let i = 0; i < numViajes; i++) {
+      const xArrive = p.XG.offset + i * freqSlots;
+      voyages.push({ pedido: p, xArrive, prio: getPriority(p) });
+    }
+
+    p.STK_COLAS = { bloquesXY: [], conexionesXY: [] };
+  });
+
+  voyages.sort((a, b) => {
+    if (a.xArrive !== b.xArrive) return a.xArrive - b.xArrive;
+    return a.prio - b.prio;
+  });
+
+  const horaMax = Math.max(0, d3.max(voyages, v => v.xArrive) || 0) + 100; // Extra buffer
+  const bocas = Array(bocasDisp).fill(0);
+  const queueLevels = Array(horaMax + 1).fill(0);
+  const globalOcupacion = Array(horaMax + 1).fill(0);
+
+  voyages.forEach(v => {
+    let tServe = v.xArrive;
+    let freeBoca = -1;
+    while (true) {
+      for (let j = 0; j < bocasDisp; j++) {
+        if (bocas[j] <= tServe) {
+          freeBoca = j;
+          break;
+        }
+      }
+      if (freeBoca !== -1) {
+        bocas[freeBoca] = tServe + 1;
+        v.xServe = tServe;
+        v.boca = freeBoca;
+        break;
+      }
+      tServe++;
+    }
+
+    if (v.xServe > v.xArrive) {
+      const ql = queueLevels[v.xArrive] || 0;
+      v.yWait = bocasDisp + ql;
+      queueLevels[v.xArrive] = ql + 1;
+
+      v.pedido.STK_COLAS.bloquesXY.push({ x: v.xArrive, y0: v.yWait, y1: v.yWait + 1, v: 1, type: 'wait' });
+      v.pedido.STK_COLAS.bloquesXY.push({ x: v.xServe, y0: v.boca, y1: v.boca + 1, v: 1, type: 'serve' });
+
+      v.pedido.STK_COLAS.conexionesXY.push({
+        x1: v.xArrive + 1,
+        y1: v.yWait + 0.5,
+        x2: v.xServe,
+        y2: v.boca + 0.5
+      });
+      globalOcupacion[v.xArrive] = Math.max(globalOcupacion[v.xArrive] || 0, v.yWait + 1);
+    } else {
+      v.pedido.STK_COLAS.bloquesXY.push({ x: v.xServe, y0: v.boca, y1: v.boca + 1, v: 1, type: 'serve' });
+    }
+
+    globalOcupacion[v.xServe] = Math.max(globalOcupacion[v.xServe] || 0, v.boca + 1);
+  });
+
+  const ocupacionMax = d3.max(globalOcupacion) || 2;
+  const metrics = {
+    volumenT: totalM3,
+    volConfirmado: totalM3Confirmados,
+    volNoConfirmado: totalM3NoConfirmados,
+    envolvente: globalOcupacion,
+    ...computeGlobalMetrics(globalOcupacion, granularidadMin)
+  };
+
+  return { horaMax: d3.max(voyages, v => v.xServe) + 1, ocupacionMax, metrics };
+}
+

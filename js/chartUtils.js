@@ -190,14 +190,14 @@ function drawLayers(g, pedidos, area, scales) {
 /* ==== * Dibujo de Cargas de Plantas (rectángulos) * ====*/
 function drawPlantLoads(g, pedidos, scales, granularidadMin) {
   const { x, y } = scales;
-  
+
   const layers = g.selectAll("g.pedido")
     .data(pedidos)
     .enter()
     .append("g")
     .attr("class", "pedido");
 
-  layers.each(function(pedido) {
+  layers.each(function (pedido) {
     const bloques = pedido.STK_PLANTAS?.bloquesXY || [];
     if (bloques.length === 0) return;
 
@@ -213,7 +213,7 @@ function drawPlantLoads(g, pedidos, scales, granularidadMin) {
         const pw = Math.max(1, x(d.x + 1) - x(d.x));
         const ph = Math.max(1, y(d.y0) - y(d.y1));
         const pr = Math.min(4, pw * 0.1, ph * 0.5);
-        
+
         const p = d3.path();
         p.moveTo(px, py + ph); // BL
         p.lineTo(px + pw, py + ph); // BR
@@ -226,6 +226,82 @@ function drawPlantLoads(g, pedidos, scales, granularidadMin) {
       .attr("stroke", colorPedido(pedido))
       .attr("stroke-width", 1)
       .attr("opacity", 0.9);
+  });
+
+  return layers;
+}
+
+/* ==== * Dibujo de Cargas de Colas (rectángulos y conexiones FIFO) * ====*/
+function drawColasLoads(g, pedidos, scales, granularidadMin) {
+  const { x, y } = scales;
+
+  const layers = g.selectAll("g.pedido")
+    .data(pedidos)
+    .enter()
+    .append("g")
+    .attr("class", "pedido");
+
+  layers.each(function (pedido) {
+    const bloques = pedido.STK_COLAS?.bloquesXY || [];
+    const conexiones = pedido.STK_COLAS?.conexionesXY || [];
+
+    if (bloques.length === 0 && conexiones.length === 0) return;
+
+    const self = d3.select(this);
+
+    // Conexiones (curvas)
+    if (conexiones.length > 0) {
+      self.selectAll("path.conexion")
+        .data(conexiones)
+        .enter()
+        .append("path")
+        .attr("class", "conexion")
+        .attr("d", d => {
+          const x1 = x(d.x1);
+          const y1 = y(d.y1);
+          const x2 = x(d.x2);
+          const y2 = y(d.y2);
+
+          const link = d3.linkHorizontal()
+            .x(p => p[0])
+            .y(p => p[1]);
+          return link({ source: [x1, y1], target: [x2, y2] });
+        })
+        .attr("fill", "none")
+        .attr("stroke", colorPedido(pedido))
+        .attr("stroke-width", 1.5)
+        .attr("stroke-dasharray", "3,3")
+        .attr("opacity", 0.7);
+    }
+
+    // Bloques
+    if (bloques.length > 0) {
+      self.selectAll("path.carga")
+        .data(bloques)
+        .enter()
+        .append("path")
+        .attr("class", "carga")
+        .attr("d", d => {
+          const px = x(d.x);
+          const py = y(d.y1);
+          const pw = Math.max(1, x(d.x + 1) - x(d.x));
+          const ph = Math.max(1, y(d.y0) - y(d.y1));
+          const pr = Math.min(4, pw * 0.1, ph * 0.5);
+
+          const p = d3.path();
+          p.moveTo(px, py + ph); // BL
+          p.lineTo(px + pw, py + ph); // BR
+          p.arcTo(px + pw * 0.8, py, px, py, pr); // TR
+          p.arcTo(px, py, px, py + ph, pr); // TL
+          p.closePath();
+          return p.toString();
+        })
+        .attr("fill", d => d.type === 'wait' ? "transparent" : getAreaColor(pedido))
+        .attr("stroke", colorPedido(pedido))
+        .attr("stroke-width", 1)
+        .attr("stroke-dasharray", d => d.type === 'wait' ? "2,2" : "none")
+        .attr("opacity", d => d.type === 'wait' ? 0.6 : 0.9);
+    }
   });
 
   return layers;
@@ -287,9 +363,15 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
 
       // Descargas
       rowsG.each(function (pedido) {
+        const offset = pedido.XG?.offset ?? 0;
+        const descargasX = (pedido.XG?.descargarel ?? []).map((rel, i) => ({
+          key: i,
+          x: offset + rel
+        }));
+
         d3.select(this)
           .selectAll("path.gantt-descarga")
-          .data(pedido.STK?.descargasXY ?? [], d => d.key)
+          .data(descargasX, d => d.key)
           .join("path")
           .attr("class", "gantt-descarga")
           .attr("d", d3.symbol().type(d3.symbolTriangle).size(20))
