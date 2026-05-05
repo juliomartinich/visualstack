@@ -19,6 +19,13 @@ function findActiveLayer(capasReversa, t, my, scales) {
           return capa;
         }
       }
+    } else if (currentGraphView === 'colas' && capa.STK_COLAS && capa.STK_COLAS.bloquesXY) {
+      const seg = capa.STK_COLAS.bloquesXY.find(s => s.x === t);
+      if (seg && seg.v > 0) {
+        if (my >= scales.y(seg.y1) && my <= scales.y(seg.y0)) {
+          return capa;
+        }
+      }
     }
   }
   return null;
@@ -89,6 +96,25 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, strokeColor
     activeRects.exit().remove();
   } else {
     overlay.selectAll("path.main-carga").remove();
+  }
+
+  const baseConexiones = d3.select(layers.nodes()[idx]).selectAll("path.conexion");
+  if (!baseConexiones.empty()) {
+    const activeConexiones = overlay.selectAll("path.main-conexion").data(baseConexiones.data());
+    
+    activeConexiones.enter()
+      .append("path")
+      .attr("class", "main-conexion")
+      .merge(activeConexiones)
+      .attr("d", (d, i) => baseConexiones.nodes()[i].getAttribute("d"))
+      .attr("fill", "none")
+      .attr("stroke", paletteColor)
+      .attr("stroke-width", 2.5)
+      .attr("stroke-dasharray", "3,3");
+      
+    activeConexiones.exit().remove();
+  } else {
+    overlay.selectAll("path.main-conexion").remove();
   }
 
   /* ==== DESCARGAS – OVERLAY =====*/
