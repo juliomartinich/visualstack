@@ -67,6 +67,29 @@ function drawAxes(g, scales, maxX, granularidad, innerH) {
     );
 }
 
+function drawCapacityLine(g, capacity, scales, innerW) {
+  if (capacity <= 0) return;
+  const yPos = scales.y(capacity);
+  g.append("line")
+    .attr("class", "capacity-line")
+    .attr("x1", 0)
+    .attr("y1", yPos)
+    .attr("x2", innerW)
+    .attr("y2", yPos)
+    .attr("stroke", "#aaa")
+    .attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", "4,4");
+    
+  g.append("text")
+    .attr("class", "capacity-label")
+    .attr("x", innerW - 5)
+    .attr("y", yPos - 5)
+    .attr("text-anchor", "end")
+    .attr("fill", "#999")
+    .attr("font-size", "10px")
+    .text(`Capacidad: ${capacity} boca(s)`);
+}
+
 /* ==== * Área stack * ===================== */
 function createArea(scales) {
   return d3.area()

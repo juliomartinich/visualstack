@@ -432,7 +432,15 @@ Promise.all([
       const xMax = CFG.horaFin * (60 / CFG.granularidadMin);
       let yMax;
       if (currentGraphView === "plantas" || currentGraphView === "colas") {
-        yMax = Math.max(10, Math.ceil(curOcupacionMax / 2) * 2 + 2); // Un poco de padding
+        const uniquePlantas = new Set(pedidos.map(p => p.Planta));
+        let capacity = 0;
+        uniquePlantas.forEach(pCode => {
+          if (window.plantasData && window.plantasData[pCode]) {
+            capacity += window.plantasData[pCode].cant_bocas || 0;
+          }
+        });
+        yMax = Math.max(capacity + 2, Math.ceil(curOcupacionMax / 2) * 2 + 2);
+        if (yMax < 10) yMax = 10;
       } else {
         yMax = Math.ceil(curOcupacionMax / CFG.yStep) * CFG.yStep;
       }
@@ -449,8 +457,26 @@ Promise.all([
 
       if (currentGraphView === 'plantas') {
         layers = drawPlantLoads(g, pedidos, scales, CFG.granularidadMin);
+        
+        const uniquePlantas = new Set(pedidos.map(p => p.Planta));
+        let capacity = 0;
+        uniquePlantas.forEach(pCode => {
+          if (window.plantasData && window.plantasData[pCode]) {
+            capacity += window.plantasData[pCode].cant_bocas || 0;
+          }
+        });
+        drawCapacityLine(g, capacity, scales, innerW);
       } else if (currentGraphView === 'colas') {
         layers = drawColasLoads(g, pedidos, scales, CFG.granularidadMin);
+        
+        const uniquePlantas = new Set(pedidos.map(p => p.Planta));
+        let capacity = 0;
+        uniquePlantas.forEach(pCode => {
+          if (window.plantasData && window.plantasData[pCode]) {
+            capacity += window.plantasData[pCode].cant_bocas || 0;
+          }
+        });
+        drawCapacityLine(g, capacity, scales, innerW);
       } else {
         area = createArea(scales);
         layers = drawLayers(g, pedidos, area, scales);
