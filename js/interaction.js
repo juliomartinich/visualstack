@@ -92,7 +92,8 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, strokeColor
   }
 
   /* ==== DESCARGAS – OVERLAY =====*/
-  const descargas = activa.STK?.descargasXY || [];
+  const currentGraphView = document.querySelector('input[name="viewGraph"]:checked')?.value || 'camiones';
+  const descargas = (currentGraphView === 'camiones' && activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
   const tris = overlay
     .selectAll("path.descarga-activa")
     .data(descargas, d => d.key);
