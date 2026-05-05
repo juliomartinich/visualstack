@@ -320,7 +320,19 @@ function buildColasStack(pedidos, granularidadMin) {
   let totalM3Confirmados = 0;
   let totalM3NoConfirmados = 0;
 
-  const bocasDisp = 2; // Por defecto 2 bocas
+  const uniquePlantas = new Set();
+  pedidos.forEach(p => uniquePlantas.add(p.Planta));
+
+  let bocasDisp = 0;
+  uniquePlantas.forEach(pCode => {
+    if (window.plantasData && window.plantasData[pCode] && window.plantasData[pCode].cant_bocas) {
+      bocasDisp += window.plantasData[pCode].cant_bocas;
+    } else {
+      bocasDisp += 1; // Fallback per plant
+    }
+  });
+
+  if (bocasDisp === 0) bocasDisp = 2; // Global fallback
   const getPriority = (p) => {
     if ((p.CantProgramada ?? 0) > 100) return 0;
     if (p.ColorPedido == 11 || p.ColorPedido == 12) return 1;
