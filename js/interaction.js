@@ -92,8 +92,7 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, strokeColor
   }
 
   /* ==== DESCARGAS – OVERLAY =====*/
-  const currentGraphView = document.querySelector('input[name="viewGraph"]:checked')?.value || 'camiones';
-  const descargas = (currentGraphView === 'camiones' && activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
+  const descargas = activa.STK?.descargasXY || [];
   const tris = overlay
     .selectAll("path.descarga-activa")
     .data(descargas, d => d.key);
@@ -428,15 +427,15 @@ function drawBand(g, scales, innerH, granularidad) {
         .attr("fill", color)
         .attr("opacity", 0.8);
 
-      const currentGraphView = document.querySelector('input[name="viewGraph"]:checked')?.value || 'camiones';
+      const descargasXY = pedido.STK?.descargasXY || [];
       const tris = fgG
         .selectAll("path.descarga-activa")
-        .data((currentGraphView === 'camiones' && pedido.STK && pedido.STK.descargasXY) ? pedido.STK.descargasXY : [], d => d.key);
+        .data(descargasXY, d => d.key);
 
       tris.enter()
         .append("path")
         .attr("class", "descarga-activa")
-        .attr("d", d3.symbol().type(d3.symbolTriangle).size(20))
+        .attr("d", d3.symbol().type(d3.symbolTriangle).size(40))
         .merge(tris)
         .attr("transform", d => `translate(${scales.x(d.x)}, ${bandHeight * 0.75})`)
         .attr("fill", "white")
