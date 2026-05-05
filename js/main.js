@@ -87,6 +87,14 @@ Promise.all([
       <div style="margin-right: 12px;"></div>
       <label for="header-filter-plantagrupo">Planta:</label>
       <select id="header-filter-plantagrupo" title="Cambiar Planta"></select>
+      <div style="margin-right: 12px;"></div>
+      <div style="display:inline-flex; align-items: center; gap: 5px; margin-left: 5px; font-size: 12px;">
+        <label for="header-view-camiones" style="margin:0; cursor:pointer; display:inline-block; pointer-events:auto;">Camiones</label>
+        <input type="radio" id="header-view-camiones" name="headerViewGraph" value="camiones">
+        <div style="width:5px;"></div>
+        <label for="header-view-plantas" style="margin:0; cursor:pointer; display:inline-block; pointer-events:auto;">Plantas</label>
+        <input type="radio" id="header-view-plantas" name="headerViewGraph" value="plantas">
+      </div>
     `;
     const filterFechaHeader = document.getElementById("header-filter-fecha");
     const filterPlantaHeader = document.getElementById("header-filter-plantagrupo");
@@ -476,13 +484,22 @@ Promise.all([
     const savedGraphView = getCookie("viewGraph") || "camiones";
     const savedGanttView = getCookie("viewGantt") || "pedidos";
     
-    document.querySelector(`input[name="viewGraph"][value="${savedGraphView}"]`).checked = true;
-    document.querySelector(`input[name="viewGantt"][value="${savedGanttView}"]`).checked = true;
+    document.querySelectorAll(`input[name="viewGraph"][value="${savedGraphView}"]`).forEach(el => el.checked = true);
+    document.querySelectorAll(`input[name="headerViewGraph"][value="${savedGraphView}"]`).forEach(el => el.checked = true);
+    document.querySelectorAll(`input[name="viewGantt"][value="${savedGanttView}"]`).forEach(el => el.checked = true);
 
-    const viewRadios = document.querySelectorAll('input[name="viewGraph"], input[name="viewGantt"]');
+    const viewRadios = document.querySelectorAll('input[name="viewGraph"], input[name="headerViewGraph"], input[name="viewGantt"]');
     viewRadios.forEach(radio => {
       radio.addEventListener("change", (e) => {
-        setCookie(e.target.name, e.target.value);
+        const val = e.target.value;
+        const name = e.target.name;
+        if (name === "viewGraph" || name === "headerViewGraph") {
+          setCookie("viewGraph", val);
+          document.querySelectorAll(`input[name="viewGraph"][value="${val}"]`).forEach(el => el.checked = true);
+          document.querySelectorAll(`input[name="headerViewGraph"][value="${val}"]`).forEach(el => el.checked = true);
+        } else {
+          setCookie(name, val);
+        }
         renderDashboard(localStorage.getItem("filterPlantaGrupo") || initialSaved);
       });
     });
