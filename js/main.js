@@ -417,18 +417,29 @@ Promise.all([
           .filter(p => p["Fecha Pedido"] === selectedDate && permitidas.includes(p.Planta))
           .map(p => ({ ...p }));
         enrichPedidosForDate(subsetPedidos);
+
+        // Calcular capacidad real (bocas) para la simulación de colas
+        const uniquePlantas = new Set(subsetPedidos.map(p => p.Planta));
+        let totalBocas = 0;
+        uniquePlantas.forEach(pCode => {
+          if (window.plantasData && window.plantasData[pCode]) {
+            totalBocas += window.plantasData[pCode].cant_bocas || 0;
+          }
+        });
+        if (totalBocas <= 0) totalBocas = 1;
         
         let stackResult;
         if (currentGraphView === 'plantas') {
           stackResult = buildPlantLoadStack(subsetPedidos, CFG.granularidadMin);
         } else if (currentGraphView === 'colas') {
-          stackResult = buildColasStack(subsetPedidos, CFG.granularidadMin);
+          stackResult = buildColasStack(subsetPedidos, totalBocas, CFG.granularidadMin);
         } else {
           stackResult = buildStack(subsetPedidos);
         }
         
         currentMetrics = stackResult.metrics;
-        curHoraMax = stackResult.horaMax;
+        const defaultXMax = (CFG.horaFin * 60) / CFG.granularidadMin;
+        curHoraMax = Math.max(stackResult.horaMax || 0, defaultXMax);
         curOcupacionMax = stackResult.ocupacionMax;
         window.appCache[cacheKey] = { pedidos: subsetPedidos, metrics: currentMetrics, horaMax: curHoraMax, ocupacionMax: curOcupacionMax };
       }

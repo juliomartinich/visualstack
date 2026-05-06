@@ -315,24 +315,12 @@ function buildPlantLoadStack(pedidos, granularidadMin) {
 }
 
 /* ==== * Construcción del stack para Colas (Lógica FIFO) * ====*/
-function buildColasStack(pedidos, granularidadMin) {
+function buildColasStack(pedidos, bocasDisp, granularidadMin) {
   let totalM3 = 0;
   let totalM3Confirmados = 0;
   let totalM3NoConfirmados = 0;
 
-  const uniquePlantas = new Set();
-  pedidos.forEach(p => uniquePlantas.add(p.Planta));
-
-  let bocasDisp = 0;
-  uniquePlantas.forEach(pCode => {
-    if (window.plantasData && window.plantasData[pCode] && window.plantasData[pCode].cant_bocas) {
-      bocasDisp += window.plantasData[pCode].cant_bocas;
-    } else {
-      bocasDisp += 1; // Fallback per plant
-    }
-  });
-
-  if (bocasDisp === 0) bocasDisp = 2; // Global fallback
+  if (!bocasDisp || bocasDisp <= 0) bocasDisp = 2; // Fallback seguro
   const getPriority = (p) => {
     if ((p.CantProgramada ?? 0) > 100) return 0;
     if (p.ColorPedido == 11 || p.ColorPedido == 12) return 1;
@@ -360,25 +348,30 @@ function buildColasStack(pedidos, granularidadMin) {
     p.STK_COLAS = { bloquesXY: [], conexionesXY: [] };
   });
 
-  voyages.sort((a, b) => {
+  const validVoyages = voyages.filter(v => !isNaN(v.xArrive));
+
+  validVoyages.sort((a, b) => {
     if (a.xArrive !== b.xArrive) return a.xArrive - b.xArrive;
     return a.prio - b.prio;
   });
 
-  const horaMax = Math.max(0, d3.max(voyages, v => v.xArrive) || 0) + 100; // Extra buffer
-  const bocas = Array(bocasDisp).fill(0);
-  const queueLevels = Array(horaMax + 1).fill(0);
-  const globalOcupacion = Array(horaMax + 1).fill(0);
+  const tMin = d3.min(validVoyages, v => v.xArrive) || 0;
+  const tMax = (d3.max(validVoyages, v => v.xArrive) || 0) + 100;
+  
+  const horaMax = tMax; 
+  const bocas = Array(bocasDisp).fill(tMin); // Las bocas están libres desde el tiempo mínimo
+  const queueLevels = {}; // Usar objeto para permitir índices negativos
+  const globalOcupacion = {}; 
 
-  const maxDelayByTime = Array(horaMax + 1).fill(0);
-  const potentialDelayByTime = Array(horaMax + 1).fill(0);
-  const arrivalsAtTime = Array(horaMax + 1).fill(0);
+  const maxDelayByTime = {};
+  const potentialDelayByTime = {};
+  const arrivalsAtTime = {};
   
   let voyageIdx = 0;
-  for (let t = 0; t <= horaMax; t++) {
-    while (voyageIdx < voyages.length && voyages[voyageIdx].xArrive === t) {
-      arrivalsAtTime[t]++;
-      const v = voyages[voyageIdx];
+  for (let t = tMin; t <= horaMax; t++) {
+    while (voyageIdx < validVoyages.length && validVoyages[voyageIdx].xArrive === t) {
+      arrivalsAtTime[t] = (arrivalsAtTime[t] || 0) + 1;
+      const v = validVoyages[voyageIdx];
       let tServe = v.xArrive;
       let freeBoca = -1;
       
@@ -399,7 +392,7 @@ function buildColasStack(pedidos, granularidadMin) {
       }
 
       const delay = v.xServe - v.xArrive;
-      if (delay > maxDelayByTime[v.xArrive]) {
+      if (delay > (maxDelayByTime[v.xArrive] || 0)) {
         maxDelayByTime[v.xArrive] = delay;
       }
 
@@ -423,28 +416,36 @@ function buildColasStack(pedidos, granularidadMin) {
     potentialDelayByTime[t] = Math.max(0, earliestFree - t);
   }
 
-  // Nueva métrica combinada: Real si hay carga, Potencial si no hay.
-  const combinedDelayByTime = Array(horaMax + 1).fill(0);
+  // Normalizar métricas a arreglos [0, horaMax] para compatibilidad con el resto de la app
+  const arrEnvolvente = Array(horaMax + 1).fill(0);
+  const arrMaxDelay = Array(horaMax + 1).fill(0);
+  const arrPotentialDelay = Array(horaMax + 1).fill(0);
+  const arrCombinedDelay = Array(horaMax + 1).fill(0);
+
   for (let t = 0; t <= horaMax; t++) {
-    if (arrivalsAtTime[t] > 0) {
-      combinedDelayByTime[t] = maxDelayByTime[t];
+    arrEnvolvente[t] = globalOcupacion[t] || 0;
+    arrMaxDelay[t] = maxDelayByTime[t] || 0;
+    arrPotentialDelay[t] = potentialDelayByTime[t] || 0;
+    
+    if ((arrivalsAtTime[t] || 0) > 0) {
+      arrCombinedDelay[t] = arrMaxDelay[t];
     } else {
-      combinedDelayByTime[t] = potentialDelayByTime[t];
+      arrCombinedDelay[t] = arrPotentialDelay[t];
     }
   }
 
-  const ocupacionMax = d3.max(globalOcupacion) || 2;
+  const ocupacionMax = d3.max(Object.values(globalOcupacion)) || 2;
   const metrics = {
     volumenT: totalM3,
     volConfirmado: totalM3Confirmados,
     volNoConfirmado: totalM3NoConfirmados,
-    envolvente: globalOcupacion,
-    maxDelayByTime: maxDelayByTime,
-    potentialDelayByTime: potentialDelayByTime,
-    combinedDelayByTime: combinedDelayByTime,
-    ...computeGlobalMetrics(globalOcupacion, granularidadMin)
+    envolvente: arrEnvolvente,
+    maxDelayByTime: arrMaxDelay,
+    potentialDelayByTime: arrPotentialDelay,
+    combinedDelayByTime: arrCombinedDelay,
+    ...computeGlobalMetrics(arrEnvolvente, granularidadMin)
   };
 
-  return { horaMax: d3.max(voyages, v => v.xServe) + 1, ocupacionMax, metrics };
+  return { horaMax: (d3.max(validVoyages, v => v.xServe) || 0) + 1, ocupacionMax, metrics };
 }
 

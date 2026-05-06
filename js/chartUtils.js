@@ -125,7 +125,7 @@ function drawDelayCurve(g, data, scales, granularidadMin) {
     .attr("class", "delay-area")
     .attr("d", area)
     .attr("fill", "red")
-    .attr("opacity", 0.05);
+    .attr("opacity", 0.1);
 }
 
 function drawPotentialDelayCurve(g, data, scales, granularidadMin) {
