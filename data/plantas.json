@@ -27,12 +27,12 @@
   "1F": {
     "nombre": "CENTINELA",
     "tiempo_carga": 15,
-    "cant_bocas": 1
+    "cant_bocas": 2
   },
   "1G": {
     "nombre": "CENTINELA",
     "tiempo_carga": 15,
-    "cant_bocas": 1
+    "cant_bocas": 2
   },
   "1H": {
     "nombre": "PROY PARQUE EOL",
@@ -52,7 +52,7 @@
   "1K": {
     "nombre": "COPIAPÓ",
     "tiempo_carga": 15,
-    "cant_bocas": 1
+    "cant_bocas": 2
   },
   "1L": {
     "nombre": "COQUIMBO",
@@ -132,12 +132,12 @@
   "1Z": {
     "nombre": "LA SUERTE",
     "tiempo_carga": 15,
-    "cant_bocas": 1
+    "cant_bocas": 2
   },
   "2A": {
     "nombre": "LA SUERTE 2",
     "tiempo_carga": 15,
-    "cant_bocas": 1
+    "cant_bocas": 2
   },
   "2C": {
     "nombre": "CORONEL",
@@ -167,7 +167,7 @@
   "2J": {
     "nombre": "PUERTO MONTT",
     "tiempo_carga": 15,
-    "cant_bocas": 1
+    "cant_bocas": 2
   },
   "2K": {
     "nombre": "PUNTA ARENAS",
@@ -182,7 +182,7 @@
   "2Y": {
     "nombre": "TEMUCO",
     "tiempo_carga": 15,
-    "cant_bocas": 1
+    "cant_bocas": 2
   },
   "2Z": {
     "nombre": "TEMUCO",
