@@ -128,6 +128,54 @@ function drawDelayCurve(g, data, scales, granularidadMin) {
     .attr("opacity", 0.05);
 }
 
+function drawPotentialDelayCurve(g, data, scales, granularidadMin) {
+  if (!data || data.length === 0 || !scales.yDelay) return;
+
+  const [xMin, xMax] = scales.x.domain();
+  const visibleData = data
+    .map((v, i) => ({ v, i }))
+    .filter(d => d.i >= xMin && d.i <= xMax);
+
+  const line = d3.line()
+    .x(d => scales.x(d.i))
+    .y(d => scales.yDelay(d.v * granularidadMin))
+    .curve(d3.curveMonotoneX);
+
+  g.append("path")
+    .datum(visibleData)
+    .attr("class", "potential-delay-curve")
+    .attr("d", line)
+    .attr("fill", "none")
+    .attr("stroke", "blue")
+    .attr("stroke-width", 2)
+    .attr("stroke-dasharray", "4,2")
+    .attr("opacity", 0.7);
+}
+
+function drawCombinedDelayCurve(g, data, scales, granularidadMin) {
+  if (!data || data.length === 0 || !scales.yDelay) return;
+
+  const [xMin, xMax] = scales.x.domain();
+  const visibleData = data
+    .map((v, i) => ({ v, i }))
+    .filter(d => d.i >= xMin && d.i <= xMax);
+
+  const line = d3.line()
+    .x(d => scales.x(d.i))
+    .y(d => scales.yDelay(d.v * granularidadMin))
+    .curve(d3.curveMonotoneX);
+
+  g.append("path")
+    .datum(visibleData)
+    .attr("class", "combined-delay-curve")
+    .attr("d", line)
+    .attr("fill", "none")
+    .attr("stroke", "red")
+    .attr("stroke-width", 2)
+    .attr("stroke-dasharray", "4,2")
+    .attr("opacity", 1);
+}
+
 function drawSecondaryAxis(g, scales, innerW, label) {
   if (!scales.yDelay) return;
 

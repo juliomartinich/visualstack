@@ -370,54 +370,68 @@ function buildColasStack(pedidos, granularidadMin) {
   const queueLevels = Array(horaMax + 1).fill(0);
   const globalOcupacion = Array(horaMax + 1).fill(0);
 
-  voyages.forEach(v => {
-    let tServe = v.xArrive;
-    let freeBoca = -1;
-    while (true) {
-      for (let j = 0; j < bocasDisp; j++) {
-        if (bocas[j] <= tServe) {
-          freeBoca = j;
+  const maxDelayByTime = Array(horaMax + 1).fill(0);
+  const potentialDelayByTime = Array(horaMax + 1).fill(0);
+  const arrivalsAtTime = Array(horaMax + 1).fill(0);
+  
+  let voyageIdx = 0;
+  for (let t = 0; t <= horaMax; t++) {
+    while (voyageIdx < voyages.length && voyages[voyageIdx].xArrive === t) {
+      arrivalsAtTime[t]++;
+      const v = voyages[voyageIdx];
+      let tServe = v.xArrive;
+      let freeBoca = -1;
+      
+      while (true) {
+        for (let j = 0; j < bocasDisp; j++) {
+          if (bocas[j] <= tServe) {
+            freeBoca = j;
+            break;
+          }
+        }
+        if (freeBoca !== -1) {
+          bocas[freeBoca] = tServe + 1;
+          v.xServe = tServe;
+          v.boca = freeBoca;
           break;
         }
+        tServe++;
       }
-      if (freeBoca !== -1) {
-        bocas[freeBoca] = tServe + 1;
-        v.xServe = tServe;
-        v.boca = freeBoca;
-        break;
+
+      const delay = v.xServe - v.xArrive;
+      if (delay > maxDelayByTime[v.xArrive]) {
+        maxDelayByTime[v.xArrive] = delay;
       }
-      tServe++;
+
+      if (v.xServe > v.xArrive) {
+        const ql = queueLevels[v.xArrive] || 0;
+        v.yWait = bocasDisp + ql;
+        queueLevels[v.xArrive] = ql + 1;
+        v.pedido.STK_COLAS.bloquesXY.push({ x: v.xArrive, y0: v.yWait, y1: v.yWait + 1, v: 1, type: 'wait' });
+        v.pedido.STK_COLAS.bloquesXY.push({ x: v.xServe, y0: v.boca, y1: v.boca + 1, v: 1, type: 'serve', delayed: true });
+        v.pedido.STK_COLAS.conexionesXY.push({ x1: v.xArrive + 1, y1: v.yWait + 0.5, x2: v.xServe, y2: v.boca + 0.5 });
+        globalOcupacion[v.xArrive] = Math.max(globalOcupacion[v.xArrive] || 0, v.yWait + 1);
+      } else {
+        v.pedido.STK_COLAS.bloquesXY.push({ x: v.xServe, y0: v.boca, y1: v.boca + 1, v: 1, type: 'serve' });
+      }
+      globalOcupacion[v.xServe] = Math.max(globalOcupacion[v.xServe] || 0, v.boca + 1);
+      
+      voyageIdx++;
     }
 
-    if (v.xServe > v.xArrive) {
-      const ql = queueLevels[v.xArrive] || 0;
-      v.yWait = bocasDisp + ql;
-      queueLevels[v.xArrive] = ql + 1;
+    const earliestFree = Math.min(...bocas);
+    potentialDelayByTime[t] = Math.max(0, earliestFree - t);
+  }
 
-      v.pedido.STK_COLAS.bloquesXY.push({ x: v.xArrive, y0: v.yWait, y1: v.yWait + 1, v: 1, type: 'wait' });
-      v.pedido.STK_COLAS.bloquesXY.push({ x: v.xServe, y0: v.boca, y1: v.boca + 1, v: 1, type: 'serve', delayed: true });
-
-      v.pedido.STK_COLAS.conexionesXY.push({
-        x1: v.xArrive + 1,
-        y1: v.yWait + 0.5,
-        x2: v.xServe,
-        y2: v.boca + 0.5
-      });
-      globalOcupacion[v.xArrive] = Math.max(globalOcupacion[v.xArrive] || 0, v.yWait + 1);
+  // Nueva métrica combinada: Real si hay carga, Potencial si no hay.
+  const combinedDelayByTime = Array(horaMax + 1).fill(0);
+  for (let t = 0; t <= horaMax; t++) {
+    if (arrivalsAtTime[t] > 0) {
+      combinedDelayByTime[t] = maxDelayByTime[t];
     } else {
-      v.pedido.STK_COLAS.bloquesXY.push({ x: v.xServe, y0: v.boca, y1: v.boca + 1, v: 1, type: 'serve' });
+      combinedDelayByTime[t] = potentialDelayByTime[t];
     }
-
-    globalOcupacion[v.xServe] = Math.max(globalOcupacion[v.xServe] || 0, v.boca + 1);
-  });
-
-  const maxDelayByTime = Array(horaMax + 1).fill(0);
-  voyages.forEach(v => {
-    const delay = v.xServe - v.xArrive;
-    if (delay > maxDelayByTime[v.xArrive]) {
-      maxDelayByTime[v.xArrive] = delay;
-    }
-  });
+  }
 
   const ocupacionMax = d3.max(globalOcupacion) || 2;
   const metrics = {
@@ -426,6 +440,8 @@ function buildColasStack(pedidos, granularidadMin) {
     volNoConfirmado: totalM3NoConfirmados,
     envolvente: globalOcupacion,
     maxDelayByTime: maxDelayByTime,
+    potentialDelayByTime: potentialDelayByTime,
+    combinedDelayByTime: combinedDelayByTime,
     ...computeGlobalMetrics(globalOcupacion, granularidadMin)
   };
 

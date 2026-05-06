@@ -486,12 +486,18 @@ Promise.all([
 
         // Curva de Delay (Eje secundario)
         if (currentMetrics.maxDelayByTime) {
-          const maxDelayMin = (d3.max(currentMetrics.maxDelayByTime) || 10) * CFG.granularidadMin;
+          const maxActual = d3.max(currentMetrics.maxDelayByTime) || 0;
+          const maxPotential = d3.max(currentMetrics.potentialDelayByTime || []) || 0;
+          const maxDelayMin = Math.max(maxActual, maxPotential, 10 / CFG.granularidadMin) * CFG.granularidadMin;
+
           scales.yDelay = d3.scaleLinear()
             .domain([0, maxDelayMin])
             .range([innerH * 0.3, innerH * 0.05]); // Base en 70% de la altura, Máximo en 95% (medido desde abajo)
           
           drawDelayCurve(g, currentMetrics.maxDelayByTime, scales, CFG.granularidadMin);
+          if (currentMetrics.combinedDelayByTime) {
+            drawCombinedDelayCurve(g, currentMetrics.combinedDelayByTime, scales, CFG.granularidadMin);
+          }
           drawSecondaryAxis(g, scales, innerW, "Delay Max [min]");
         }
       } else {

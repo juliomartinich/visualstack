@@ -253,8 +253,8 @@ function setupInteraction(
       .text(metrics.envolvente[t])
       .style("opacity", 1);
 
-    if (scales.yDelay && metrics.maxDelayByTime && metrics.maxDelayByTime[t] > 0) {
-      const delayMin = metrics.maxDelayByTime[t] * granularidad;
+    if (scales.yDelay && metrics.combinedDelayByTime && metrics.combinedDelayByTime[t] > 0) {
+      const delayMin = metrics.combinedDelayByTime[t] * granularidad;
       delayLabel
         .attr("x", xPos)
         .attr("y", scales.yDelay(delayMin))
