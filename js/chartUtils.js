@@ -78,7 +78,7 @@ function drawCapacityLine(g, capacity, scales, innerW) {
     .attr("y2", yPos)
     .attr("stroke", "#aaa")
     .attr("stroke-width", 2.5);
-    
+
   g.append("text")
     .attr("class", "capacity-label")
     .attr("x", innerW - 5)
@@ -91,30 +91,37 @@ function drawCapacityLine(g, capacity, scales, innerW) {
 
 function drawDelayCurve(g, data, scales, granularidadMin) {
   if (!data || data.length === 0 || !scales.yDelay) return;
+
+  const [xMin, xMax] = scales.x.domain();
   
+  // Filtramos la data para que solo incluya los puntos dentro del rango visible
+  const visibleData = data
+    .map((v, i) => ({ v, i }))
+    .filter(d => d.i >= xMin && d.i <= xMax);
+
   const line = d3.line()
-    .x((d, i) => scales.x(i))
-    .y(d => scales.yDelay(d * granularidadMin))
+    .x(d => scales.x(d.i))
+    .y(d => scales.yDelay(d.v * granularidadMin))
     .curve(d3.curveMonotoneX);
 
   g.append("path")
-    .datum(data)
+    .datum(visibleData)
     .attr("class", "delay-curve")
     .attr("d", line)
     .attr("fill", "none")
     .attr("stroke", "red")
     .attr("stroke-width", 2)
     .attr("opacity", 0.8);
-    
+
   // Área bajo la curva
   const area = d3.area()
-    .x((d, i) => scales.x(i))
+    .x(d => scales.x(d.i))
     .y0(scales.yDelay(0))
-    .y1(d => scales.yDelay(d * granularidadMin))
+    .y1(d => scales.yDelay(d.v * granularidadMin))
     .curve(d3.curveMonotoneX);
-    
+
   g.append("path")
-    .datum(data)
+    .datum(visibleData)
     .attr("class", "delay-area")
     .attr("d", area)
     .attr("fill", "red")
@@ -123,7 +130,7 @@ function drawDelayCurve(g, data, scales, granularidadMin) {
 
 function drawSecondaryAxis(g, scales, innerW, label) {
   if (!scales.yDelay) return;
-  
+
   const axisG = g.append("g")
     .attr("class", "axis axis-y-secondary")
     .attr("transform", `translate(${innerW}, 0)`)
@@ -133,19 +140,31 @@ function drawSecondaryAxis(g, scales, innerW, label) {
         .tickSize(5)
         .tickFormat(d => d === 0 ? "" : d)
     );
-    
+
   axisG.selectAll("line").attr("stroke", "red");
   axisG.selectAll("path").attr("stroke", "red");
   axisG.selectAll("text").attr("fill", "red").style("font-size", "9px");
 
   axisG.append("text")
     .attr("x", -8)
-    .attr("y", 12) // Un poco más abajo para que esté dentro del área
+    .attr("y", 12)
     .attr("fill", "red")
     .attr("text-anchor", "end")
     .attr("font-size", "10px")
     .attr("font-weight", "bold")
     .text(label);
+
+  // Línea roja horizontal para el cero del delay (toda la extensión del eje X)
+  const zeroY = scales.yDelay(0);
+  g.append("line")
+    .attr("class", "delay-zero-line")
+    .attr("x1", 0)
+    .attr("y1", zeroY)
+    .attr("x2", innerW)
+    .attr("y2", zeroY)
+    .attr("stroke", "red")
+    .attr("stroke-width", 1)
+    .attr("opacity", 0.3);
 }
 
 /* ==== * Área stack * ===================== */

@@ -216,6 +216,7 @@ function setupInteraction(
       cursor.style("opacity", 0);
       envCircle.style("opacity", 0);
       envLabel.style("opacity", 0);
+      if (typeof delayLabel !== 'undefined') delayLabel.style("opacity", 0);
       d3.select("#gantt-chart svg line.cursor").style("opacity", 0);
       return;
     }
@@ -248,9 +249,20 @@ function setupInteraction(
 
     envLabel
       .attr("x", xPos)
-      .attr("y", scales.y(metrics.envolvente[t] + 1))
+      .attr("y", scales.y(metrics.envolvente[t]))
       .text(metrics.envolvente[t])
       .style("opacity", 1);
+
+    if (scales.yDelay && metrics.maxDelayByTime && metrics.maxDelayByTime[t] > 0) {
+      const delayMin = metrics.maxDelayByTime[t] * granularidad;
+      delayLabel
+        .attr("x", xPos)
+        .attr("y", scales.yDelay(delayMin))
+        .text(`${delayMin}`)
+        .style("opacity", 1);
+    } else {
+      delayLabel.style("opacity", 0);
+    }
   }
   window.moveCursorTo = syncCursor;
 
@@ -371,6 +383,13 @@ function setupInteraction(
     .attr("text-anchor", "middle")
     .attr("font-size", 10)
     .attr("fill", "darkblue")
+    .attr("dy", "-6")
+    .style("opacity", 0);
+
+  const delayLabel = envG.append("text")
+    .attr("text-anchor", "middle")
+    .attr("font-size", 10)
+    .attr("fill", "red")
     .attr("dy", "-6")
     .style("opacity", 0);
 
