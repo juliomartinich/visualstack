@@ -40,26 +40,21 @@
         <select id="filter-fecha"></select>
       </div>
 
-      <div class="filter-group horizontal-group">
-        <label>Gráfico</label>
-        <div class="radio-group">
-          <input type="radio" id="view-graph-camiones" name="viewGraph" value="camiones" checked>
-          <label for="view-graph-camiones">Camiones</label>
-          <input type="radio" id="view-graph-plantas" name="viewGraph" value="plantas">
-          <label for="view-graph-plantas">Plantas</label>
-          <input type="radio" id="view-graph-colas" name="viewGraph" value="colas">
-          <label for="view-graph-colas">Colas</label>
-        </div>
+      <div class="filter-group">
+        <label for="filter-viewgraph">Vista Gráfico</label>
+        <select id="filter-viewgraph" name="viewGraph">
+          <option value="camiones">Camiones</option>
+          <option value="plantas">Plantas</option>
+          <option value="colas">Colas</option>
+        </select>
       </div>
 
-      <div class="filter-group horizontal-group">
-        <label>Gantt</label>
-        <div class="radio-group">
-          <input type="radio" id="view-gantt-pedidos" name="viewGantt" value="pedidos" checked>
-          <label for="view-gantt-pedidos">Pedidos</label>
-          <input type="radio" id="view-gantt-despachos" name="viewGantt" value="despachos">
-          <label for="view-gantt-despachos">Despachos</label>
-        </div>
+      <div class="filter-group">
+        <label for="filter-viewgantt">Vista Gantt</label>
+        <select id="filter-viewgantt" name="viewGantt">
+          <option value="pedidos">Pedidos</option>
+          <option value="despachos">Despachos</option>
+        </select>
       </div>
 
       <div class="filter-group">

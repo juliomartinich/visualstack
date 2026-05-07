@@ -79,24 +79,40 @@ Promise.all([
     const uniqueDates = [...new Set(fullPedidos.map(p => p["Fecha Pedido"]))].sort();
     const filterFechaPanel = document.getElementById("filter-fecha");
 
-    // Create header selects
+    // Create header selects transparent container
     const dateContainer = document.getElementById("header-date-container");
     dateContainer.innerHTML = `
-      <label for="header-filter-fecha">Despacho:</label>
-      <select id="header-filter-fecha" title="Cambiar Fecha"></select>
-      <div style="margin-right: 12px;"></div>
-      <label for="header-filter-plantagrupo">Planta:</label>
-      <select id="header-filter-plantagrupo" title="Cambiar Planta"></select>
-      <div style="margin-right: 12px;"></div>
-      <div style="display:inline-flex; align-items: center; gap: 5px; margin-left: 5px; font-size: 12px;">
-        <label for="header-view-camiones" style="margin:0; cursor:pointer; display:inline-block; pointer-events:auto;">Camiones</label>
-        <input type="radio" id="header-view-camiones" name="headerViewGraph" value="camiones">
-        <div style="width:5px;"></div>
-        <label for="header-view-plantas" style="margin:0; cursor:pointer; display:inline-block; pointer-events:auto;">Plantas</label>
-        <input type="radio" id="header-view-plantas" name="headerViewGraph" value="plantas">
-        <div style="width:5px;"></div>
-        <label for="header-view-colas" style="margin:0; cursor:pointer; display:inline-block; pointer-events:auto;">Colas</label>
-        <input type="radio" id="header-view-colas" name="headerViewGraph" value="colas">
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 11px; background: transparent; padding: 0; flex-wrap: nowrap; overflow: hidden;">
+        <!-- Grupo Día -->
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <label for="header-filter-fecha" style="font-weight: 600; color: #555;">Día:</label>
+          <select id="header-filter-fecha" title="Cambiar Fecha" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
+        </div>
+        
+        <!-- Grupo Planta -->
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <label for="header-filter-plantagrupo" style="font-weight: 600; color: #555;">Planta:</label>
+          <select id="header-filter-plantagrupo" title="Cambiar Planta" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
+        </div>
+
+        <!-- Grupo Vista -->
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
+          <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
+            <option value="camiones">Camiones</option>
+            <option value="plantas">Plantas</option>
+            <option value="colas">Colas</option>
+          </select>
+        </div>
+
+        <!-- Grupo Gantt -->
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <label for="header-viewgantt" style="font-weight: 600; color: #555;">Gantt:</label>
+          <select id="header-viewgantt" name="headerViewGantt" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
+            <option value="pedidos">Pedidos</option>
+            <option value="despachos">Despachos</option>
+          </select>
+        </div>
       </div>
     `;
     const filterFechaHeader = document.getElementById("header-filter-fecha");
@@ -252,8 +268,10 @@ Promise.all([
 
     const filterSelect = document.getElementById("filter-plantagrupo");
     const codObraInput = document.getElementById("filter-codobra");
+    const headerCodObraInput = document.getElementById("header-filter-codobra");
     const codObraList = document.getElementById("codobras-list");
     const filterCheck = d3.select("#filter-green");
+    const headerFilterCheck = d3.select("#header-filter-green");
 
     function renderDateOptionsForFilter(filterKey) {
       let allowedPlants = [];
@@ -300,6 +318,7 @@ Promise.all([
       filterPlantaHeader.value = val;
       localStorage.setItem("filterPlantaGrupo", val);
       if (codObraInput) codObraInput.value = "";
+      if (headerCodObraInput) headerCodObraInput.value = "";
 
       const currentDate = filterFechaPanel.value;
       let allowedPlants = [];
@@ -330,6 +349,7 @@ Promise.all([
       filterSelect.value = val;
       localStorage.setItem("filterPlantaGrupo", val);
       if (codObraInput) codObraInput.value = "";
+      if (headerCodObraInput) headerCodObraInput.value = "";
 
       const currentDate = filterFechaPanel.value;
       let allowedPlants = [];
@@ -355,8 +375,11 @@ Promise.all([
       renderDashboard(val);
     });
 
-    codObraInput.addEventListener("input", (e) => {
+    function handleObraInput(e) {
       const val = e.target.value;
+      codObraInput.value = val;
+      if (headerCodObraInput) headerCodObraInput.value = val;
+
       const selectedId = val ? val.split(" - ")[0].trim() : "";
       d3.selectAll(".pedido").select("path.area").style("fill", d => {
         if (selectedId && String(d.CodObra) === selectedId) return "red";
@@ -376,14 +399,24 @@ Promise.all([
         window.selectPedido(null, false, true);
         if (window.moveCursorTo) window.moveCursorTo(null);
       }
-    });
+    }
 
-    filterCheck.on("change", () => {
-      const filtered = filterCheck.property("checked")
+    codObraInput.addEventListener("input", handleObraInput);
+    if (headerCodObraInput) headerCodObraInput.addEventListener("input", handleObraInput);
+
+    function handleFilterCheck() {
+      const isChecked = d3.select(this).property("checked");
+      filterCheck.property("checked", isChecked);
+      if (!headerFilterCheck.empty()) headerFilterCheck.property("checked", isChecked);
+
+      const filtered = isChecked
         ? pedidos.filter(p => p.Confirmado === "SI" && p.MaxCamiones === 1)
         : pedidos;
       ganttPanel.show(filtered);
-    });
+    }
+
+    filterCheck.on("change", handleFilterCheck);
+    if (!headerFilterCheck.empty()) headerFilterCheck.on("change", handleFilterCheck);
 
     function renderDashboard(filterKey) {
       svg.selectAll(".chart-header").remove();
@@ -395,7 +428,7 @@ Promise.all([
       meta.DiaDespacho = formatFecha(selectedDate);
       meta.styles = getDateStyles(selectedDate);
 
-      const currentGraphView = document.querySelector('input[name="viewGraph"]:checked')?.value || 'camiones';
+      const currentGraphView = document.getElementById("filter-viewgraph")?.value || 'camiones';
       const cacheKey = `${selectedDate}_${filterKey}_${currentGraphView}`;
       let subsetPedidos = [];
       let currentMetrics, curHoraMax, curOcupacionMax;
@@ -516,11 +549,11 @@ Promise.all([
         layers = drawLayers(g, pedidos, area, scales);
       }
 
-      let filteredForGantt = filterCheck.property("checked")
+      let filteredForGantt = (filterCheck.property("checked") || (!headerFilterCheck.empty() && headerFilterCheck.property("checked")))
         ? pedidos.filter(p => p.Confirmado === "SI" && p.MaxCamiones === 1)
         : pedidos.slice(); // Create a shallow copy before sorting
 
-      const currentGanttView = document.querySelector('input[name="viewGantt"]:checked')?.value || 'pedidos';
+      const currentGanttView = document.getElementById("filter-viewgantt")?.value || 'pedidos';
       if (currentGanttView === 'despachos') {
         filteredForGantt = decomposePedidosIntoVoyages(filteredForGantt, CFG.granularidadMin);
       }
@@ -548,23 +581,33 @@ Promise.all([
 
     const initialSaved = updateFiltersForDate(filterFechaPanel.value);
 
-    // View Mode Radios
+    // View Mode Selects
     const savedGraphView = getCookie("viewGraph") || "camiones";
     const savedGanttView = getCookie("viewGantt") || "pedidos";
     
-    document.querySelectorAll(`input[name="viewGraph"][value="${savedGraphView}"]`).forEach(el => el.checked = true);
-    document.querySelectorAll(`input[name="headerViewGraph"][value="${savedGraphView}"]`).forEach(el => el.checked = true);
-    document.querySelectorAll(`input[name="viewGantt"][value="${savedGanttView}"]`).forEach(el => el.checked = true);
+    const selectViewGraph = document.getElementById("filter-viewgraph");
+    const headerViewGraph = document.getElementById("header-viewgraph");
+    const selectViewGantt = document.getElementById("filter-viewgantt");
+    const headerViewGantt = document.getElementById("header-viewgantt");
+    
+    if (selectViewGraph) selectViewGraph.value = savedGraphView;
+    if (headerViewGraph) headerViewGraph.value = savedGraphView;
+    if (selectViewGantt) selectViewGantt.value = savedGanttView;
+    if (headerViewGantt) headerViewGantt.value = savedGanttView;
 
-    const viewRadios = document.querySelectorAll('input[name="viewGraph"], input[name="headerViewGraph"], input[name="viewGantt"]');
-    viewRadios.forEach(radio => {
-      radio.addEventListener("change", (e) => {
+    const viewControls = document.querySelectorAll('select[name="viewGraph"], select[name="headerViewGraph"], select[name="viewGantt"], select[name="headerViewGantt"]');
+    viewControls.forEach(ctrl => {
+      ctrl.addEventListener("change", (e) => {
         const val = e.target.value;
         const name = e.target.name;
         if (name === "viewGraph" || name === "headerViewGraph") {
           setCookie("viewGraph", val);
-          document.querySelectorAll(`input[name="viewGraph"][value="${val}"]`).forEach(el => el.checked = true);
-          document.querySelectorAll(`input[name="headerViewGraph"][value="${val}"]`).forEach(el => el.checked = true);
+          if (selectViewGraph) selectViewGraph.value = val;
+          if (headerViewGraph) headerViewGraph.value = val;
+        } else if (name === "viewGantt" || name === "headerViewGantt") {
+          setCookie("viewGantt", val);
+          if (selectViewGantt) selectViewGantt.value = val;
+          if (headerViewGantt) headerViewGantt.value = val;
         } else {
           setCookie(name, val);
         }
