@@ -2,7 +2,7 @@
 
 /* ==== DETECCIÓN DE PEDIDO EXTENDIDO ACTIVO =====*/
 function findActiveLayer(capasReversa, t, my, scales) {
-  const currentGraphView = document.querySelector('input[name="viewGraph"]:checked')?.value || 'camiones';
+  const currentGraphView = document.getElementById("filter-viewgraph")?.value || 'camiones';
 
   for (const capa of capasReversa) {
     if (currentGraphView === 'camiones' && capa.STK && capa.STK.segmentosXY) {
@@ -119,7 +119,7 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, strokeColor
   }
 
   /* ==== DESCARGAS – OVERLAY =====*/
-  const currentGraphView = document.querySelector('input[name="viewGraph"]:checked')?.value || 'camiones';
+  const currentGraphView = document.getElementById("filter-viewgraph")?.value || 'camiones';
   const descargas = (currentGraphView === 'camiones' && activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
   const tris = overlay
     .selectAll("path.descarga-activa")
@@ -196,7 +196,8 @@ function resetInteraction({ cursor, layers, overlay, panel, band }) {
 
 /* ========================= INTERACCIÓN PRINCIPAL =========================*/
 const lastActivePedido = { current: null };
-const selectedPedido = { current: null };
+window.selectedPedido = { current: null };
+const selectedPedido = window.selectedPedido;
 const lastWasHovering = { current: false };
 
 function setupInteraction(
@@ -432,6 +433,17 @@ function setupInteraction(
   }).on("mouseleave", () => {
     syncCursor(null);
   });
+
+  // Re-apply selection if it exists (correspondence between views)
+  if (window.selectedPedido.current) {
+    const parentId = window.selectedPedido.current.id;
+    const freshPedido = getCapas().find(p => p.id === parentId);
+    if (freshPedido) {
+      window.selectedPedido.current = freshPedido;
+      lastActivePedido.current = null; // Force refresh
+      highlightPedido(null);
+    }
+  }
 }
 
 /* ==== BANDA INFERIOR ==== */

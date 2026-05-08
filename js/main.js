@@ -396,8 +396,12 @@ Promise.all([
           }
         }
       } else {
-        window.selectPedido(null, false, true);
-        if (window.moveCursorTo) window.moveCursorTo(null);
+        // Solo limpiamos si es una acción directa del usuario (isTrusted)
+        // para evitar que los refrescos automáticos limpien la selección persistente
+        if (e.isTrusted) {
+          window.selectPedido(null, false, true);
+          if (window.moveCursorTo) window.moveCursorTo(null);
+        }
       }
     }
 
