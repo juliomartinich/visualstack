@@ -619,4 +619,48 @@ function positionTooltip(panel, margin, mx, my, innerW, innerH) {
       .style("top", `${margin.top}px`)
       .style("right", "auto");
   }
+}
+
+/* ==== * Dibujo de Colas 2 (descenso progresivo) * ====*/
+function drawColas2Loads(g, pedidos, scales, granularidadMin) {
+  const { x, y } = scales;
+
+  const layers = g.selectAll("g.pedido")
+    .data(pedidos)
+    .enter()
+    .append("g")
+    .attr("class", "pedido");
+
+  layers.each(function (pedido) {
+    const bloques = pedido.STK_COLAS2?.bloquesXY || [];
+    if (bloques.length === 0) return;
+
+    d3.select(this)
+      .selectAll("path.carga")
+      .data(bloques)
+      .enter()
+      .append("path")
+      .attr("class", "carga")
+      .attr("d", d => {
+        const px = x(d.x);
+        const py = y(d.y1);
+        const pw = Math.max(1, x(d.x + 1) - x(d.x));
+        const ph = Math.max(1, y(d.y0) - y(d.y1));
+        const pr = Math.min(4, pw * 0.1, ph * 0.5);
+
+        const p = d3.path();
+        p.moveTo(px, py + ph); // BL
+        p.lineTo(px + pw, py + ph); // BR
+        p.arcTo(px + pw * 0.8, py, px, py, pr); // TR
+        p.arcTo(px, py, px, py + ph, pr); // TL
+        p.closePath();
+        return p.toString();
+      })
+      .attr("fill", d => getAreaColor(pedido))
+      .attr("stroke", colorPedido(pedido))
+      .attr("stroke-width", 1)
+      .attr("opacity", d => d.type === 'wait' ? 0.5 : 0.9);
+  });
+
+  return layers;
 } 

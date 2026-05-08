@@ -26,6 +26,13 @@ function findActiveLayer(capasReversa, t, my, scales) {
           return capa;
         }
       }
+    } else if (currentGraphView === 'colas2' && capa.STK_COLAS2 && capa.STK_COLAS2.bloquesXY) {
+      const seg = capa.STK_COLAS2.bloquesXY.find(s => s.x === t);
+      if (seg && seg.v > 0) {
+        if (my >= scales.y(seg.y1) && my <= scales.y(seg.y0)) {
+          return capa;
+        }
+      }
     }
   }
   return null;

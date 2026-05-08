@@ -102,6 +102,7 @@ Promise.all([
             <option value="camiones">Camiones</option>
             <option value="plantas">Plantas</option>
             <option value="colas">Colas</option>
+            <option value="colas2">Colas 2</option>
           </select>
         </div>
 
@@ -432,7 +433,9 @@ Promise.all([
       meta.DiaDespacho = formatFecha(selectedDate);
       meta.styles = getDateStyles(selectedDate);
 
-      const currentGraphView = document.getElementById("filter-viewgraph")?.value || 'camiones';
+      const v1 = document.getElementById("filter-viewgraph")?.value;
+      const v2 = document.getElementById("header-viewgraph")?.value;
+      const currentGraphView = (v2 || v1 || getCookie("viewGraph") || 'camiones').trim();
       const cacheKey = `${selectedDate}_${filterKey}_${currentGraphView}`;
       let subsetPedidos = [];
       let currentMetrics, curHoraMax, curOcupacionMax;
@@ -470,6 +473,8 @@ Promise.all([
           stackResult = buildPlantLoadStack(subsetPedidos, CFG.granularidadMin);
         } else if (currentGraphView === 'colas') {
           stackResult = buildColasStack(subsetPedidos, totalBocas, CFG.granularidadMin);
+        } else if (currentGraphView === 'colas2') {
+          stackResult = buildColas2Stack(subsetPedidos, totalBocas, CFG.granularidadMin);
         } else {
           stackResult = buildStack(subsetPedidos);
         }
@@ -485,7 +490,7 @@ Promise.all([
       const xMin = CFG.horaInicio * (60 / CFG.granularidadMin);
       const xMax = CFG.horaFin * (60 / CFG.granularidadMin);
       let yMax;
-      if (currentGraphView === "plantas" || currentGraphView === "colas") {
+      if (currentGraphView === "plantas" || currentGraphView === "colas" || currentGraphView === "colas2") {
         const uniquePlantas = new Set(pedidos.map(p => p.Planta));
         let capacity = 0;
         uniquePlantas.forEach(pCode => {
@@ -511,6 +516,17 @@ Promise.all([
 
       if (currentGraphView === 'plantas') {
         layers = drawPlantLoads(g, pedidos, scales, CFG.granularidadMin);
+        
+        const uniquePlantas = new Set(pedidos.map(p => p.Planta));
+        let capacity = 0;
+        uniquePlantas.forEach(pCode => {
+          if (window.plantasData && window.plantasData[pCode]) {
+            capacity += window.plantasData[pCode].cant_bocas || 0;
+          }
+        });
+        drawCapacityLine(g, capacity, scales, innerW);
+      } else if (currentGraphView === 'colas2') {
+        layers = drawColas2Loads(g, pedidos, scales, CFG.granularidadMin);
         
         const uniquePlantas = new Set(pedidos.map(p => p.Planta));
         let capacity = 0;
@@ -599,24 +615,27 @@ Promise.all([
     if (selectViewGantt) selectViewGantt.value = savedGanttView;
     if (headerViewGantt) headerViewGantt.value = savedGanttView;
 
-    const viewControls = document.querySelectorAll('select[name="viewGraph"], select[name="headerViewGraph"], select[name="viewGantt"], select[name="headerViewGantt"]');
-    viewControls.forEach(ctrl => {
-      ctrl.addEventListener("change", (e) => {
-        const val = e.target.value;
-        const name = e.target.name;
-        if (name === "viewGraph" || name === "headerViewGraph") {
-          setCookie("viewGraph", val);
-          if (selectViewGraph) selectViewGraph.value = val;
-          if (headerViewGraph) headerViewGraph.value = val;
-        } else if (name === "viewGantt" || name === "headerViewGantt") {
-          setCookie("viewGantt", val);
-          if (selectViewGantt) selectViewGantt.value = val;
-          if (headerViewGantt) headerViewGantt.value = val;
-        } else {
-          setCookie(name, val);
-        }
-        renderDashboard(localStorage.getItem("filterPlantaGrupo") || initialSaved);
-      });
+    // Event delegation for header and panel controls
+    document.addEventListener("change", (e) => {
+      const ctrl = e.target;
+      const name = ctrl.name;
+      if (!["viewGraph", "headerViewGraph", "viewGantt", "headerViewGantt"].includes(name)) return;
+
+      const val = ctrl.value;
+      if (name === "viewGraph" || name === "headerViewGraph") {
+        setCookie("viewGraph", val);
+        const s1 = document.getElementById("filter-viewgraph");
+        const s2 = document.getElementById("header-viewgraph");
+        if (s1) s1.value = val;
+        if (s2) s2.value = val;
+      } else if (name === "viewGantt" || name === "headerViewGantt") {
+        setCookie("viewGantt", val);
+        const s1 = document.getElementById("filter-viewgantt");
+        const s2 = document.getElementById("header-viewgantt");
+        if (s1) s1.value = val;
+        if (s2) s2.value = val;
+      }
+      renderDashboard(localStorage.getItem("filterPlantaGrupo") || initialSaved);
     });
 
     renderDateOptionsForFilter(initialSaved);

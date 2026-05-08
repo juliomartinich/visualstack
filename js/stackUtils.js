@@ -314,6 +314,86 @@ function buildPlantLoadStack(pedidos, granularidadMin) {
   return { horaMax, ocupacionMax, metrics };
 }
 
+/* ==== * buildColas2Stack: Nueva vista de colas con descenso progresivo * ==== */
+function buildColas2Stack(pedidos, totalBocas, granularidadMin) {
+  let totalM3 = 0;
+  let totalM3Confirmados = 0;
+  let totalM3NoConfirmados = 0;
+
+  // 1. Descomponer en viajes individuales
+  const allVoyages = [];
+  pedidos.forEach(p => {
+    const cant = p.CantProgramada ?? 0;
+    totalM3 += cant;
+    if (p.Confirmado === "SI") totalM3Confirmados += cant;
+    else totalM3NoConfirmados += cant;
+
+    p.STK_COLAS2 = { bloquesXY: [] };
+    const numViajes = p.CantCargas || 1;
+    const freqSlots = Math.floor((p.Frecuencia || 0) / granularidadMin);
+    for (let i = 0; i < numViajes; i++) {
+      allVoyages.push({
+        pedido: p,
+        xArrive: (p.XG?.offset ?? 0) + i * freqSlots,
+        id: `${p.id}_v${i}`
+      });
+    }
+  });
+
+  // 2. Ordenar por llegada (FIFO)
+  allVoyages.sort((a, b) => a.xArrive - b.xArrive || a.pedido.id - b.pedido.id);
+
+  const horaMax = (d3.max(allVoyages, v => v.xArrive) || 0) + 120; // margen
+  const bocas = Array(totalBocas).fill(0); 
+  const queue = [];
+  const globalOcupacion = Array(horaMax + 1).fill(0);
+  
+  let voyageIdx = 0;
+  for (let t = 0; t <= horaMax; t++) {
+    // Entran a la cola los que llegan en t
+    while (voyageIdx < allVoyages.length && allVoyages[voyageIdx].xArrive <= t) {
+      queue.push(allVoyages[voyageIdx]);
+      voyageIdx++;
+    }
+
+    // Intentar despachar desde la cola a bocas libres
+    for (let b = 0; b < totalBocas; b++) {
+      if (bocas[b] <= t && queue.length > 0) {
+        const v = queue.shift();
+        v.xServe = t;
+        v.boca = b;
+        bocas[b] = t + 1; // 1 slot de carga
+        v.pedido.STK_COLAS2.bloquesXY.push({ x: t, y0: b, y1: b + 1, v: 1, type: 'serve' });
+        globalOcupacion[t] = Math.max(globalOcupacion[t], b + 1);
+      }
+    }
+
+    // Registrar posición de los que siguen esperando
+    queue.forEach((v, idx) => {
+      const yPos = totalBocas + idx;
+      v.pedido.STK_COLAS2.bloquesXY.push({ x: t, y0: yPos, y1: yPos + 1, v: 1, type: 'wait' });
+      globalOcupacion[t] = Math.max(globalOcupacion[t], yPos + 1);
+    });
+  }
+
+  const arrEnvolvente = Array(horaMax + 1).fill(0);
+  for (let t = 0; t <= horaMax; t++) arrEnvolvente[t] = globalOcupacion[t] || 0;
+
+  const metrics = {
+    volumenT: totalM3,
+    volConfirmado: totalM3Confirmados,
+    volNoConfirmado: totalM3NoConfirmados,
+    envolvente: arrEnvolvente,
+    ...computeGlobalMetrics(arrEnvolvente, granularidadMin)
+  };
+
+  return { 
+    horaMax: (d3.max(allVoyages, v => v.xServe || v.xArrive) || 0) + 5, 
+    ocupacionMax: d3.max(arrEnvolvente) || 2, 
+    metrics 
+  };
+}
+
 /* ==== * Construcción del stack para Colas (Lógica FIFO) * ====*/
 function buildColasStack(pedidos, bocasDisp, granularidadMin) {
   let totalM3 = 0;
@@ -448,4 +528,6 @@ function buildColasStack(pedidos, bocasDisp, granularidadMin) {
 
   return { horaMax: (d3.max(validVoyages, v => v.xServe) || 0) + 1, ocupacionMax, metrics };
 }
+
+
 
