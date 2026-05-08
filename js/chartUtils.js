@@ -650,55 +650,60 @@ function drawColas2Loads(g, pedidos, scales, granularidadMin) {
         const pw = x(pts[0].x + 1) - x(pts[0].x);
         const pr = Math.min(5, pw * 0.2); // Radio de redondeo
 
-        // Borde superior con flujo trapezoidal (70/30)
+        // --- BORDE SUPERIOR ---
         pts.forEach((p, i) => {
           const x0 = x(p.x);
           const y1 = y(p.y1);
+          const x30 = x0 + 0.3 * pw;
+          const x70 = x0 + 0.7 * pw;
 
           if (i === 0) {
-            // Inicio: subida vertical desde la base
+            // Inicio: Vertical y redondeado
             path.moveTo(x0, y(p.y0));
             path.lineTo(x0, y1 + pr);
             path.arcTo(x0, y1, x0 + pr, y1, pr);
           } else {
-            // Ya estamos en (x0 + 0.3*pw, y1) por la rampa anterior
-            path.lineTo(x0 + 0.3 * pw, y1);
+            // Entrada a la meseta desde rampa anterior (redondeada)
+            path.arcTo(x30, y1, x30 + pr, y1, pr);
           }
 
-          // Meseta hasta el 70% del slot
-          path.lineTo(x0 + 0.7 * pw, y1);
+          // Meseta hasta el 70%
+          path.lineTo(x70 - pr, y1);
 
-          // Rampa hacia el siguiente slot si existe
+          // Salida (Rampa o Punta Final)
           if (i < pts.length - 1) {
             const nextP = pts[i + 1];
-            path.lineTo(x(nextP.x) + 0.3 * pw, y(nextP.y1));
+            const xNext30 = x(nextP.x) + 0.3 * pw;
+            const yNext = y(nextP.y1);
+            path.arcTo(x70, y1, xNext30, yNext, pr);
           } else {
-            // Último punto: terminar en el borde del slot
-            path.lineTo(x0 + pw, y1);
+            // Punta final diagonal hasta la base (100% y0)
+            const xEnd = x0 + pw;
+            const yBot = y(p.y0);
+            path.arcTo(x70, y1, xEnd, yBot, pr);
+            path.lineTo(xEnd, yBot); // Asegurar que llegue al 100% de la base
           }
         });
 
-        // Borde inferior (regresando con el mismo flujo para efecto de cinta)
+        // --- BORDE INFERIOR (Retorno) ---
         for (let i = pts.length - 1; i >= 0; i--) {
           const p = pts[i];
           const x0 = x(p.x);
           const y0 = y(p.y0);
+          const x30 = x0 + 0.3 * pw;
+          const x70 = x0 + 0.7 * pw;
 
           if (i === pts.length - 1) {
-            path.lineTo(x0 + pw, y0);
+            // El último recorre toda la base plana hasta x0
+            path.lineTo(x0, y0);
           } else {
-            // Punto de llegada de la rampa inferior
-            path.lineTo(x0 + 0.7 * pw, y0);
+            // Rampa inferior regresando
+            path.lineTo(x70, y0);
+            path.lineTo(x30, y0);
           }
-
-          // Meseta inferior
-          path.lineTo(x0 + 0.3 * pw, y0);
-
-          // Rampa inferior hacia atrás
-          if (i > 0) {
-            const prevP = pts[i - 1];
-            path.lineTo(x(prevP.x) + 0.7 * pw, y(prevP.y0));
-          } else {
+          
+          if (i === 0) {
+            // Cierre vertical final
             path.lineTo(x0, y0);
           }
         }
