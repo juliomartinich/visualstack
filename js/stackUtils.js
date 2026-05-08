@@ -363,7 +363,7 @@ function buildColas2Stack(pedidos, totalBocas, granularidadMin) {
         v.xServe = t;
         v.boca = b;
         bocas[b] = t + 1; // 1 slot de carga
-        v.pedido.STK_COLAS2.bloquesXY.push({ x: t, y0: b, y1: b + 1, v: 1, type: 'serve' });
+        v.pedido.STK_COLAS2.bloquesXY.push({ x: t, y0: b, y1: b + 1, v: 1, type: 'serve', voyageId: v.id });
         globalOcupacion[t] = Math.max(globalOcupacion[t], b + 1);
       }
     }
@@ -371,7 +371,7 @@ function buildColas2Stack(pedidos, totalBocas, granularidadMin) {
     // Registrar posición de los que siguen esperando
     queue.forEach((v, idx) => {
       const yPos = totalBocas + idx;
-      v.pedido.STK_COLAS2.bloquesXY.push({ x: t, y0: yPos, y1: yPos + 1, v: 1, type: 'wait' });
+      v.pedido.STK_COLAS2.bloquesXY.push({ x: t, y0: yPos, y1: yPos + 1, v: 1, type: 'wait', voyageId: v.id });
       globalOcupacion[t] = Math.max(globalOcupacion[t], yPos + 1);
     });
   }

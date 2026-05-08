@@ -93,7 +93,7 @@ function drawDelayCurve(g, data, scales, granularidadMin) {
   if (!data || data.length === 0 || !scales.yDelay) return;
 
   const [xMin, xMax] = scales.x.domain();
-  
+
   // Filtramos la data para que solo incluya los puntos dentro del rango visible
   const visibleData = data
     .map((v, i) => ({ v, i }))
@@ -621,7 +621,7 @@ function positionTooltip(panel, margin, mx, my, innerW, innerH) {
   }
 }
 
-/* ==== * Dibujo de Colas 2 (descenso progresivo) * ====*/
+/* ==== * Dibujo de Colas 2 (descenso progresivo como cinta continua) * ====*/
 function drawColas2Loads(g, pedidos, scales, granularidadMin) {
   const { x, y } = scales;
 
@@ -635,31 +635,81 @@ function drawColas2Loads(g, pedidos, scales, granularidadMin) {
     const bloques = pedido.STK_COLAS2?.bloquesXY || [];
     if (bloques.length === 0) return;
 
+    // Agrupar por viaje para dibujar cintas continuas
+    const grouped = d3.group(bloques, d => d.voyageId);
+
     d3.select(this)
       .selectAll("path.carga")
-      .data(bloques)
+      .data(Array.from(grouped.values()))
       .enter()
       .append("path")
       .attr("class", "carga")
-      .attr("d", d => {
-        const px = x(d.x);
-        const py = y(d.y1);
-        const pw = Math.max(1, x(d.x + 1) - x(d.x));
-        const ph = Math.max(1, y(d.y0) - y(d.y1));
-        const pr = Math.min(4, pw * 0.1, ph * 0.5);
+      .attr("d", pts => {
+        pts.sort((a, b) => a.x - b.x);
+        const path = d3.path();
+        const pw = x(pts[0].x + 1) - x(pts[0].x);
+        const pr = Math.min(5, pw * 0.2); // Radio de redondeo
 
-        const p = d3.path();
-        p.moveTo(px, py + ph); // BL
-        p.lineTo(px + pw, py + ph); // BR
-        p.arcTo(px + pw * 0.8, py, px, py, pr); // TR
-        p.arcTo(px, py, px, py + ph, pr); // TL
-        p.closePath();
-        return p.toString();
+        // Borde superior con flujo trapezoidal (70/30)
+        pts.forEach((p, i) => {
+          const x0 = x(p.x);
+          const y1 = y(p.y1);
+
+          if (i === 0) {
+            // Inicio: subida vertical desde la base
+            path.moveTo(x0, y(p.y0));
+            path.lineTo(x0, y1 + pr);
+            path.arcTo(x0, y1, x0 + pr, y1, pr);
+          } else {
+            // Ya estamos en (x0 + 0.3*pw, y1) por la rampa anterior
+            path.lineTo(x0 + 0.3 * pw, y1);
+          }
+
+          // Meseta hasta el 70% del slot
+          path.lineTo(x0 + 0.7 * pw, y1);
+
+          // Rampa hacia el siguiente slot si existe
+          if (i < pts.length - 1) {
+            const nextP = pts[i + 1];
+            path.lineTo(x(nextP.x) + 0.3 * pw, y(nextP.y1));
+          } else {
+            // Último punto: terminar en el borde del slot
+            path.lineTo(x0 + pw, y1);
+          }
+        });
+
+        // Borde inferior (regresando con el mismo flujo para efecto de cinta)
+        for (let i = pts.length - 1; i >= 0; i--) {
+          const p = pts[i];
+          const x0 = x(p.x);
+          const y0 = y(p.y0);
+
+          if (i === pts.length - 1) {
+            path.lineTo(x0 + pw, y0);
+          } else {
+            // Punto de llegada de la rampa inferior
+            path.lineTo(x0 + 0.7 * pw, y0);
+          }
+
+          // Meseta inferior
+          path.lineTo(x0 + 0.3 * pw, y0);
+
+          // Rampa inferior hacia atrás
+          if (i > 0) {
+            const prevP = pts[i - 1];
+            path.lineTo(x(prevP.x) + 0.7 * pw, y(prevP.y0));
+          } else {
+            path.lineTo(x0, y0);
+          }
+        }
+
+        path.closePath();
+        return path.toString();
       })
-      .attr("fill", d => getAreaColor(pedido))
+      .attr("fill", getAreaColor(pedido))
       .attr("stroke", colorPedido(pedido))
       .attr("stroke-width", 1)
-      .attr("opacity", d => d.type === 'wait' ? 0.5 : 0.9);
+      .attr("opacity", 0.8);
   });
 
   return layers;
