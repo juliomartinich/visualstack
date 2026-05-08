@@ -13,26 +13,20 @@ function findActiveLayer(capasReversa, t, my, scales) {
         }
       }
     } else if (currentGraphView === 'plantas' && capa.STK_PLANTAS && capa.STK_PLANTAS.bloquesXY) {
-      const seg = capa.STK_PLANTAS.bloquesXY.find(s => s.x === t);
-      if (seg && seg.v > 0) {
-        if (my >= scales.y(seg.y1) && my <= scales.y(seg.y0)) {
-          return capa;
-        }
-      }
+      const found = capa.STK_PLANTAS.bloquesXY.some(seg => 
+        seg.x === t && seg.v > 0 && my >= scales.y(seg.y1) && my <= scales.y(seg.y0)
+      );
+      if (found) return capa;
     } else if (currentGraphView === 'colas' && capa.STK_COLAS && capa.STK_COLAS.bloquesXY) {
-      const seg = capa.STK_COLAS.bloquesXY.find(s => s.x === t);
-      if (seg && seg.v > 0) {
-        if (my >= scales.y(seg.y1) && my <= scales.y(seg.y0)) {
-          return capa;
-        }
-      }
+      const found = capa.STK_COLAS.bloquesXY.some(seg => 
+        seg.x === t && seg.v > 0 && my >= scales.y(seg.y1) && my <= scales.y(seg.y0)
+      );
+      if (found) return capa;
     } else if (currentGraphView === 'colas2' && capa.STK_COLAS2 && capa.STK_COLAS2.bloquesXY) {
-      const seg = capa.STK_COLAS2.bloquesXY.find(s => s.x === t);
-      if (seg && seg.v > 0) {
-        if (my >= scales.y(seg.y1) && my <= scales.y(seg.y0)) {
-          return capa;
-        }
-      }
+      const found = capa.STK_COLAS2.bloquesXY.some(seg => 
+        seg.x === t && seg.v > 0 && my >= scales.y(seg.y1) && my <= scales.y(seg.y0)
+      );
+      if (found) return capa;
     }
   }
   return null;
