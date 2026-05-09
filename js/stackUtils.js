@@ -314,8 +314,8 @@ function buildPlantLoadStack(pedidos, granularidadMin) {
   return { horaMax, ocupacionMax, metrics };
 }
 
-/* ==== * buildColas2Stack: Nueva vista de colas con descenso progresivo * ==== */
-function buildColas2Stack(pedidos, totalBocas, granularidadMin) {
+/* ==== * buildColasStack: Nueva vista de colas con descenso progresivo * ==== */
+function buildColasStack(pedidos, totalBocas, granularidadMin) {
   let totalM3 = 0;
   let totalM3Confirmados = 0;
   let totalM3NoConfirmados = 0;
@@ -328,7 +328,7 @@ function buildColas2Stack(pedidos, totalBocas, granularidadMin) {
     if (p.Confirmado === "SI") totalM3Confirmados += cant;
     else totalM3NoConfirmados += cant;
 
-    p.STK_COLAS2 = { bloquesXY: [] };
+    p.STK_COLAS = { bloquesXY: [] };
     const numViajes = p.CantCargas || 1;
     const freqSlots = Math.floor((p.Frecuencia || 0) / granularidadMin);
     for (let i = 0; i < numViajes; i++) {
@@ -363,7 +363,7 @@ function buildColas2Stack(pedidos, totalBocas, granularidadMin) {
         v.xServe = t;
         v.boca = b;
         bocas[b] = t + 1; // 1 slot de carga
-        v.pedido.STK_COLAS2.bloquesXY.push({ x: t, y0: b, y1: b + 1, v: 1, type: 'serve', voyageId: v.id });
+        v.pedido.STK_COLAS.bloquesXY.push({ x: t, y0: b, y1: b + 1, v: 1, type: 'serve', voyageId: v.id });
         globalOcupacion[t] = Math.max(globalOcupacion[t], b + 1);
       }
     }
@@ -371,7 +371,7 @@ function buildColas2Stack(pedidos, totalBocas, granularidadMin) {
     // Registrar posición de los que siguen esperando
     queue.forEach((v, idx) => {
       const yPos = totalBocas + idx;
-      v.pedido.STK_COLAS2.bloquesXY.push({ x: t, y0: yPos, y1: yPos + 1, v: 1, type: 'wait', voyageId: v.id });
+      v.pedido.STK_COLAS.bloquesXY.push({ x: t, y0: yPos, y1: yPos + 1, v: 1, type: 'wait', voyageId: v.id });
       globalOcupacion[t] = Math.max(globalOcupacion[t], yPos + 1);
     });
 

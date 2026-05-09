@@ -493,8 +493,8 @@ function positionTooltip(panel, margin, mx, my, innerW, innerH) {
   }
 }
 
-/* ==== * Dibujo de Colas 2 (descenso progresivo como cinta continua) * ====*/
-function drawColas2Loads(g, pedidos, scales, granularidadMin) {
+/* ==== * Dibujo de Colas (descenso progresivo como cinta continua) * ====*/
+function drawColasLoads(g, pedidos, scales, granularidadMin) {
   const { x, y } = scales;
 
   const layers = g.selectAll("g.pedido")
@@ -504,7 +504,7 @@ function drawColas2Loads(g, pedidos, scales, granularidadMin) {
     .attr("class", "pedido");
 
   layers.each(function (pedido) {
-    const bloques = pedido.STK_COLAS2?.bloquesXY || [];
+    const bloques = pedido.STK_COLAS?.bloquesXY || [];
     if (bloques.length === 0) return;
 
     // Agrupar por viaje para dibujar cintas continuas

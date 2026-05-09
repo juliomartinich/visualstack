@@ -101,7 +101,7 @@ Promise.all([
           <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
             <option value="camiones">Camiones</option>
             <option value="plantas">Plantas</option>
-            <option value="colas2">Colas 2</option>
+            <option value="colas">Colas</option>
           </select>
         </div>
 
@@ -470,8 +470,8 @@ Promise.all([
         let stackResult;
         if (currentGraphView === 'plantas') {
           stackResult = buildPlantLoadStack(subsetPedidos, CFG.granularidadMin);
-        } else if (currentGraphView === 'colas2') {
-          stackResult = buildColas2Stack(subsetPedidos, totalBocas, CFG.granularidadMin);
+        } else if (currentGraphView === 'colas') {
+          stackResult = buildColasStack(subsetPedidos, totalBocas, CFG.granularidadMin);
         } else {
           stackResult = buildStack(subsetPedidos);
         }
@@ -487,7 +487,7 @@ Promise.all([
       const xMin = CFG.horaInicio * (60 / CFG.granularidadMin);
       const xMax = CFG.horaFin * (60 / CFG.granularidadMin);
       let yMax;
-      if (currentGraphView === "plantas" || currentGraphView === "colas2") {
+      if (currentGraphView === "plantas" || currentGraphView === "colas") {
         const uniquePlantas = new Set(pedidos.map(p => p.Planta));
         let capacity = 0;
         uniquePlantas.forEach(pCode => {
@@ -522,8 +522,8 @@ Promise.all([
           }
         });
         drawCapacityLine(g, capacity, scales, innerW);
-      } else if (currentGraphView === 'colas2') {
-        layers = drawColas2Loads(g, pedidos, scales, CFG.granularidadMin);
+      } else if (currentGraphView === 'colas') {
+        layers = drawColasLoads(g, pedidos, scales, CFG.granularidadMin);
         
         const uniquePlantas = new Set(pedidos.map(p => p.Planta));
         let capacity = 0;
