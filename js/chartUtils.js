@@ -145,16 +145,17 @@ function drawLeftAxis(g, scale, label) {
     .call(axis);
 
   axisG.append("text")
-    .attr("x", -5)
-    .attr("y", scale.range()[1] - 5)
+    .attr("transform", "rotate(-90)")
+    .attr("y", -35) // Espacio para los números del eje
+    .attr("x", -scale.range()[1] - 12) // Ahora sí, hacia abajo (más negativo tras rotación -90)
     .attr("fill", "#333")
     .attr("text-anchor", "end")
-    .attr("font-size", "10px")
+    .attr("font-size", "11px")
     .attr("font-weight", "bold")
     .text(label);
 }
 
-function drawRightAxis(g, scale, innerW, label) {
+function drawRightAxis(g, scale, innerW, label, color = "#666") {
   if (!scale) return;
   const axis = d3.axisRight(scale).ticks(5);
   const axisG = g.append("g")
@@ -162,11 +163,17 @@ function drawRightAxis(g, scale, innerW, label) {
     .attr("transform", `translate(${innerW}, 0)`)
     .call(axis);
 
+  if (color !== "#666") {
+    axisG.selectAll("line").attr("stroke", color);
+    axisG.selectAll("path").attr("stroke", color);
+    axisG.selectAll("text").attr("fill", color);
+  }
+
   axisG.append("text")
-    .attr("x", 5)
-    .attr("y", scale.range()[1] - 5)
-    .attr("fill", "#666")
-    .attr("text-anchor", "start")
+    .attr("x", -10) // Hacia el interior
+    .attr("y", scale.range()[1] + 15) // Bajamos un poco más (15px) del tope del sector
+    .attr("fill", color)
+    .attr("text-anchor", "end") // Alineado al eje pero desde adentro
     .attr("font-size", "10px")
     .attr("font-weight", "bold")
     .text(label);

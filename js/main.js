@@ -532,11 +532,15 @@ Promise.all([
           .domain([0, Math.max(totalBocas + 2, Math.ceil(curOcupacionMaxColas / 2) * 2 + 2)])
           .range([innerH * 0.40, innerH * 0.10]);
           
-        // Zona Superior: Delay (del 70% al 95% del gráfico: 0.05 a 0.30 de innerH)
+        // Determinar posición de la línea de capacidad para que el Delay flote sobre ella
+        const yCapacityPos = scales.yColas(totalBocas);
+        const delayStart = yCapacityPos - 15; // 15px por encima de la línea de capacidad
+
+        // Zona Superior: Delay (flotando desde delayStart hasta el 95% del gráfico)
         const maxDelayMin = Math.max(d3.max(currentMetrics.delay2ByTime) || 0, 10 / CFG.granularidadMin) * CFG.granularidadMin;
         scales.yDelay = d3.scaleLinear()
           .domain([0, maxDelayMin])
-          .range([innerH * 0.30, innerH * 0.05]);
+          .range([delayStart, innerH * 0.05]);
 
         yMax = 0; // para evitar ejes extra
       } else if (currentGraphView === "plantas" || currentGraphView === "colas") {
@@ -595,7 +599,7 @@ Promise.all([
             .range([innerH * 0.3, innerH * 0.05]); 
           
           drawDelayCurve(g, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
-          drawSecondaryAxis(g, scales, innerW, "Delay Max [min]");
+          drawRightAxis(g, scales.yDelay, innerW, "Delay Max [min]", "red");
         }
       } else if (currentGraphView === 'recursos') {
         // 1. Dibujar Camiones (Abajo)
@@ -624,7 +628,7 @@ Promise.all([
         // 3. Dibujar Delay (Arriba)
         const gDelay = g.append("g").attr("class", "zona-delay");
         drawDelayCurve(gDelay, currentMetrics.delay2ByTime, scales, CFG.granularidadMin); 
-        drawRightAxis(gDelay, scales.yDelay, innerW, "Delay Max [min]");
+        drawRightAxis(gDelay, scales.yDelay, innerW, "Delay Max [min]", "red");
       } else {
         area = createArea(scales);
         layers = drawLayers(g, pedidos, area, scales);
