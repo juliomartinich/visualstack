@@ -5,23 +5,34 @@ function findActiveLayer(capasReversa, t, my, scales) {
   const currentGraphView = document.getElementById("filter-viewgraph")?.value || 'camiones';
 
   for (const capa of capasReversa) {
-    if (currentGraphView === 'camiones' && capa.STK && capa.STK.segmentosXY) {
-      const seg = capa.STK.segmentosXY.find(s => s.x === t);
-      if (seg && seg.v > 0) {
-        if (my >= scales.y(seg.y1) && my <= scales.y(seg.y0)) {
+    // 1. Caso Camiones (o zona inferior de Recursos)
+    if ((currentGraphView === 'camiones' || currentGraphView === 'recursos') && capa.STK && capa.STK.segmentosXY) {
+      const y = (currentGraphView === 'recursos') ? scales.yCamiones : scales.y;
+      if (y) {
+        const seg = capa.STK.segmentosXY.find(s => s.x === t);
+        if (seg && seg.v > 0 && my >= y(seg.y1) && my <= y(seg.y0)) {
           return capa;
         }
       }
-    } else if (currentGraphView === 'plantas' && capa.STK_PLANTAS && capa.STK_PLANTAS.bloquesXY) {
+    }
+    
+    // 2. Caso Plantas
+    if (currentGraphView === 'plantas' && capa.STK_PLANTAS && capa.STK_PLANTAS.bloquesXY) {
       const found = capa.STK_PLANTAS.bloquesXY.some(seg => 
         seg.x === t && seg.v > 0 && my >= scales.y(seg.y1) && my <= scales.y(seg.y0)
       );
       if (found) return capa;
-    } else if (currentGraphView === 'colas' && capa.STK_COLAS && capa.STK_COLAS.bloquesXY) {
-      const found = capa.STK_COLAS.bloquesXY.some(seg => 
-        seg.x === t && seg.v > 0 && my >= scales.y(seg.y1) && my <= scales.y(seg.y0)
-      );
-      if (found) return capa;
+    }
+
+    // 3. Caso Colas (o zona media de Recursos)
+    if ((currentGraphView === 'colas' || currentGraphView === 'recursos') && capa.STK_COLAS && capa.STK_COLAS.bloquesXY) {
+      const y = (currentGraphView === 'recursos') ? scales.yColas : scales.y;
+      if (y) {
+        const found = capa.STK_COLAS.bloquesXY.some(seg => 
+          seg.x === t && seg.v > 0 && my >= y(seg.y1) && my <= y(seg.y0)
+        );
+        if (found) return capa;
+      }
     }
   }
   return null;
@@ -209,6 +220,7 @@ function setupInteraction(
     .style("opacity", 0);
 
   function syncCursor(t) {
+    const currentGraphView = document.getElementById("filter-viewgraph")?.value || 'camiones';
     if (t === null) {
       cursor.style("opacity", 0);
       envCircle.style("opacity", 0);
@@ -239,18 +251,21 @@ function setupInteraction(
     }
 
     // Always show metadata (trucks amount)
-    envCircle
-      .attr("cx", xPos)
-      .attr("cy", scales.y(metrics.envolvente[t]))
-      .style("opacity", 1);
+    const yEnv = (currentGraphView === 'recursos') ? scales.yColas : scales.y;
+    if (yEnv) {
+      envCircle
+        .attr("cx", xPos)
+        .attr("cy", yEnv(metrics.envolvente[t]))
+        .style("opacity", 1);
 
-    envLabel
-      .attr("x", xPos)
-      .attr("y", scales.y(metrics.envolvente[t]))
-      .text(metrics.envolvente[t])
-      .style("opacity", 1);
+      envLabel
+        .attr("x", xPos)
+        .attr("y", yEnv(metrics.envolvente[t]))
+        .text(metrics.envolvente[t])
+        .style("opacity", 1);
+    }
 
-    // Etiqueta de Delay (Roja) para vista Colas 2
+    // Etiqueta de Delay (Roja) para vista Colas o Recursos
     const delayVal = metrics.delay2ByTime ? metrics.delay2ByTime[t] : 0;
 
     if (scales.yDelay && delayVal > 0) {
@@ -268,6 +283,7 @@ function setupInteraction(
 
   // Interacción desde Stack -> Gantt
   function handlePointer(ev) {
+    const currentGraphView = document.getElementById("filter-viewgraph")?.value || 'camiones';
     const [mx, my] = d3.pointer(ev);
     const t = Math.round(scales.x.invert(mx));
 

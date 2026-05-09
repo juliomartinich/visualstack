@@ -52,8 +52,10 @@ function drawGrids(g, scales, maxX, granularidad, innerW, innerH, yMax) {
 }
 
 /* ==== * Ejes * ===================== */
-function drawAxes(g, scales, maxX, granularidad, innerH) {
-  g.append("g").call(d3.axisLeft(scales.y));
+function drawAxes(g, scales, maxX, granularidad, innerH, skipY = false) {
+  if (!skipY) {
+    g.append("g").call(d3.axisLeft(scales.y).ticks(10));
+  }
 
   g.append("g")
     .attr("transform", `translate(0,${innerH})`)
@@ -67,26 +69,31 @@ function drawAxes(g, scales, maxX, granularidad, innerH) {
     );
 }
 
-function drawCapacityLine(g, capacity, scales, innerW) {
-  if (capacity <= 0) return;
-  const yPos = scales.y(capacity);
+function drawCapacityLine(g, capacity, scales, innerW, yScale) {
+  const y = yScale || scales.y;
+  const yPos = y(capacity);
+  
   g.append("line")
     .attr("class", "capacity-line")
     .attr("x1", 0)
-    .attr("y1", yPos)
     .attr("x2", innerW)
+    .attr("y1", yPos)
     .attr("y2", yPos)
-    .attr("stroke", "#aaa")
-    .attr("stroke-width", 2.5);
+    .attr("stroke", capacity === 0 ? "#ccc" : "#333")
+    .attr("stroke-width", capacity === 0 ? 1 : 2)
+    .attr("stroke-dasharray", capacity === 0 ? "none" : "5,5")
+    .style("pointer-events", "none");
 
-  g.append("text")
-    .attr("class", "capacity-label")
-    .attr("x", innerW - 5)
-    .attr("y", yPos - 5)
-    .attr("text-anchor", "end")
-    .attr("fill", "#999")
-    .attr("font-size", "10px")
-    .text(`Capacidad: ${capacity} boca(s)`);
+  if (capacity > 0) {
+    g.append("text")
+      .attr("class", "capacity-label")
+      .attr("x", innerW - 5)
+      .attr("y", yPos - 5)
+      .attr("text-anchor", "end")
+      .attr("fill", "#333")
+      .attr("font-size", "10px")
+      .text(`Capacidad: ${capacity} bocas`);
+  }
 }
 
 function drawDelayCurve(g, data, scales, granularidadMin) {
@@ -130,52 +137,49 @@ function drawDelayCurve(g, data, scales, granularidadMin) {
 
 
 
-function drawSecondaryAxis(g, scales, innerW, label) {
-  if (!scales.yDelay) return;
-
+function drawLeftAxis(g, scale, label) {
+  if (!scale) return;
+  const axis = d3.axisLeft(scale).ticks(5);
   const axisG = g.append("g")
-    .attr("class", "axis axis-y-secondary")
-    .attr("transform", `translate(${innerW}, 0)`)
-    .call(
-      d3.axisLeft(scales.yDelay)
-        .ticks(5)
-        .tickSize(5)
-        .tickFormat(d => d === 0 ? "" : d)
-    );
-
-  axisG.selectAll("line").attr("stroke", "red");
-  axisG.selectAll("path").attr("stroke", "red");
-  axisG.selectAll("text").attr("fill", "red").style("font-size", "9px");
+    .attr("class", "y-axis-left")
+    .call(axis);
 
   axisG.append("text")
-    .attr("x", -8)
-    .attr("y", 12)
-    .attr("fill", "red")
+    .attr("x", -5)
+    .attr("y", scale.range()[1] - 5)
+    .attr("fill", "#333")
     .attr("text-anchor", "end")
     .attr("font-size", "10px")
     .attr("font-weight", "bold")
     .text(label);
+}
 
-  // Línea roja horizontal para el cero del delay (toda la extensión del eje X)
-  const zeroY = scales.yDelay(0);
-  g.append("line")
-    .attr("class", "delay-zero-line")
-    .attr("x1", 0)
-    .attr("y1", zeroY)
-    .attr("x2", innerW)
-    .attr("y2", zeroY)
-    .attr("stroke", "red")
-    .attr("stroke-width", 1)
-    .attr("opacity", 0.3);
+function drawRightAxis(g, scale, innerW, label) {
+  if (!scale) return;
+  const axis = d3.axisRight(scale).ticks(5);
+  const axisG = g.append("g")
+    .attr("class", "y-axis-right")
+    .attr("transform", `translate(${innerW}, 0)`)
+    .call(axis);
+
+  axisG.append("text")
+    .attr("x", 5)
+    .attr("y", scale.range()[1] - 5)
+    .attr("fill", "#666")
+    .attr("text-anchor", "start")
+    .attr("font-size", "10px")
+    .attr("font-weight", "bold")
+    .text(label);
 }
 
 /* ==== * Área stack * ===================== */
-function createArea(scales) {
+function createArea(scales, yScale) {
+  const y = yScale || scales.y;
   return d3.area()
     .defined(d => d.v > 0)
     .x(d => scales.x(d.x))
-    .y0(d => scales.y(d.y0))
-    .y1(d => scales.y(d.y1));
+    .y0(d => y(d.y0))
+    .y1(d => y(d.y1));
 }
 
 function colorPedido(pedido) {
@@ -209,8 +213,9 @@ function getAreaColor(pedido) {
 }
 
 /* ==== dibuja parte superior del area con los bordes verticales =====*/
-function lineTopClosed(segmentos, scales) {
-  const { x, y } = scales;
+function lineTopClosed(segmentos, scales, yScale) {
+  const x = scales.x;
+  const y = yScale || scales.y;
   const pts = [];
 
   const first = segmentos.find(d => d.v > 0);
@@ -235,8 +240,9 @@ function lineTopClosed(segmentos, scales) {
 }
 
 /* ==== * Dibujo de pedidos (stack) * ===================== */
-function drawLayers(g, pedidos, area, scales) {
-  const { x, y } = scales;
+function drawLayers(g, pedidos, area, scales, yScale) {
+  const x = scales.x;
+  const y = yScale || scales.y;
 
   const layers = g.selectAll("g.pedido")
     .data(pedidos)
@@ -252,7 +258,7 @@ function drawLayers(g, pedidos, area, scales) {
 
   layers.append("path")
     .attr("class", "line-top")
-    .attr("d", d => lineTopClosed(d.STK?.segmentosXY || [], scales))
+    .attr("d", d => lineTopClosed(d.STK?.segmentosXY || [], scales, y))
     .attr("fill", "none")
     .attr("stroke", d => colorPedido(d))
     .attr("stroke-width", CFG.lineStrokeWidth)
@@ -494,8 +500,9 @@ function positionTooltip(panel, margin, mx, my, innerW, innerH) {
 }
 
 /* ==== * Dibujo de Colas (descenso progresivo como cinta continua) * ====*/
-function drawColasLoads(g, pedidos, scales, granularidadMin) {
-  const { x, y } = scales;
+function drawColasLoads(g, pedidos, scales, granularidadMin, yScale) {
+  const x = scales.x;
+  const y = yScale || scales.y;
 
   const layers = g.selectAll("g.pedido")
     .data(pedidos)
