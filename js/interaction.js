@@ -17,11 +17,6 @@ function findActiveLayer(capasReversa, t, my, scales) {
         seg.x === t && seg.v > 0 && my >= scales.y(seg.y1) && my <= scales.y(seg.y0)
       );
       if (found) return capa;
-    } else if (currentGraphView === 'colas' && capa.STK_COLAS && capa.STK_COLAS.bloquesXY) {
-      const found = capa.STK_COLAS.bloquesXY.some(seg => 
-        seg.x === t && seg.v > 0 && my >= scales.y(seg.y1) && my <= scales.y(seg.y0)
-      );
-      if (found) return capa;
     } else if (currentGraphView === 'colas2' && capa.STK_COLAS2 && capa.STK_COLAS2.bloquesXY) {
       const found = capa.STK_COLAS2.bloquesXY.some(seg => 
         seg.x === t && seg.v > 0 && my >= scales.y(seg.y1) && my <= scales.y(seg.y0)
@@ -255,9 +250,8 @@ function setupInteraction(
       .text(metrics.envolvente[t])
       .style("opacity", 1);
 
-    // Etiqueta de Delay (Roja) para vistas Colas o Colas 2
-    const delayVal = (metrics.combinedDelayByTime ? metrics.combinedDelayByTime[t] : 0) || 
-                     (metrics.delay2ByTime ? metrics.delay2ByTime[t] : 0);
+    // Etiqueta de Delay (Roja) para vista Colas 2
+    const delayVal = metrics.delay2ByTime ? metrics.delay2ByTime[t] : 0;
 
     if (scales.yDelay && delayVal > 0) {
       const delayMin = delayVal * granularidad;

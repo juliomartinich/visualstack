@@ -101,7 +101,6 @@ Promise.all([
           <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
             <option value="camiones">Camiones</option>
             <option value="plantas">Plantas</option>
-            <option value="colas">Colas</option>
             <option value="colas2">Colas 2</option>
           </select>
         </div>
@@ -471,8 +470,6 @@ Promise.all([
         let stackResult;
         if (currentGraphView === 'plantas') {
           stackResult = buildPlantLoadStack(subsetPedidos, CFG.granularidadMin);
-        } else if (currentGraphView === 'colas') {
-          stackResult = buildColasStack(subsetPedidos, totalBocas, CFG.granularidadMin);
         } else if (currentGraphView === 'colas2') {
           stackResult = buildColas2Stack(subsetPedidos, totalBocas, CFG.granularidadMin);
         } else {
@@ -490,7 +487,7 @@ Promise.all([
       const xMin = CFG.horaInicio * (60 / CFG.granularidadMin);
       const xMax = CFG.horaFin * (60 / CFG.granularidadMin);
       let yMax;
-      if (currentGraphView === "plantas" || currentGraphView === "colas" || currentGraphView === "colas2") {
+      if (currentGraphView === "plantas" || currentGraphView === "colas2") {
         const uniquePlantas = new Set(pedidos.map(p => p.Planta));
         let capacity = 0;
         uniquePlantas.forEach(pCode => {
@@ -546,34 +543,6 @@ Promise.all([
           
           drawDelayCurve(g, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
           drawSecondaryAxis(g, scales, innerW, "Delay [min]");
-        }
-      } else if (currentGraphView === 'colas') {
-        layers = drawColasLoads(g, pedidos, scales, CFG.granularidadMin);
-        
-        const uniquePlantas = new Set(pedidos.map(p => p.Planta));
-        let capacity = 0;
-        uniquePlantas.forEach(pCode => {
-          if (window.plantasData && window.plantasData[pCode]) {
-            capacity += window.plantasData[pCode].cant_bocas || 0;
-          }
-        });
-        drawCapacityLine(g, capacity, scales, innerW);
-
-        // Curva de Delay (Eje secundario)
-        if (currentMetrics.maxDelayByTime) {
-          const maxActual = d3.max(currentMetrics.maxDelayByTime) || 0;
-          const maxPotential = d3.max(currentMetrics.potentialDelayByTime || []) || 0;
-          const maxDelayMin = Math.max(maxActual, maxPotential, 10 / CFG.granularidadMin) * CFG.granularidadMin;
-
-          scales.yDelay = d3.scaleLinear()
-            .domain([0, maxDelayMin])
-            .range([innerH * 0.3, innerH * 0.05]); // Base en 70% de la altura, Máximo en 95% (medido desde abajo)
-          
-          drawDelayCurve(g, currentMetrics.maxDelayByTime, scales, CFG.granularidadMin);
-          if (currentMetrics.combinedDelayByTime) {
-            drawCombinedDelayCurve(g, currentMetrics.combinedDelayByTime, scales, CFG.granularidadMin);
-          }
-          drawSecondaryAxis(g, scales, innerW, "Delay Max [min]");
         }
       } else {
         area = createArea(scales);

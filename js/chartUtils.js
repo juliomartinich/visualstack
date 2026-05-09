@@ -128,53 +128,7 @@ function drawDelayCurve(g, data, scales, granularidadMin) {
     .attr("opacity", 0.1);
 }
 
-function drawPotentialDelayCurve(g, data, scales, granularidadMin) {
-  if (!data || data.length === 0 || !scales.yDelay) return;
 
-  const [xMin, xMax] = scales.x.domain();
-  const visibleData = data
-    .map((v, i) => ({ v, i }))
-    .filter(d => d.i >= xMin && d.i <= xMax);
-
-  const line = d3.line()
-    .x(d => scales.x(d.i))
-    .y(d => scales.yDelay(d.v * granularidadMin))
-    .curve(d3.curveMonotoneX);
-
-  g.append("path")
-    .datum(visibleData)
-    .attr("class", "potential-delay-curve")
-    .attr("d", line)
-    .attr("fill", "none")
-    .attr("stroke", "blue")
-    .attr("stroke-width", 2)
-    .attr("stroke-dasharray", "4,2")
-    .attr("opacity", 0.7);
-}
-
-function drawCombinedDelayCurve(g, data, scales, granularidadMin) {
-  if (!data || data.length === 0 || !scales.yDelay) return;
-
-  const [xMin, xMax] = scales.x.domain();
-  const visibleData = data
-    .map((v, i) => ({ v, i }))
-    .filter(d => d.i >= xMin && d.i <= xMax);
-
-  const line = d3.line()
-    .x(d => scales.x(d.i))
-    .y(d => scales.yDelay(d.v * granularidadMin))
-    .curve(d3.curveMonotoneX);
-
-  g.append("path")
-    .datum(visibleData)
-    .attr("class", "combined-delay-curve")
-    .attr("d", line)
-    .attr("fill", "none")
-    .attr("stroke", "red")
-    .attr("stroke-width", 2)
-    .attr("stroke-dasharray", "4,2")
-    .attr("opacity", 1);
-}
 
 function drawSecondaryAxis(g, scales, innerW, label) {
   if (!scales.yDelay) return;
@@ -379,89 +333,7 @@ function drawPlantLoads(g, pedidos, scales, granularidadMin) {
   return layers;
 }
 
-/* ==== * Dibujo de Cargas de Colas (rectángulos y conexiones FIFO) * ====*/
-function drawColasLoads(g, pedidos, scales, granularidadMin) {
-  const { x, y } = scales;
 
-  const layers = g.selectAll("g.pedido")
-    .data(pedidos)
-    .enter()
-    .append("g")
-    .attr("class", "pedido");
-
-  layers.each(function (pedido) {
-    const bloques = pedido.STK_COLAS?.bloquesXY || [];
-    const conexiones = pedido.STK_COLAS?.conexionesXY || [];
-
-    if (bloques.length === 0 && conexiones.length === 0) return;
-
-    const self = d3.select(this);
-
-    // Conexiones (curvas)
-    if (conexiones.length > 0) {
-      self.selectAll("path.conexion")
-        .data(conexiones)
-        .enter()
-        .append("path")
-        .attr("class", "conexion")
-        .attr("d", d => {
-          const x1 = x(d.x1);
-          const y1 = y(d.y1);
-          const x2 = x(d.x2);
-          const y2 = y(d.y2);
-
-          const link = d3.linkHorizontal()
-            .x(p => p[0])
-            .y(p => p[1]);
-          return link({ source: [x1, y1], target: [x2, y2] });
-        })
-        .attr("fill", "none")
-        .attr("stroke", "saddlebrown")
-        .attr("stroke-width", 1.5)
-        .attr("stroke-dasharray", "3,3")
-        .attr("opacity", 0.5);
-    }
-
-    // Bloques
-    if (bloques.length > 0) {
-      self.selectAll("path.carga")
-        .data(bloques)
-        .enter()
-        .append("path")
-        .attr("class", "carga")
-        .attr("d", d => {
-          const px = x(d.x);
-          const py = y(d.y1);
-          const pw = Math.max(1, x(d.x + 1) - x(d.x));
-          const ph = Math.max(1, y(d.y0) - y(d.y1));
-          const pr = Math.min(4, pw * 0.1, ph * 0.5);
-
-          const p = d3.path();
-          p.moveTo(px, py + ph); // BL
-          p.lineTo(px + pw, py + ph); // BR
-          p.arcTo(px + pw * 0.8, py, px, py, pr); // TR
-          p.arcTo(px, py, px, py + ph, pr); // TL
-          p.closePath();
-          return p.toString();
-        })
-        .attr("fill", d => {
-          if (d.type === 'wait') return "transparent";
-          if (d.delayed) return "saddlebrown";
-          return getAreaColor(pedido);
-        })
-        .attr("stroke", colorPedido(pedido))
-        .attr("stroke-width", 1)
-        .attr("stroke-dasharray", d => d.type === 'wait' ? "2,2" : "none")
-        .attr("opacity", d => {
-          if (d.type === 'wait') return 0.6;
-          if (d.delayed) return 0.6;
-          return 0.9;
-        });
-    }
-  });
-
-  return layers;
-}
 
 /* ==== * Panel Gantt inferior (Scrollable) * ===================== */
 function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
