@@ -255,8 +255,12 @@ function setupInteraction(
       .text(metrics.envolvente[t])
       .style("opacity", 1);
 
-    if (scales.yDelay && metrics.combinedDelayByTime && metrics.combinedDelayByTime[t] > 0) {
-      const delayMin = metrics.combinedDelayByTime[t] * granularidad;
+    // Etiqueta de Delay (Roja) para vistas Colas o Colas 2
+    const delayVal = (metrics.combinedDelayByTime ? metrics.combinedDelayByTime[t] : 0) || 
+                     (metrics.delay2ByTime ? metrics.delay2ByTime[t] : 0);
+
+    if (scales.yDelay && delayVal > 0) {
+      const delayMin = delayVal * granularidad;
       delayLabel
         .attr("x", xPos)
         .attr("y", scales.yDelay(delayMin))
