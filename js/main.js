@@ -536,6 +536,17 @@ Promise.all([
           }
         });
         drawCapacityLine(g, capacity, scales, innerW);
+
+        // Nueva curva Delay 2 (Roja)
+        if (currentMetrics.delay2ByTime) {
+          const maxDelayMin = Math.max(d3.max(currentMetrics.delay2ByTime) || 0, 10 / CFG.granularidadMin) * CFG.granularidadMin;
+          scales.yDelay = d3.scaleLinear()
+            .domain([0, maxDelayMin])
+            .range([innerH * 0.3, innerH * 0.05]); 
+          
+          drawDelayCurve(g, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
+          drawSecondaryAxis(g, scales, innerW, "Delay [min]");
+        }
       } else if (currentGraphView === 'colas') {
         layers = drawColasLoads(g, pedidos, scales, CFG.granularidadMin);
         

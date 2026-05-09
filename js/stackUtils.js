@@ -374,6 +374,24 @@ function buildColas2Stack(pedidos, totalBocas, granularidadMin) {
       v.pedido.STK_COLAS2.bloquesXY.push({ x: t, y0: yPos, y1: yPos + 1, v: 1, type: 'wait', voyageId: v.id });
       globalOcupacion[t] = Math.max(globalOcupacion[t], yPos + 1);
     });
+
+  }
+
+  // --- NUEVA LÓGICA: Calcular Delay2 después de la simulación ---
+  const delay2ByTime = Array(horaMax + 1).fill(0);
+  for (let t = 0; t <= horaMax; t++) {
+    // Buscamos todos los viajes que están en la cola en el tiempo t
+    // Un viaje está en cola si ya llegó (xArrive <= t) pero aún no se atiende (xServe > t)
+    const inQueueAtT = allVoyages.filter(v => v.xArrive <= t && v.xServe > t);
+    if (inQueueAtT.length > 0) {
+      // El que está "más arriba" es el que llegó más tarde (max xArrive)
+      let lastInQueue = inQueueAtT[0];
+      inQueueAtT.forEach(v => {
+        if (v.xArrive > lastInQueue.xArrive) lastInQueue = v;
+      });
+      // Guardar en slots (sin multiplicar por granularidad) para consistencia
+      delay2ByTime[t] = (lastInQueue.xServe - t);
+    }
   }
 
   const arrEnvolvente = Array(horaMax + 1).fill(0);
@@ -384,6 +402,7 @@ function buildColas2Stack(pedidos, totalBocas, granularidadMin) {
     volConfirmado: totalM3Confirmados,
     volNoConfirmado: totalM3NoConfirmados,
     envolvente: arrEnvolvente,
+    delay2ByTime: delay2ByTime,
     ...computeGlobalMetrics(arrEnvolvente, granularidadMin)
   };
 
