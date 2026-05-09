@@ -384,10 +384,10 @@ function buildColasStack(pedidos, totalBocas, granularidadMin) {
     // Un viaje está en cola si ya llegó (xArrive <= t) pero aún no se atiende (xServe > t)
     const inQueueAtT = allVoyages.filter(v => v.xArrive <= t && v.xServe > t);
     if (inQueueAtT.length > 0) {
-      // El que está "más arriba" es el que llegó más tarde (max xArrive)
+      // El que está "más arriba" en la visualización es el que se atenderá más tarde (max xServe)
       let lastInQueue = inQueueAtT[0];
       inQueueAtT.forEach(v => {
-        if (v.xArrive > lastInQueue.xArrive) lastInQueue = v;
+        if (v.xServe > lastInQueue.xServe) lastInQueue = v;
       });
       // Guardar en slots (sin multiplicar por granularidad) para consistencia
       delay2ByTime[t] = (lastInQueue.xServe - t);

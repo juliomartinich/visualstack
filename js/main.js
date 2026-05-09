@@ -542,7 +542,7 @@ Promise.all([
             .range([innerH * 0.3, innerH * 0.05]); 
           
           drawDelayCurve(g, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
-          drawSecondaryAxis(g, scales, innerW, "Delay [min]");
+          drawSecondaryAxis(g, scales, innerW, "Delay Max [min]");
         }
       } else {
         area = createArea(scales);
