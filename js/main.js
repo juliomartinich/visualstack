@@ -629,6 +629,9 @@ Promise.all([
         const gDelay = g.append("g").attr("class", "zona-delay");
         drawDelayCurve(gDelay, currentMetrics.delay2ByTime, scales, CFG.granularidadMin); 
         drawRightAxis(gDelay, scales.yDelay, innerW, "Delay Max [min]", "red");
+
+        // Capturar todas las capas para el highlight de interacción
+        layers = g.selectAll(".pedido"); 
       } else {
         area = createArea(scales);
         layers = drawLayers(g, pedidos, area, scales);

@@ -211,6 +211,13 @@ function colorPedido(pedido) {
 }
 
 /* ==== * Color de Área * ===================== */
+function getJsonColor(pedido) {
+  if (!window.pedidoColorsMap) return colorPedido(pedido);
+  // ColorPedido suele ser el ID en el mapa
+  const color = window.pedidoColorsMap.get(Number(pedido.ColorPedido));
+  return color || colorPedido(pedido);
+}
+
 function getAreaColor(pedido) {
   if (pedido.CantProgramada > 100) return AREACOLORS.masivo;
   if (pedido.ColorPedido == 11 || pedido.ColorPedido == 12) return AREACOLORS.color11_12;
@@ -289,7 +296,7 @@ function drawLayers(g, pedidos, area, scales, yScale) {
       .enter()
       .append("path")
       .attr("class", "descarga")
-      .attr("d", d3.symbol().type(d3.symbolTriangle).size(15))
+      .attr("d", d3.symbol().type(d3.symbolTriangle).size(20))
       .attr("transform", d => `
         translate(${x(d.x)}, ${y(d.y)})
         rotate(180)
