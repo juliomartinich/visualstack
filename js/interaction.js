@@ -360,7 +360,7 @@ function setupInteraction(
       });
 
       drawActiveArea({ overlay, layers, getCapas, activa: focus, scales, jsonColor, dynamicColor: colorPedido(focus) });
-      band.show(focus, jsonColor);
+      band.show(focus, colorPedido(focus));
 
       // Highlight en Gantt (highlight all voyages of the same parent)
       d3.selectAll(".gantt-row").classed("inactive", d => (d.parentPedidoId || d.id) !== parentId)

@@ -206,7 +206,7 @@ function decomposePedidosIntoVoyages(pedidos, granularidadMin) {
     const numViajes = p.CantCargas || 1;
     const cycleTime = (p.TiempoCarga || 0) + (p.Frecuencia || 0) + 2 * (p.TiempoViaje || 0);
     const cycleSlots = Math.ceil(cycleTime / granularidadMin);
-    const freqSlots = Math.floor((p.Frecuencia || 0) / granularidadMin);
+    const freqSlots = Math.ceil((p.Frecuencia || 0) / granularidadMin);
     const cargaSlots = Math.ceil((p.TiempoCarga || 0) / granularidadMin);
     const viajeSlots = Math.ceil((p.TiempoViaje || 0) / granularidadMin);
 
