@@ -54,7 +54,7 @@ function scrollToGanttRow(pedidoId) {
 }
 
 /* ==== HIGHLIGHT DEL ÁREA ACTIVA ====*/
-function drawActiveArea({ overlay, layers, getCapas, activa, scales, jsonColor, dynamicColor }) {
+function drawActiveArea({ overlay, layers, getCapas, activa, scales, colorOrigen, colorSort }) {
   const capas = getCapas();
   const idx = capas.indexOf(activa);
   if (idx < 0) return;
@@ -73,9 +73,9 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, jsonColor, 
       .attr("class", "main")
       .merge(main)
       .attr("d", baseArea.attr("d"))
-      .attr("fill", jsonColor)
+      .attr("fill", colorOrigen)
       .attr("fill-opacity", 0.45)
-      .attr("stroke", dynamicColor)
+      .attr("stroke", colorSort)
       .attr("stroke-width", 1.3)
       .attr("stroke-linecap", "round");
   } else {
@@ -91,9 +91,9 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, jsonColor, 
       .attr("class", "main-carga")
       .merge(activeRects)
       .attr("d", (d, i) => baseRects.nodes()[i].getAttribute("d"))
-      .attr("fill", d => d.delayed ? "saddlebrown" : jsonColor)
+      .attr("fill", d => d.delayed ? "saddlebrown" : colorOrigen)
       .attr("fill-opacity", d => d.delayed ? 0.5 : 0.7)
-      .attr("stroke", dynamicColor)
+      .attr("stroke", colorSort)
       .attr("stroke-width", 1.5);
       
     activeRects.exit().remove();
@@ -137,7 +137,7 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, jsonColor, 
       const y = (currentGraphView === 'recursos' || currentGraphView === 'camiones') && scales.yCamiones ? scales.yCamiones : scales.y;
       return `translate(${scales.x(d.x)}, ${y(d.y)}) rotate(180)`;
     })
-    .attr("fill", colorPedido(activa))
+    .attr("fill", getColorSort(activa))
     .attr("stroke", "white")
     .attr("stroke-width", 1.5)
     .style("pointer-events", "none");
@@ -206,7 +206,7 @@ const lastWasHovering = { current: false };
 function setupInteraction(
   svg, g, layers, getCapas, scales, band,
   granularidad, panel, innerW, innerH,
-  ganttPanel, metrics, margin, colorPedido
+  ganttPanel, metrics, margin, getColorSort
 ) {
   // Cursors
   const cursor = g.append("line")
@@ -327,7 +327,7 @@ function setupInteraction(
         group.selectAll("path.area, path.carga")
           .style("fill", getAreaColor(d));
         group.selectAll("path.line-top, path.carga")
-          .attr("stroke", colorPedido(d))
+          .attr("stroke", getColorSort(d))
           .attr("stroke-width", scales.yCamiones ? CFG.lineStrokeWidth : 1);
       });
 
@@ -341,44 +341,46 @@ function setupInteraction(
 
     // 2. Highlighting (Area & Band)
     if (isFocusChange) {
+      const isHover = !!activa;
       const parentId = focus.parentPedidoId || focus.id;
       const codObra = focus.CodObra;
-      const jsonColor = getJsonColor(focus);
+      const colorOrigen = getColorOrigen(focus);
+      const colorObra = "red";
 
       layers.style("opacity", d => {
         const isSameParent = (d.parentPedidoId || d.id) === parentId;
-        const isSameObra = codObra && d.CodObra === codObra;
+        const isSameObra = !isHover && codObra && d.CodObra === codObra;
         return (isSameParent || isSameObra) ? 1 : 0.5;
       });
       
-      // Highlight con COLOR DEL JSON
+      // Highlight con COLOR DE ORIGEN (o COLOR DE OBRA si es selección y aplica)
       layers.each(function(d) {
         const isSameParent = (d.parentPedidoId || d.id) === parentId;
-        const isSameObra = codObra && d.CodObra === codObra;
+        const isSameObra = !isHover && codObra && d.CodObra === codObra;
         const isTarget = isSameParent || isSameObra;
         const group = d3.select(this);
         
         group.selectAll("path.area, path.carga")
-          .style("fill", isTarget ? (isSameObra ? "red" : jsonColor) : getAreaColor(d));
+          .style("fill", isTarget ? (isSameObra ? colorObra : colorOrigen) : getAreaColor(d));
         
         group.selectAll("path.line-top, path.carga")
-          .attr("stroke", colorPedido(d)) // Siempre el dinámico
+          .attr("stroke", getColorSort(d)) // Siempre el Color del Sort (dinámico)
           .attr("stroke-width", isTarget ? 2 : (scales.yCamiones ? CFG.lineStrokeWidth : 1));
       });
 
-      drawActiveArea({ overlay, layers, getCapas, activa: focus, scales, jsonColor, dynamicColor: colorPedido(focus) });
-      band.show(focus, colorPedido(focus));
+      drawActiveArea({ overlay, layers, getCapas, activa: focus, scales, colorOrigen, colorSort: getColorSort(focus) });
+      band.show(focus, getColorSort(focus));
 
-      // Highlight en Gantt (highlight all voyages of the same parent or same obra)
+      // Highlight en Gantt (highlight all voyages of the same parent, or same obra if not hovering)
       d3.selectAll(".gantt-row")
         .classed("inactive", d => {
           const isSameParent = (d.parentPedidoId || d.id) === parentId;
-          const isSameObra = codObra && d.CodObra === codObra;
+          const isSameObra = !isHover && codObra && d.CodObra === codObra;
           return !(isSameParent || isSameObra);
         })
         .classed("active", d => {
           const isSameParent = (d.parentPedidoId || d.id) === parentId;
-          const isSameObra = codObra && d.CodObra === codObra;
+          const isSameObra = !isHover && codObra && d.CodObra === codObra;
           return (isSameParent || isSameObra);
         });
     }

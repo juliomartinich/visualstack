@@ -189,7 +189,7 @@ function createArea(scales, yScale) {
     .y1(d => y(d.y1));
 }
 
-function colorPedido(pedido) {
+function getColorSort(pedido) {
   if (pedido.CantProgramada > 100) {
     return COLORS.multi;
   }
@@ -211,11 +211,11 @@ function colorPedido(pedido) {
 }
 
 /* ==== * Color de Área * ===================== */
-function getJsonColor(pedido) {
-  if (!window.pedidoColorsMap) return colorPedido(pedido);
+function getColorOrigen(pedido) {
+  if (!window.pedidoColorsMap) return getColorSort(pedido);
   // ColorPedido suele ser el ID en el mapa
   const color = window.pedidoColorsMap.get(Number(pedido.ColorPedido));
-  return color || colorPedido(pedido);
+  return color || getColorSort(pedido);
 }
 
 function getAreaColor(pedido) {
@@ -274,7 +274,7 @@ function drawLayers(g, pedidos, area, scales, yScale) {
     .attr("class", "line-top")
     .attr("d", d => lineTopClosed(d.STK?.segmentosXY || [], scales, y))
     .attr("fill", "none")
-    .attr("stroke", d => colorPedido(d))
+    .attr("stroke", d => getColorSort(d))
     .attr("stroke-width", CFG.lineStrokeWidth)
     .attr("stroke-opacity", CFG.lineOpacity);
 
@@ -301,7 +301,7 @@ function drawLayers(g, pedidos, area, scales, yScale) {
         translate(${x(d.x)}, ${y(d.y)})
         rotate(180)
       `)
-      .attr("fill", colorPedido(pedido))
+      .attr("fill", getColorSort(pedido))
       .attr("fill-opacity", CFG.triangleOpacity)
       .style("pointer-events", "none");
   });
@@ -345,7 +345,7 @@ function drawPlantLoads(g, pedidos, scales, granularidadMin) {
         return p.toString();
       })
       .attr("fill", getAreaColor(pedido))
-      .attr("stroke", colorPedido(pedido))
+      .attr("stroke", getColorSort(pedido))
       .attr("stroke-width", 1)
       .attr("opacity", 0.9);
   });
@@ -406,7 +406,7 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
         })
         .attr("height", rowHeight - 3)
         .attr("rx", 3)
-        .attr("fill", d => colorPedido(d))
+        .attr("fill", d => getColorSort(d))
         .attr("opacity", 0.8);
 
       // Descargas
@@ -605,7 +605,7 @@ function drawColasLoads(g, pedidos, scales, granularidadMin, yScale) {
         return path.toString();
       })
       .attr("fill", getAreaColor(pedido))
-      .attr("stroke", colorPedido(pedido))
+      .attr("stroke", getColorSort(pedido))
       .attr("stroke-width", 1)
       .attr("opacity", 0.8);
   });

@@ -660,7 +660,7 @@ Promise.all([
 
       setupInteraction(
         svg, g, layers, () => pedidos, scales, band, CFG.granularidadMin,
-        panel, innerW, innerH, ganttPanel, currentMetrics, margin, colorPedido
+        panel, innerW, innerH, ganttPanel, currentMetrics, margin, getColorSort
       );
 
       codObraList.innerHTML = "";
