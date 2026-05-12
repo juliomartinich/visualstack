@@ -342,17 +342,24 @@ function setupInteraction(
     // 2. Highlighting (Area & Band)
     if (isFocusChange) {
       const parentId = focus.parentPedidoId || focus.id;
+      const codObra = focus.CodObra;
       const jsonColor = getJsonColor(focus);
 
-      layers.style("opacity", d => (d.parentPedidoId || d.id) === parentId ? 1 : 0.5);
+      layers.style("opacity", d => {
+        const isSameParent = (d.parentPedidoId || d.id) === parentId;
+        const isSameObra = codObra && d.CodObra === codObra;
+        return (isSameParent || isSameObra) ? 1 : 0.5;
+      });
       
       // Highlight con COLOR DEL JSON
       layers.each(function(d) {
-        const isTarget = (d.parentPedidoId || d.id) === parentId;
+        const isSameParent = (d.parentPedidoId || d.id) === parentId;
+        const isSameObra = codObra && d.CodObra === codObra;
+        const isTarget = isSameParent || isSameObra;
         const group = d3.select(this);
         
         group.selectAll("path.area, path.carga")
-          .style("fill", isTarget ? jsonColor : getAreaColor(d));
+          .style("fill", isTarget ? (isSameObra ? "red" : jsonColor) : getAreaColor(d));
         
         group.selectAll("path.line-top, path.carga")
           .attr("stroke", colorPedido(d)) // Siempre el dinámico
@@ -362,9 +369,18 @@ function setupInteraction(
       drawActiveArea({ overlay, layers, getCapas, activa: focus, scales, jsonColor, dynamicColor: colorPedido(focus) });
       band.show(focus, colorPedido(focus));
 
-      // Highlight en Gantt (highlight all voyages of the same parent)
-      d3.selectAll(".gantt-row").classed("inactive", d => (d.parentPedidoId || d.id) !== parentId)
-        .classed("active", d => (d.parentPedidoId || d.id) === parentId);
+      // Highlight en Gantt (highlight all voyages of the same parent or same obra)
+      d3.selectAll(".gantt-row")
+        .classed("inactive", d => {
+          const isSameParent = (d.parentPedidoId || d.id) === parentId;
+          const isSameObra = codObra && d.CodObra === codObra;
+          return !(isSameParent || isSameObra);
+        })
+        .classed("active", d => {
+          const isSameParent = (d.parentPedidoId || d.id) === parentId;
+          const isSameObra = codObra && d.CodObra === codObra;
+          return (isSameParent || isSameObra);
+        });
     }
 
     // 3. Tooltip logic (Render & Position)

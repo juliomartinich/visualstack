@@ -389,11 +389,18 @@ Promise.all([
       if (selectedId) {
         const matchingPedidos = pedidos.filter(p => String(p.CodObra) === selectedId).sort((a, b) => a.XG.offset - b.XG.offset);
         if (matchingPedidos.length > 0) {
-          const first = matchingPedidos[0];
-          window.selectPedido(first, false, true);
-          if (window.moveCursorTo) {
-            const midT = first.XG.offset + Math.floor(first.XG.finrel / 2);
-            window.moveCursorTo(midT);
+          const current = window.selectedPedido.current;
+          // Si ya tenemos un pedido seleccionado que pertenece a esta obra, no lo sobreescribimos.
+          // Esto evita que al pinchar un pedido, se salte automáticamente al primero de la obra.
+          const alreadySelected = current && String(current.CodObra) === selectedId;
+          
+          if (!alreadySelected) {
+            const first = matchingPedidos[0];
+            window.selectPedido(first, false, true);
+            if (window.moveCursorTo) {
+              const midT = first.XG.offset + Math.floor(first.XG.finrel / 2);
+              window.moveCursorTo(midT);
+            }
           }
         }
       } else {
