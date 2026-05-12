@@ -781,6 +781,20 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Listener para la tecla Escape para limpiar selección
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      window.selectPedido(null, false, true);
+      if (window.moveCursorTo) window.moveCursorTo(null);
+      
+      const codObraInput = document.getElementById("filter-codobra");
+      if (codObraInput) {
+        codObraInput.value = "";
+        codObraInput.dispatchEvent(new Event("input"));
+      }
+    }
+  });
+
   const opacitySlider = document.getElementById("range-opacity");
   const opacityVal = document.getElementById("val-opacity");
   if (opacitySlider) {

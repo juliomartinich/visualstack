@@ -298,7 +298,10 @@ function setupInteraction(
     const capasReversa = [...getCapas()].reverse();
     const activa = findActiveLayer(capasReversa, t, my, scales);
 
-    highlightPedido(activa, mx, my, t);
+    // Solo hacemos highlight por hover si no hay un pedido seleccionado por click
+    if (!selectedPedido.current) {
+      highlightPedido(activa, mx, my, t);
+    }
 
     return activa;
   }
@@ -415,10 +418,10 @@ function setupInteraction(
 
   // Interacción desde Gantt -> Stack
   window.highlightFromGantt = (activa) => {
-    // When highlighting from Gantt (hover on row), we don't necessarily update the cursor line position
-    // unless we want it to snap to the row's time. 
-    // But the user asked for the dashed line to continue in Gantt following the mouse.
-    highlightPedido(activa);
+    // Solo hacemos highlight por hover desde Gantt si no hay un pedido seleccionado por click
+    if (!selectedPedido.current) {
+      highlightPedido(activa);
+    }
   };
 
   const overlay = g.append("g")
