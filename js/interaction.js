@@ -1,8 +1,33 @@
 /* ========================= INTERACTION ========================= */
 
+function getCurrentGraphView() {
+  const vg1 = document.getElementById("filter-viewgraph")?.value;
+  const vg2 = document.getElementById("header-viewgraph")?.value;
+  let graphView = 'camiones';
+  if (vg2 || vg1) {
+    graphView = (vg2 || vg1).trim();
+  } else if (typeof getCookie === 'function') {
+    graphView = (getCookie("viewGraph") || 'camiones').trim();
+  }
+
+  const vgt1 = document.getElementById("filter-viewgantt")?.value;
+  const vgt2 = document.getElementById("header-viewgantt")?.value;
+  let ganttView = 'pedidos';
+  if (vgt2 || vgt1) {
+    ganttView = (vgt2 || vgt1).trim();
+  } else if (typeof getCookie === 'function') {
+    ganttView = (getCookie("viewGantt") || 'pedidos').trim();
+  }
+
+  if (graphView === 'camiones' && ganttView === 'despachos') {
+    return 'camionesd';
+  }
+  return graphView;
+}
+
 /* ==== DETECCIÓN DE PEDIDO EXTENDIDO ACTIVO =====*/
 function findActiveLayer(capasReversa, t, my, scales) {
-  const currentGraphView = document.getElementById("filter-viewgraph")?.value || 'camiones';
+  const currentGraphView = getCurrentGraphView();
 
   for (const capa of capasReversa) {
     // 1. Zona de Colas (Si el ratón está en la parte superior del gráfico)
@@ -122,7 +147,7 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, colorOrigen
   }
 
   /* ==== DESCARGAS – OVERLAY =====*/
-  const currentGraphView = document.getElementById("filter-viewgraph")?.value || 'camiones';
+  const currentGraphView = getCurrentGraphView();
   const descargas = ((currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'recursos') && activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
   const tris = overlay
     .selectAll("path.descarga-activa")
@@ -227,7 +252,7 @@ function setupInteraction(
   const labelDelay = g.append("text").attr("class", "cursor-label delay").attr("fill", "red").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
 
   function syncCursor(t) {
-    const currentGraphView = document.getElementById("filter-viewgraph")?.value || 'camiones';
+    const currentGraphView = getCurrentGraphView();
     if (t === null) {
       cursor.style("opacity", 0);
       circleCamiones.style("opacity", 0); labelCamiones.style("opacity", 0);
@@ -291,7 +316,7 @@ function setupInteraction(
 
   // Interacción desde Stack -> Gantt
   function handlePointer(ev) {
-    const currentGraphView = document.getElementById("filter-viewgraph")?.value || 'camiones';
+    const currentGraphView = getCurrentGraphView();
     const [mx, my] = d3.pointer(ev);
     const t = Math.round(scales.x.invert(mx));
 

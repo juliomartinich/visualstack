@@ -95,14 +95,13 @@ Promise.all([
         <div style="display: flex; align-items: center; gap: 4px;">
           <label for="header-filter-plantagrupo" style="font-weight: 600; color: #555;">Planta:</label>
           <select id="header-filter-plantagrupo" title="Cambiar Planta" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
-        </div>
+        </div>      
 
         <!-- Grupo Vista -->
         <div style="display: flex; align-items: center; gap: 4px;">
           <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
           <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
             <option value="camiones">Camiones</option>
-            <option value="camionesd">Camiones D</option>
             <option value="plantas">Plantas</option>
             <option value="colas">Colas</option>
             <option value="recursos">Recursos</option>
@@ -443,9 +442,10 @@ Promise.all([
       meta.DiaDespacho = formatFecha(selectedDate);
       meta.styles = getDateStyles(selectedDate);
 
-      const v1 = document.getElementById("filter-viewgraph")?.value;
-      const v2 = document.getElementById("header-viewgraph")?.value;
-      const currentGraphView = (v2 || v1 || getCookie("viewGraph") || 'camiones').trim();
+      const currentGraphView = getCurrentGraphView();
+      const vg1 = document.getElementById("filter-viewgantt")?.value;
+      const vg2 = document.getElementById("header-viewgantt")?.value;
+      const currentGanttView = (vg2 || vg1 || getCookie("viewGantt") || 'pedidos').trim();
       const cacheKey = `${selectedDate}_${filterKey}_${currentGraphView}`;
       let subsetPedidos = [];
       let currentMetrics, curHoraMax, curOcupacionMax, curOcupacionMaxCamiones = 0, curOcupacionMaxColas = 0, totalBocas = 0;
@@ -655,7 +655,6 @@ Promise.all([
         ? pedidos.filter(p => p.Confirmado === "SI" && p.MaxCamiones === 1)
         : pedidos.slice(); // Create a shallow copy before sorting
 
-      const currentGanttView = document.getElementById("filter-viewgantt")?.value || 'pedidos';
       if (currentGanttView === 'despachos') {
         filteredForGantt = decomposePedidosIntoVoyages(filteredForGantt, CFG.granularidadMin);
       }
@@ -684,7 +683,11 @@ Promise.all([
     const initialSaved = updateFiltersForDate(filterFechaPanel.value);
 
     // View Mode Selects
-    const savedGraphView = getCookie("viewGraph") || "camiones";
+    let savedGraphView = getCookie("viewGraph") || "camiones";
+    if (savedGraphView === "camionesd") {
+      savedGraphView = "camiones";
+      setCookie("viewGraph", "camiones");
+    }
     const savedGanttView = getCookie("viewGantt") || "pedidos";
     
     const selectViewGraph = document.getElementById("filter-viewgraph");
