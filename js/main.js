@@ -52,7 +52,9 @@ Promise.all([
         const MaxCamiones = XG.demanda.length
           ? Math.max(...XG.demanda)
           : 0;
-        return { ...pedidoNeg, XG, MaxCamiones };
+        const result = { ...pedidoNeg, XG, MaxCamiones };
+        result.despachos = calculateDespachosForPedido(result, CFG.granularidadMin);
+        return result;
       });
 
     // Helpers for dynamic styling based on date
@@ -100,6 +102,7 @@ Promise.all([
           <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
           <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
             <option value="camiones">Camiones</option>
+            <option value="camionesd">Camiones D</option>
             <option value="plantas">Plantas</option>
             <option value="colas">Colas</option>
             <option value="recursos">Recursos</option>
@@ -466,6 +469,10 @@ Promise.all([
           .filter(p => p["Fecha Pedido"] === selectedDate && permitidas.includes(p.Planta))
           .map(p => ({ ...p }));
         enrichPedidosForDate(subsetPedidos);
+
+        if (currentGraphView === 'camionesd') {
+          subsetPedidos = subsetPedidos.flatMap(p => p.despachos.map(d => ({ ...d, parentPedido: p })));
+        }
 
         // Calcular totalBocas para la simulación
         const plantsInView = new Set(subsetPedidos.map(p => p.Planta));

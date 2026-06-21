@@ -15,7 +15,7 @@ function findActiveLayer(capasReversa, t, my, scales) {
     }
 
     // 2. Zona de Camiones
-    if ((currentGraphView === 'camiones' || currentGraphView === 'recursos') && capa.STK?.segmentosXY) {
+    if ((currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'recursos') && capa.STK?.segmentosXY) {
       const y = (currentGraphView === 'recursos') ? scales.yCamiones : scales.y;
       const seg = capa.STK.segmentosXY.find(s => s.x === t);
       if (seg && seg.v > 0 && my >= y(seg.y1) - 2 && my <= y(seg.y0) + 2) {
@@ -123,7 +123,7 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, colorOrigen
 
   /* ==== DESCARGAS – OVERLAY =====*/
   const currentGraphView = document.getElementById("filter-viewgraph")?.value || 'camiones';
-  const descargas = ((currentGraphView === 'camiones' || currentGraphView === 'recursos') && activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
+  const descargas = ((currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'recursos') && activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
   const tris = overlay
     .selectAll("path.descarga-activa")
     .data(descargas, d => d.key);
@@ -134,7 +134,7 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, colorOrigen
     .attr("d", d3.symbol().type(d3.symbolTriangle).size(170))
     .merge(tris)
     .attr("transform", d => {
-      const y = (currentGraphView === 'recursos' || currentGraphView === 'camiones') && scales.yCamiones ? scales.yCamiones : scales.y;
+      const y = (currentGraphView === 'recursos' || currentGraphView === 'camiones' || currentGraphView === 'camionesd') && scales.yCamiones ? scales.yCamiones : scales.y;
       return `translate(${scales.x(d.x)}, ${y(d.y)}) rotate(180)`;
     })
     .attr("fill", getColorSort(activa))
@@ -152,10 +152,12 @@ function renderTooltip(panel, activa, t, granularidad) {
   const hh = Math.floor(totalMin / 60);
   const mm = totalMin % 60;
 
+  const ref = p.isDespacho ? p.parentPedido : p;
+
   panel.html(`
     <div class="tooltip-card">
       <div class="tooltip-header">
-        <div class="pedido">Pedido #${p.id}</div>
+        <div class="pedido">${p.isDespacho ? `Despacho ${p.despachoIndex} (Pedido #${ref.id})` : `Pedido #${p.id}`}</div>
         <div><b>${p.CantProgramada} m³</b></div>
         <div class="planta">Planta ${p.Planta}${window.plantasData && window.plantasData[p.Planta] ? ` - ${window.plantasData[p.Planta].nombre}` : ''}</div>
       </div>
@@ -172,9 +174,9 @@ function renderTooltip(panel, activa, t, granularidad) {
           <div class="cycle-time-value">${(p.TiempoCarga || 0) + (p.Frecuencia || 0) + 2 * (p.TiempoViaje || 0)} min</div>
         </div>
 
-        <span>Viajes / Camiones</span><b>${p.CantCargas} / ${p.MaxCamiones}</b>
+        <span>Viajes / Camiones</span><b>${p.isDespacho ? `1 (de ${ref.CantCargas})` : `${p.CantCargas} / ${p.MaxCamiones}`}</b>
         <span>Confirmado</span><b>${p.Confirmado}</b>
-        <span>Pedidos de la Obra</span><b>${p.CantPedidosObra}</b>
+        <span>Pedidos de la Obra</span><b>${ref.CantPedidosObra}</b>
       </div>
 
       <div class="tooltip-footer">
@@ -334,6 +336,11 @@ function setupInteraction(
           .attr("stroke-width", scales.yCamiones ? CFG.lineStrokeWidth : 1);
       });
 
+      // Restaurar opacidad y stroke de las envolventes de los pedidos padre
+      d3.selectAll("path.line-parent-envelope")
+        .style("opacity", 1.0)
+        .attr("stroke-width", CFG.lineStrokeWidth);
+
       overlay.selectAll("*").remove();
       if (band) band.clear();
       panel.html(`<div class="tooltip-card"></div>`);
@@ -370,6 +377,19 @@ function setupInteraction(
           .attr("stroke", getColorSort(d)) // Siempre el Color del Sort (dinámico)
           .attr("stroke-width", isTarget ? 2 : (scales.yCamiones ? CFG.lineStrokeWidth : 1));
       });
+
+      // Highlight de las envolventes de pedidos padre
+      d3.selectAll("path.line-parent-envelope")
+        .style("opacity", d => {
+          const isSameParent = d.id === parentId;
+          const isSameObra = !isHover && codObra && d.parentPedido.CodObra === codObra;
+          return (isSameParent || isSameObra) ? 1.0 : 0.3;
+        })
+        .attr("stroke-width", d => {
+          const isSameParent = d.id === parentId;
+          const isSameObra = !isHover && codObra && d.parentPedido.CodObra === codObra;
+          return (isSameParent || isSameObra) ? CFG.lineStrokeWidth * 1.5 : CFG.lineStrokeWidth;
+        });
 
       drawActiveArea({ overlay, layers, getCapas, activa: focus, scales, colorOrigen, colorSort: getColorSort(focus) });
       band.show(focus, getColorSort(focus));

@@ -190,21 +190,22 @@ function createArea(scales, yScale) {
 }
 
 function getColorSort(pedido) {
-  if (pedido.CantProgramada > 100) {
+  const ref = pedido.isDespacho ? pedido.parentPedido : pedido;
+  if (ref.CantProgramada > 100) {
     return COLORS.multi;
   }
-  if (pedido.ColorPedido == 11 || pedido.ColorPedido == 12) {
+  if (ref.ColorPedido == 11 || ref.ColorPedido == 12) {
     return COLORS.color11_12;
   }
-  if (pedido.Confirmado !== "SI") {
+  if (ref.Confirmado !== "SI") {
     return COLORS.unconfirmed;
   }
   // Si tiene más de 1 camión en simultáneo, siempre es AZUL
-  if (pedido.MaxCamiones > 1) {
+  if (ref.MaxCamiones > 1) {
     return COLORS.multi;
   }
   // Solo los de 1 camión pueden ser verdes
-  if (pedido.CantPedidosObra === 1) {
+  if (ref.CantPedidosObra === 1) {
     return COLORS.singleOrder;
   }
   return COLORS.mono;
@@ -212,17 +213,19 @@ function getColorSort(pedido) {
 
 /* ==== * Color de Área * ===================== */
 function getColorOrigen(pedido) {
-  if (!window.pedidoColorsMap) return getColorSort(pedido);
+  const ref = pedido.isDespacho ? pedido.parentPedido : pedido;
+  if (!window.pedidoColorsMap) return getColorSort(ref);
   // ColorPedido suele ser el ID en el mapa
-  const color = window.pedidoColorsMap.get(Number(pedido.ColorPedido));
-  return color || getColorSort(pedido);
+  const color = window.pedidoColorsMap.get(Number(ref.ColorPedido));
+  return color || getColorSort(ref);
 }
 
 function getAreaColor(pedido) {
-  if (pedido.CantProgramada > 100) return AREACOLORS.masivo;
-  if (pedido.ColorPedido == 11 || pedido.ColorPedido == 12) return AREACOLORS.color11_12;
-  if (pedido.Confirmado !== "SI") return AREACOLORS.unconfirmed;
-  if (pedido.MaxCamiones === 1 && pedido.CantPedidosObra === 1) return AREACOLORS.singleOrder;
+  const ref = pedido.isDespacho ? pedido.parentPedido : pedido;
+  if (ref.CantProgramada > 100) return AREACOLORS.masivo;
+  if (ref.ColorPedido == 11 || ref.ColorPedido == 12) return AREACOLORS.color11_12;
+  if (ref.Confirmado !== "SI") return AREACOLORS.unconfirmed;
+  if (ref.MaxCamiones === 1 && ref.CantPedidosObra === 1) return AREACOLORS.singleOrder;
   return "none";
 }
 
@@ -254,9 +257,40 @@ function lineTopClosed(segmentos, scales, yScale) {
 }
 
 /* ==== * Dibujo de pedidos (stack) * ===================== */
+function computeCombinedSegmentos(dispatches) {
+  const segmentsByX = {};
+  dispatches.forEach(d => {
+    const segments = d.STK?.segmentosXY || [];
+    segments.forEach(seg => {
+      if (seg.v <= 0) return;
+      if (!segmentsByX[seg.x]) {
+        segmentsByX[seg.x] = [];
+      }
+      segmentsByX[seg.x].push(seg);
+    });
+  });
+
+  const combined = [];
+  const xKeys = Object.keys(segmentsByX).map(Number).sort((a, b) => a - b);
+  xKeys.forEach(x => {
+    const list = segmentsByX[x];
+    const y0 = d3.min(list, s => s.y0);
+    const y1 = d3.max(list, s => s.y1);
+    combined.push({ x, y0, y1, v: y1 - y0 });
+  });
+
+  return combined;
+}
+
+/* ==== * Dibujo de pedidos (stack) * ===================== */
 function drawLayers(g, pedidos, area, scales, yScale) {
   const x = scales.x;
   const y = yScale || scales.y;
+
+  // Limpiar cualquier envolvente de pedidos anterior
+  g.selectAll("path.line-parent-envelope").remove();
+
+  const isDespachoMode = pedidos.some(d => d.isDespacho);
 
   const layers = g.selectAll("g.pedido")
     .data(pedidos)
@@ -275,13 +309,46 @@ function drawLayers(g, pedidos, area, scales, yScale) {
     .attr("d", d => lineTopClosed(d.STK?.segmentosXY || [], scales, y))
     .attr("fill", "none")
     .attr("stroke", d => getColorSort(d))
-    .attr("stroke-width", CFG.lineStrokeWidth)
-    .attr("stroke-opacity", CFG.lineOpacity);
+    .attr("stroke-width", isDespachoMode ? CFG.lineStrokeWidth * 0.4 : CFG.lineStrokeWidth)
+    .attr("stroke-opacity", isDespachoMode ? CFG.lineOpacity * 0.4 : CFG.lineOpacity);
+
+  // Si estamos en modo despachos, dibujar la envolvente para el pedido unificado
+  if (isDespachoMode) {
+    const groups = d3.group(pedidos, d => d.parentPedidoId);
+    const parentEnvelopesData = Array.from(groups.entries()).map(([parentId, dispatches]) => {
+      const parentPedido = dispatches[0].parentPedido;
+      const combinedSegmentos = computeCombinedSegmentos(dispatches);
+      return {
+        id: parentId,
+        parentPedido,
+        segmentosXY: combinedSegmentos
+      };
+    });
+
+    g.selectAll("path.line-parent-envelope")
+      .data(parentEnvelopesData, d => d.id)
+      .enter()
+      .append("path")
+      .attr("class", "line-parent-envelope")
+      .attr("d", d => lineTopClosed(d.segmentosXY, scales, y))
+      .attr("fill", "none")
+      .attr("stroke", d => getColorSort(d.parentPedido))
+      .attr("stroke-width", CFG.lineStrokeWidth)
+      .attr("stroke-opacity", CFG.lineOpacity)
+      .style("pointer-events", "none");
+  }
 
   window.updateVisualStyles = () => {
     d3.selectAll(".pedido path.line-top")
-      .attr("stroke-width", CFG.lineStrokeWidth)
-      .attr("stroke-opacity", CFG.lineOpacity);
+      .attr("stroke-width", isDespachoMode ? CFG.lineStrokeWidth * 0.4 : CFG.lineStrokeWidth)
+      .attr("stroke-opacity", isDespachoMode ? CFG.lineOpacity * 0.4 : CFG.lineOpacity);
+
+    if (isDespachoMode) {
+      d3.selectAll("path.line-parent-envelope")
+        .attr("stroke-width", CFG.lineStrokeWidth)
+        .attr("stroke-opacity", CFG.lineOpacity);
+    }
+
     d3.selectAll(".pedido path.descarga")
       .attr("fill-opacity", CFG.triangleOpacity);
   };
@@ -436,7 +503,10 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
         .attr("y", rowHeight - 2)
         .attr("fill", "#444")
         .attr("font-size", 11)
-        .text(d => `${d.id} - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`)
+        .text(d => d.isDespacho
+          ? `Despacho ${d.despachoIndex} (Ped #${d.parentPedido.id}) - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`
+          : `${d.id} - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`
+        )
         .each(function (d) {
           const self = d3.select(this);
           const labelWidth = this.getComputedTextLength();

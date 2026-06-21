@@ -19,6 +19,9 @@ function buildStack(pedidos) {
   */
 
   pedidos.sort((a, b) => {
+    const refA = a.parentPedido || a;
+    const refB = b.parentPedido || b;
+
     const getPriority = (p) => {
       // 1. Masivos (> 100 m3)
       if ((p.CantProgramada ?? 0) > 100) return 0;
@@ -35,12 +38,22 @@ function buildStack(pedidos) {
       return 3;                              // Verde Claro
     };
 
-    const prioA = getPriority(a);
-    const prioB = getPriority(b);
+    const prioA = getPriority(refA);
+    const prioB = getPriority(refB);
     if (prioA !== prioB) return prioA - prioB;
 
-    // A igual prioridad, por hora de inicio (offset)
-    return (a.XG?.offset ?? 0) - (b.XG?.offset ?? 0);
+    // A igual prioridad, por hora de inicio (offset) del pedido padre
+    const offsetA = refA.XG?.offset ?? 0;
+    const offsetB = refB.XG?.offset ?? 0;
+    if (offsetA !== offsetB) return offsetA - offsetB;
+
+    // Si pertenecen al mismo pedido, ordenar por su índice de despacho
+    if (refA.id === refB.id) {
+      return (a.despachoIndex ?? 0) - (b.despachoIndex ?? 0);
+    }
+
+    // Como último recurso, mantener consistencia usando el ID del pedido
+    return String(refA.id).localeCompare(String(refB.id));
   });
 
   const horaMax = Math.max(0, d3.max(pedidos, p => (p.XG?.offset ?? 0) + (p.XG?.finrel ?? 0)) || 0);

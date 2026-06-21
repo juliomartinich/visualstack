@@ -106,3 +106,68 @@ function slotToHHMM(slot, granularidadMin) {
 function formatM3(v) {
     return d3.format(",.0f")(v).replace(/,/g, ".");
 }
+
+function calculateDespachosForPedido(p, granularidad) {
+    const CantProgramada = Number(p.CantProgramada) || 0;
+    const TamanoCarga = Number(p.TamanoCarga) || 8;
+    const Frecuencia = Number(p.Frecuencia) || 0;
+    const TiempoCarga = Number(p.TiempoCarga) || 0;
+    const TiempoViaje = Number(p.TiempoViaje) || 0;
+    const TiempoCiclo = Number(p.TiempoCiclo) || 0;
+
+    const N = Math.ceil(CantProgramada / TamanoCarga);
+    const despachos = [];
+
+    const freqSlots = Math.ceil(Frecuencia / granularidad);
+    const cicloSlots = Math.ceil(TiempoCiclo / granularidad);
+
+    for (let i = 0; i < N; i++) {
+        const despachoIndex = i + 1;
+        const vol = (i === N - 1) ? (CantProgramada - i * TamanoCarga) : TamanoCarga;
+        
+        // El offset absoluto en slots se calcula sumando i * freqSlots al offset del pedido
+        const offset = p.XG.offset + i * freqSlots;
+        
+        // La descarga relativa del despacho:
+        // Si el pedido original tiene descargas definidas, las usamos de forma relativa.
+        // Si no (o si nos pasamos de rango), la estimamos por defecto usando TiempoCarga + TiempoViaje.
+        const descargaRel = (p.XG.descargarel && p.XG.descargarel[i] !== undefined)
+            ? (p.XG.descargarel[i] - i * freqSlots)
+            : Math.ceil((TiempoCarga + TiempoViaje) / granularidad);
+
+        const HoraAsignacionMin = p.HoraAsignacionMin + i * Frecuencia;
+        const HoraInicioMin = p.HoraInicioMin + i * Frecuencia;
+        const HoraFinalMin = HoraAsignacionMin + TiempoCiclo;
+
+        const d = {
+            ...p,
+            id: `${p.id}_d${despachoIndex}`,
+            parentPedidoId: p.id,
+            parentPedido: p, // Referencia al pedido original
+            despachoIndex,
+            isDespacho: true,
+            CantProgramada: vol,
+            CantCargas: 1,
+            MaxCamiones: 1,
+            HoraAsignacionMin,
+            HoraInicioMin,
+            HoraFinalMin,
+            HoraAsignacionHhmm: minToHHMM(HoraAsignacionMin),
+            HoraInicio: minToHHMM(HoraInicioMin),
+            HoraFinalHhmm: minToHHMM(HoraFinalMin),
+            Descargas: [{ idx: 0, Min: HoraInicioMin, Hhmm: minToHHMM(HoraInicioMin) }],
+            descargasBandXY: [{ key: 0, x: offset + descargaRel }],
+            XG: {
+                offset,
+                descargarel: [descargaRel],
+                finrel: cicloSlots,
+                ciclo: cicloSlots,
+                freq: freqSlots,
+                demanda: new Array(cicloSlots).fill(1)
+            }
+        };
+        despachos.push(d);
+    }
+    return despachos;
+}
+
