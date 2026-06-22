@@ -446,7 +446,7 @@ Promise.all([
       const vg1 = document.getElementById("filter-viewgantt")?.value;
       const vg2 = document.getElementById("header-viewgantt")?.value;
       const currentGanttView = (vg2 || vg1 || getCookie("viewGantt") || 'pedidos').trim();
-      const cacheKey = `${selectedDate}_${filterKey}_${currentGraphView}`;
+      const cacheKey = `${selectedDate}_${filterKey}_${currentGraphView}_${currentGanttView}`;
       let subsetPedidos = [];
       let currentMetrics, curHoraMax, curOcupacionMax, curOcupacionMaxCamiones = 0, curOcupacionMaxColas = 0, totalBocas = 0;
 
@@ -470,7 +470,7 @@ Promise.all([
           .map(p => ({ ...p }));
         enrichPedidosForDate(subsetPedidos);
 
-        if (currentGraphView === 'camionesd') {
+        if (currentGanttView === 'despachos') {
           subsetPedidos = subsetPedidos.flatMap(p => p.despachos.map(d => ({ ...d, parentPedido: p })));
         }
 

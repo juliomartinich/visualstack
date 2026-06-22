@@ -189,9 +189,10 @@ function renderTooltip(panel, activa, t, granularidad) {
 
       <div class="tooltip-grid">
         <div class="full-row product-row"><span>Producto</span><b>${p.Producto}</b></div>
-        <span>Hora requerida cliente</span><b>${p.HoraInicio}</b>
+        <span>Hora Asignación</span><b>${p.HoraAsignacionHhmm}</b>
         <span>Tiempo de Carga + Prep</span><b>${p.TiempoCarga} min</b>
         <span>Tiempo de Viaje</span><b>${p.TiempoViaje} min</b>
+        <span>Hora requerida cliente</span><b>${p.HoraInicio}</b>
         <span>Frecuencia / Estadía</span><b>${p.Frecuencia} min</b>
 
         <div class="cycle-time-box">
@@ -199,7 +200,7 @@ function renderTooltip(panel, activa, t, granularidad) {
           <div class="cycle-time-value">${(p.TiempoCarga || 0) + (p.Frecuencia || 0) + 2 * (p.TiempoViaje || 0)} min</div>
         </div>
 
-        <span>Viajes / Camiones</span><b>${p.isDespacho ? `${ref.CantCargas}` : `${p.CantCargas} / ${p.MaxCamiones}`}</b>
+        <span>Viajes / Camiones</span><b>${ref.CantCargas} / ${ref.MaxCamiones}</b>
         <span>Confirmado</span><b>${p.Confirmado}</b>
         <span>Pedidos de la Obra</span><b>${ref.CantPedidosObra}</b>
       </div>
