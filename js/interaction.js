@@ -182,7 +182,7 @@ function renderTooltip(panel, activa, t, granularidad) {
   panel.html(`
     <div class="tooltip-card">
       <div class="tooltip-header">
-        <div class="pedido">${p.isDespacho ? `Despacho ${p.despachoIndex} (Pedido #${ref.id})` : `Pedido #${p.id}`}</div>
+        <div class="pedido">${p.isDespacho ? `Despacho ${p.despachoIndex} de ${ref.CantCargas} (Pedido #${ref.id})` : `Pedido #${p.id}`}</div>
         <div><b>${p.CantProgramada} m³</b></div>
         <div class="planta">Planta ${p.Planta}${window.plantasData && window.plantasData[p.Planta] ? ` - ${window.plantasData[p.Planta].nombre}` : ''}</div>
       </div>
@@ -199,7 +199,7 @@ function renderTooltip(panel, activa, t, granularidad) {
           <div class="cycle-time-value">${(p.TiempoCarga || 0) + (p.Frecuencia || 0) + 2 * (p.TiempoViaje || 0)} min</div>
         </div>
 
-        <span>Viajes / Camiones</span><b>${p.isDespacho ? `1 (de ${ref.CantCargas})` : `${p.CantCargas} / ${p.MaxCamiones}`}</b>
+        <span>Viajes / Camiones</span><b>${p.isDespacho ? `${ref.CantCargas}` : `${p.CantCargas} / ${p.MaxCamiones}`}</b>
         <span>Confirmado</span><b>${p.Confirmado}</b>
         <span>Pedidos de la Obra</span><b>${ref.CantPedidosObra}</b>
       </div>
