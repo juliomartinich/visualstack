@@ -102,8 +102,8 @@ Promise.all([
           <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
           <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
             <option value="camiones">Camiones</option>
-            <option value="plantas">Plantas</option>
-            <option value="colas">Colas</option>
+            <option value="plantas">Asignaciones</option>
+            <option value="colas">Plantas</option>
             <option value="recursos">Recursos</option>
           </select>
         </div>
@@ -637,7 +637,7 @@ Promise.all([
           }
         });
         drawCapacityLine(gColas, capacity, scales, innerW, scales.yColas);
-        drawLeftAxis(gColas, scales.yColas, "Colas");
+        drawLeftAxis(gColas, scales.yColas, "Plantas");
         
         // 3. Dibujar Delay (Arriba)
         const gDelay = g.append("g").attr("class", "zona-delay");
