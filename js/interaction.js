@@ -30,9 +30,37 @@ function findActiveLayer(capasReversa, t, my, scales) {
   const currentGraphView = getCurrentGraphView();
 
   for (const capa of capasReversa) {
-    // 1. Zona de Colas (Si el ratón está en la parte superior del gráfico)
-    if ((currentGraphView === 'colas' || currentGraphView === 'recursos') && my < (scales.yCamiones ? (innerH * 0.45) : innerH) && capa.STK_COLAS?.bloquesXY) {
-      const y = (currentGraphView === 'recursos') ? scales.yColas : scales.y;
+    if (currentGraphView === 'recursos') {
+      // 1. Zona Camiones: innerH * 0.55 to innerH
+      if (my >= innerH * 0.55 && capa.STK?.segmentosXY) {
+        const y = scales.yCamiones;
+        const seg = capa.STK.segmentosXY.find(s => s.x === t);
+        if (seg && seg.v > 0 && my >= y(seg.y1) - 2 && my <= y(seg.y0) + 2) {
+          return capa;
+        }
+      }
+      // 2. Zona Asignaciones: innerH * 0.35 to innerH * 0.55
+      if (my >= innerH * 0.35 && my < innerH * 0.55 && capa.STK_PLANTAS?.bloquesXY) {
+        const y = scales.yAsignaciones;
+        const found = capa.STK_PLANTAS.bloquesXY.some(seg => 
+          seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
+        );
+        if (found) return capa;
+      }
+      // 3. Zona Plantas (Colas): innerH * 0.12 to innerH * 0.35
+      if (my >= innerH * 0.12 && my < innerH * 0.35 && capa.STK_COLAS?.bloquesXY) {
+        const y = scales.yColas;
+        const found = capa.STK_COLAS.bloquesXY.some(seg => 
+          seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
+        );
+        if (found) return capa;
+      }
+      continue;
+    }
+
+    // 1. Zona de Colas (Si el ratón está en la parte superior del gráfico en vista colas)
+    if (currentGraphView === 'colas' && capa.STK_COLAS?.bloquesXY) {
+      const y = scales.y;
       const found = capa.STK_COLAS.bloquesXY.some(seg => 
         seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
       );
@@ -40,8 +68,8 @@ function findActiveLayer(capasReversa, t, my, scales) {
     }
 
     // 2. Zona de Camiones
-    if ((currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'recursos') && capa.STK?.segmentosXY) {
-      const y = (currentGraphView === 'recursos') ? scales.yCamiones : scales.y;
+    if ((currentGraphView === 'camiones' || currentGraphView === 'camionesd') && capa.STK?.segmentosXY) {
+      const y = scales.y;
       const seg = capa.STK.segmentosXY.find(s => s.x === t);
       if (seg && seg.v > 0 && my >= y(seg.y1) - 2 && my <= y(seg.y0) + 2) {
         return capa;
@@ -80,24 +108,23 @@ function scrollToGanttRow(pedidoId) {
 
 /* ==== HIGHLIGHT DEL ÁREA ACTIVA ====*/
 function drawActiveArea({ overlay, layers, getCapas, activa, scales, colorOrigen, colorSort }) {
-  const capas = getCapas();
-  const idx = capas.indexOf(activa);
-  if (idx < 0) return;
+  const activeGroups = layers.filter(d => d === activa);
+  if (activeGroups.empty()) return;
 
-  const baseArea = d3
-    .select(layers.nodes()[idx])
-    .select("path.area");
+  let areaD = null;
+  activeGroups.selectAll("path.area").each(function() {
+    const dVal = d3.select(this).attr("d");
+    if (dVal) areaD = dVal;
+  });
 
-  const paletteColor = window.pedidoColorsMap?.get(activa.ColorPedido) || strokeColor;
-
-  if (!baseArea.empty()) {
+  if (areaD) {
     const main = overlay.selectAll("path.main").data([null]);
 
     main.enter()
       .append("path")
       .attr("class", "main")
       .merge(main)
-      .attr("d", baseArea.attr("d"))
+      .attr("d", areaD)
       .attr("fill", colorOrigen)
       .attr("fill-opacity", 0.45)
       .attr("stroke", colorSort)
@@ -107,7 +134,7 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, colorOrigen
     overlay.selectAll("path.main").remove();
   }
 
-  const baseRects = d3.select(layers.nodes()[idx]).selectAll("path.carga");
+  const baseRects = activeGroups.selectAll("path.carga");
   if (!baseRects.empty()) {
     const activeRects = overlay.selectAll("path.main-carga").data(baseRects.data());
     
@@ -126,7 +153,7 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, colorOrigen
     overlay.selectAll("path.main-carga").remove();
   }
 
-  const baseConexiones = d3.select(layers.nodes()[idx]).selectAll("path.conexion");
+  const baseConexiones = activeGroups.selectAll("path.conexion");
   if (!baseConexiones.empty()) {
     const activeConexiones = overlay.selectAll("path.main-conexion").data(baseConexiones.data());
     
@@ -249,6 +276,9 @@ function setupInteraction(
   const circleColas = g.append("circle").attr("class", "cursor-circle colas").attr("r", 4).attr("fill", "#555").style("opacity", 0).style("pointer-events", "none");
   const labelColas = g.append("text").attr("class", "cursor-label colas").attr("fill", "#555").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
 
+  const circleAsignaciones = g.append("circle").attr("class", "cursor-circle asignaciones").attr("r", 4).attr("fill", "#777").style("opacity", 0).style("pointer-events", "none");
+  const labelAsignaciones = g.append("text").attr("class", "cursor-label asignaciones").attr("fill", "#777").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
+
   const circleDelay = g.append("circle").attr("class", "cursor-circle delay").attr("r", 4).attr("fill", "red").style("opacity", 0).style("pointer-events", "none");
   const labelDelay = g.append("text").attr("class", "cursor-label delay").attr("fill", "red").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
 
@@ -258,6 +288,7 @@ function setupInteraction(
       cursor.style("opacity", 0);
       circleCamiones.style("opacity", 0); labelCamiones.style("opacity", 0);
       circleColas.style("opacity", 0); labelColas.style("opacity", 0);
+      circleAsignaciones.style("opacity", 0); labelAsignaciones.style("opacity", 0);
       circleDelay.style("opacity", 0); labelDelay.style("opacity", 0);
       d3.select("#gantt-chart svg line.cursor").style("opacity", 0);
       return;
@@ -290,7 +321,21 @@ function setupInteraction(
       circleColas.style("opacity", 0); labelColas.style("opacity", 0);
     }
 
-    // 3. Delay
+    // 3. Asignaciones (solo en recursos o plantas)
+    if (currentGraphView === 'recursos' || currentGraphView === 'plantas') {
+      const envAsignaciones = (currentGraphView === 'recursos' ? metrics.envolventeAsignaciones : metrics.envolvente)?.[t] || 0;
+      const yAs = (currentGraphView === 'recursos' ? scales.yAsignaciones : scales.y);
+      if (yAs && envAsignaciones > 0) {
+        circleAsignaciones.attr("cx", xPos).attr("cy", yAs(envAsignaciones)).style("opacity", 1);
+        labelAsignaciones.attr("x", xPos + 8).attr("y", yAs(envAsignaciones) - 5).text(envAsignaciones).style("opacity", 1);
+      } else {
+        circleAsignaciones.style("opacity", 0); labelAsignaciones.style("opacity", 0);
+      }
+    } else {
+      circleAsignaciones.style("opacity", 0); labelAsignaciones.style("opacity", 0);
+    }
+
+    // 4. Delay
     const delayVal = metrics.delay2ByTime ? metrics.delay2ByTime[t] : 0;
     if (scales.yDelay && delayVal > 0) {
       const delayMin = delayVal * granularidad;

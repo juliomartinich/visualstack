@@ -137,19 +137,22 @@ function drawDelayCurve(g, data, scales, granularidadMin) {
 
 
 
-function drawLeftAxis(g, scale, label) {
+function drawLeftAxis(g, scale, label, customRange) {
   if (!scale) return;
   const axis = d3.axisLeft(scale).ticks(5);
   const axisG = g.append("g")
     .attr("class", "y-axis-left")
     .call(axis);
 
+  const rangeToUse = customRange || scale.range();
+  const centerPos = -(rangeToUse[0] + rangeToUse[1]) / 2;
+
   axisG.append("text")
     .attr("transform", "rotate(-90)")
     .attr("y", -35) // Espacio para los números del eje
-    .attr("x", -scale.range()[1] - 12) // Ahora sí, hacia abajo (más negativo tras rotación -90)
+    .attr("x", centerPos)
     .attr("fill", "#333")
-    .attr("text-anchor", "end")
+    .attr("text-anchor", "middle")
     .attr("font-size", "11px")
     .attr("font-weight", "bold")
     .text(label);
@@ -377,8 +380,9 @@ function drawLayers(g, pedidos, area, scales, yScale) {
 }
 
 /* ==== * Dibujo de Cargas de Plantas (rectángulos) * ====*/
-function drawPlantLoads(g, pedidos, scales, granularidadMin) {
-  const { x, y } = scales;
+function drawPlantLoads(g, pedidos, scales, granularidadMin, yScale) {
+  const x = scales.x;
+  const y = yScale || scales.y;
 
   const layers = g.selectAll("g.pedido")
     .data(pedidos)

@@ -448,7 +448,7 @@ Promise.all([
       const currentGanttView = (vg2 || vg1 || getCookie("viewGantt") || 'pedidos').trim();
       const cacheKey = `${selectedDate}_${filterKey}_${currentGraphView}_${currentGanttView}`;
       let subsetPedidos = [];
-      let currentMetrics, curHoraMax, curOcupacionMax, curOcupacionMaxCamiones = 0, curOcupacionMaxColas = 0, totalBocas = 0;
+      let currentMetrics, curHoraMax, curOcupacionMax, curOcupacionMaxCamiones = 0, curOcupacionMaxColas = 0, curOcupacionMaxAsignaciones = 0, totalBocas = 0;
 
       if (window.appCache[cacheKey]) {
         const cached = window.appCache[cacheKey];
@@ -458,6 +458,7 @@ Promise.all([
         curOcupacionMax = cached.ocupacionMax;
         curOcupacionMaxCamiones = cached.ocupacionMaxCamiones || 0;
         curOcupacionMaxColas = cached.ocupacionMaxColas || 0;
+        curOcupacionMaxAsignaciones = cached.ocupacionMaxAsignaciones || 0;
       } else {
         let permitidas = [];
         if (filterKey.startsWith("Grupo:")) {
@@ -490,14 +491,21 @@ Promise.all([
         } else if (currentGraphView === 'colas') {
           stackResult = buildColasStack(subsetPedidos, totalBocas, CFG.granularidadMin);
         } else if (currentGraphView === 'recursos') {
-          // Ejecutar ambas simulaciones
+          // Ejecutar las tres simulaciones (Camiones, Colas, Asignaciones)
           const resCamiones = buildStack(subsetPedidos);
           const resColas = buildColasStack(subsetPedidos, totalBocas, CFG.granularidadMin);
+          const resAsignaciones = buildPlantLoadStack(subsetPedidos, CFG.granularidadMin);
           stackResult = {
-            metrics: { ...resColas.metrics, envolventeColas: resColas.metrics.envolvente, envolventeCamiones: resCamiones.metrics.envolvente },
-            horaMax: Math.max(resCamiones.horaMax, resColas.horaMax),
+            metrics: { 
+              ...resColas.metrics, 
+              envolventeColas: resColas.metrics.envolvente, 
+              envolventeCamiones: resCamiones.metrics.envolvente,
+              envolventeAsignaciones: resAsignaciones.metrics.envolvente
+            },
+            horaMax: Math.max(resCamiones.horaMax, resColas.horaMax, resAsignaciones.horaMax),
             ocupacionMaxCamiones: resCamiones.ocupacionMax,
             ocupacionMaxColas: resColas.ocupacionMax,
+            ocupacionMaxAsignaciones: resAsignaciones.ocupacionMax,
             ocupacionMax: 100 // dummy
           };
         } else {
@@ -508,13 +516,15 @@ Promise.all([
         curOcupacionMax = stackResult.ocupacionMax || 0;
         curOcupacionMaxCamiones = stackResult.ocupacionMaxCamiones || 0;
         curOcupacionMaxColas = stackResult.ocupacionMaxColas || 0;
+        curOcupacionMaxAsignaciones = stackResult.ocupacionMaxAsignaciones || 0;
         window.appCache[cacheKey] = { 
           pedidos: subsetPedidos, 
           metrics: currentMetrics, 
           horaMax: curHoraMax, 
           ocupacionMax: curOcupacionMax,
           ocupacionMaxCamiones: curOcupacionMaxCamiones,
-          ocupacionMaxColas: curOcupacionMaxColas
+          ocupacionMaxColas: curOcupacionMaxColas,
+          ocupacionMaxAsignaciones: curOcupacionMaxAsignaciones
         };
       }
 
@@ -533,28 +543,29 @@ Promise.all([
       const xMax = CFG.horaFin * (60 / CFG.granularidadMin);
       let yMax;
       if (currentGraphView === 'recursos') {
-        // En modo recursos creamos 3 escalas específicas
+        // En modo recursos creamos 4 escalas específicas (Camiones, Asignaciones, Colas, Delay)
         scales = createScales({ xMin, xMax, yMax: 1, innerW, innerH }); // x global
         
-        // Zona Inferior: Camiones (60% del gráfico: 0.40 a 1.0 de innerH)
+        // Zona Inferior: Camiones (de 0.55 a 1.0 de innerH)
         scales.yCamiones = d3.scaleLinear()
           .domain([0, Math.ceil(curOcupacionMaxCamiones / CFG.yStep) * CFG.yStep])
-          .range([innerH, innerH * 0.40]);
+          .range([innerH, innerH * 0.55]);
           
-        // Zona Media: Colas (del 60% al 90% del gráfico: 0.10 a 0.40 de innerH)
+        // Zona Media-Baja: Asignaciones (de 0.35 a 0.55 de innerH)
+        scales.yAsignaciones = d3.scaleLinear()
+          .domain([0, Math.max(totalBocas + 2, Math.ceil(curOcupacionMaxAsignaciones / 2) * 2 + 2)])
+          .range([innerH * 0.55, innerH * 0.35]);
+
+        // Zona Media-Alta: Plantas (de 0.12 a 0.35 de innerH)
         scales.yColas = d3.scaleLinear()
           .domain([0, Math.max(totalBocas + 2, Math.ceil(curOcupacionMaxColas / 2) * 2 + 2)])
-          .range([innerH * 0.40, innerH * 0.10]);
+          .range([innerH * 0.35, innerH * 0.12]);
           
-        // Determinar posición de la línea de capacidad para que el Delay flote sobre ella
-        const yCapacityPos = scales.yColas(totalBocas);
-        const delayStart = yCapacityPos - 15; // 15px por encima de la línea de capacidad
-
-        // Zona Superior: Delay (flotando desde delayStart hasta el 95% del gráfico)
+        // Zona Superior: Delay (de 0.02 a 0.12 de innerH)
         const maxDelayMin = Math.max(d3.max(currentMetrics.delay2ByTime) || 0, 10 / CFG.granularidadMin) * CFG.granularidadMin;
         scales.yDelay = d3.scaleLinear()
           .domain([0, maxDelayMin])
-          .range([delayStart, innerH * 0.05]);
+          .range([innerH * 0.12 - 5, innerH * 0.02]);
 
         yMax = 0; // para evitar ejes extra
       } else if (currentGraphView === "plantas" || currentGraphView === "colas") {
@@ -616,19 +627,13 @@ Promise.all([
           drawRightAxis(g, scales.yDelay, innerW, "Delay Max [min]", "red");
         }
       } else if (currentGraphView === 'recursos') {
-        // 1. Dibujar Camiones (Abajo)
+        // 1. Dibujar Camiones (Abajo: 55% - 100% of innerH)
         const gCamiones = g.append("g").attr("class", "zona-camiones");
         const areaCamiones = createArea(scales, scales.yCamiones);
         drawLayers(gCamiones, pedidos, areaCamiones, scales, scales.yCamiones);
         drawLeftAxis(gCamiones, scales.yCamiones, "Camiones");
-        
-        // 2. Dibujar Colas (Medio)
-        const gColas = g.append("g").attr("class", "zona-colas");
-        drawColasLoads(gColas, pedidos, scales, CFG.granularidadMin, scales.yColas);
-        
-        // Línea en el 0 de colas
-        drawCapacityLine(gColas, 0, scales, innerW, scales.yColas);
 
+        // Obtenemos capacidad para las líneas de capacidad
         const uniquePlantas = new Set(pedidos.map(p => p.Planta));
         let capacity = 0;
         uniquePlantas.forEach(pCode => {
@@ -636,13 +641,27 @@ Promise.all([
             capacity += window.plantasData[pCode].cant_bocas || 0;
           }
         });
+
+        // 2. Dibujar Asignaciones (Medio-Bajo: 35% - 55% of innerH)
+        const gAsignaciones = g.append("g").attr("class", "zona-asignaciones");
+        drawPlantLoads(gAsignaciones, pedidos, scales, CFG.granularidadMin, scales.yAsignaciones);
+        drawCapacityLine(gAsignaciones, 0, scales, innerW, scales.yAsignaciones);
+        drawCapacityLine(gAsignaciones, capacity, scales, innerW, scales.yAsignaciones);
+        drawLeftAxis(gAsignaciones, scales.yAsignaciones, "Asignaciones");
+
+        // 3. Dibujar Plantas (Medio-Alta: 12% - 35% of innerH)
+        const gColas = g.append("g").attr("class", "zona-colas");
+        drawColasLoads(gColas, pedidos, scales, CFG.granularidadMin, scales.yColas);
+        drawCapacityLine(gColas, 0, scales, innerW, scales.yColas);
         drawCapacityLine(gColas, capacity, scales, innerW, scales.yColas);
-        drawLeftAxis(gColas, scales.yColas, "Plantas");
-        
-        // 3. Dibujar Delay (Arriba)
+
+        // 4. Dibujar Delay (Arriba: 2% - 12% of innerH)
         const gDelay = g.append("g").attr("class", "zona-delay");
-        drawDelayCurve(gDelay, currentMetrics.delay2ByTime, scales, CFG.granularidadMin); 
+        drawDelayCurve(gDelay, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
         drawRightAxis(gDelay, scales.yDelay, innerW, "Delay Max [min]", "red");
+
+        // Eje izquierdo de Plantas centrado ocupando el espacio de Plantas y Delay Max
+        drawLeftAxis(gColas, scales.yColas, "Plantas", [scales.yColas.range()[0], scales.yDelay.range()[1]]);
 
         // Capturar todas las capas para el highlight de interacción
         layers = g.selectAll(".pedido"); 
@@ -687,6 +706,9 @@ Promise.all([
     if (savedGraphView === "camionesd") {
       savedGraphView = "camiones";
       setCookie("viewGraph", "camiones");
+    } else if (savedGraphView === "recursos2") {
+      savedGraphView = "recursos";
+      setCookie("viewGraph", "recursos");
     }
     const savedGanttView = getCookie("viewGantt") || "pedidos";
     
@@ -741,6 +763,10 @@ function drawTopOverlay(svg, g, meta, scales, metrics, width, filterKey = "") {
 
   txt.append("tspan").attr("font-size", 12).attr("fill", "#333").attr("font-weight", 600).text(`Volumen: ${formatM3(metrics.volumenT)} m3`);
   txt.append("tspan").attr("font-size", 10).attr("fill", "#000").text(`, Confirmado: ${formatM3(metrics.volConfirmado)}`);
+
+  if (typeof getCurrentGraphView === "function" && getCurrentGraphView() === "recursos") {
+    return;
+  }
 
   const markerG = g.append("g").attr("class", "markers-top").style("pointer-events", "none");
   const items = [{ key: "maxGlobal", color: "#d62728" }, { key: "maxAM", color: "#1f77b4" }, { key: "min12_14", color: "#2ca02c" }, { key: "maxPM14", color: "#1f77b4" }];
