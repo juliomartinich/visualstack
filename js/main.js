@@ -104,7 +104,6 @@ Promise.all([
             <option value="camiones">Camiones</option>
             <option value="plantas">Asignaciones</option>
             <option value="colas">Plantas</option>
-            <option value="colas_xp">Plantas xP</option>
             <option value="recursos">Recursos</option>
           </select>
         </div>
@@ -532,9 +531,6 @@ Promise.all([
             stackResult.isSplit = false;
           }
         } else if (currentGraphView === 'colas') {
-          stackResult = buildColasStack(subsetPedidos, totalBocas, CFG.granularidadMin);
-          stackResult.isSplit = false;
-        } else if (currentGraphView === 'colas_xp') {
           if (filterKey.startsWith("Grupo:")) {
             const groupName = filterKey.split(":")[1];
             const permitidasGrupo = grupos[groupName] || [];
@@ -684,8 +680,8 @@ Promise.all([
         });
         
         yMax = 0; // evitar eje global
-      } else if (currentGraphView === "colas_xp" && stackResult.isSplit) {
-        // En modo colas_xp dividido creamos escalas y de colas y de delay por cada planta
+      } else if (currentGraphView === "colas" && stackResult.isSplit) {
+        // En modo colas dividido creamos escalas y de colas y de delay por cada planta
         scales = createScales({ xMin, xMax, yMax: 1, innerW, innerH }); // x global
         scales.yColasPlants = {};
         scales.yDelayPlants = {};
@@ -729,7 +725,7 @@ Promise.all([
         });
 
         yMax = 0; // evitar eje global
-      } else if (currentGraphView === "plantas" || currentGraphView === "colas" || currentGraphView === "colas_xp") {
+      } else if (currentGraphView === "plantas" || currentGraphView === "colas") {
         const uniquePlantas = new Set(pedidos.map(p => p.Planta));
         let capacity = 0;
         uniquePlantas.forEach(pCode => {
@@ -746,7 +742,7 @@ Promise.all([
       }
 
       drawGrids(g, scales, curHoraMax, CFG.granularidadMin, innerW, innerH, yMax);
-      drawAxes(g, scales, curHoraMax, CFG.granularidadMin, innerH, currentGraphView === 'recursos' || (currentGraphView === 'plantas' && stackResult.isSplit) || (currentGraphView === 'colas_xp' && stackResult.isSplit));
+      drawAxes(g, scales, curHoraMax, CFG.granularidadMin, innerH, currentGraphView === 'recursos' || (currentGraphView === 'plantas' && stackResult.isSplit) || (currentGraphView === 'colas' && stackResult.isSplit));
       drawTopOverlay(svg, g, meta, scales, currentMetrics, width, filterKey);
 
       band = drawBand(g, scales, innerH, CFG.granularidadMin);
@@ -780,28 +776,6 @@ Promise.all([
           drawCapacityLine(g, capacity, scales, innerW);
         }
       } else if (currentGraphView === 'colas') {
-        layers = drawColasLoads(g, pedidos, scales, CFG.granularidadMin);
-        
-        const uniquePlantas = new Set(pedidos.map(p => p.Planta));
-        let capacity = 0;
-        uniquePlantas.forEach(pCode => {
-          if (window.plantasData && window.plantasData[pCode]) {
-            capacity += window.plantasData[pCode].cant_bocas || 0;
-          }
-        });
-        drawCapacityLine(g, capacity, scales, innerW);
-
-        // Nueva curva Delay 2 (Roja)
-        if (currentMetrics.delay2ByTime) {
-          const maxDelayMin = Math.max(d3.max(currentMetrics.delay2ByTime) || 0, 10 / CFG.granularidadMin) * CFG.granularidadMin;
-          scales.yDelay = d3.scaleLinear()
-            .domain([0, maxDelayMin])
-            .range([innerH * 0.75, innerH * 0.05]); 
-          
-          drawDelayCurve(g, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
-          drawRightAxis(g, scales.yDelay, innerW, "Delay Max [min]", "red");
-        }
-      } else if (currentGraphView === 'colas_xp') {
         if (stackResult.isSplit) {
           stackResult.plants.forEach(pCode => {
             const plantPedidos = pedidos.filter(p => p.Planta === pCode);

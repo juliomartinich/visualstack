@@ -58,8 +58,8 @@ function findActiveLayer(capasReversa, t, my, scales) {
       continue;
     }
 
-    // 1. Zona de Colas (Si el ratón está en la parte superior del gráfico en vista colas o colas_xp)
-    if ((currentGraphView === 'colas' || currentGraphView === 'colas_xp') && capa.STK_COLAS?.bloquesXY) {
+    // 1. Zona de Colas (Si el ratón está en la parte superior del gráfico en vista colas)
+    if (currentGraphView === 'colas' && capa.STK_COLAS?.bloquesXY) {
       if (scales.yColasPlants) {
         const y = scales.yColasPlants[capa.Planta];
         if (y) {
@@ -329,8 +329,8 @@ function setupInteraction(
       circleCamiones.style("opacity", 0); labelCamiones.style("opacity", 0);
     }
 
-    // 2. Colas (solo en recursos, colas, o colas_xp sin dividir)
-    if (currentGraphView === 'recursos' || currentGraphView === 'colas' || (currentGraphView === 'colas_xp' && !scales.yColasPlants)) {
+    // 2. Colas (solo en recursos o colas sin dividir)
+    if (currentGraphView === 'recursos' || (currentGraphView === 'colas' && !scales.yColasPlants)) {
       const envColas = (currentGraphView === 'recursos' ? metrics.envolventeColas : metrics.envolvente)?.[t] || 0;
       const yCol = (currentGraphView === 'recursos' ? scales.yColas : scales.y);
       if (yCol && envColas > 0) {
@@ -401,9 +401,9 @@ function setupInteraction(
       });
     }
 
-    // Manejo dinámico de círculos e indicadores para plantas en la vista split Plantas xP (Colas y Delay)
+    // Manejo dinámico de círculos e indicadores para plantas en la vista split Plantas (Colas y Delay)
     let splitColasPlants = [];
-    if (currentGraphView === 'colas_xp' && scales.yColasPlants) {
+    if (currentGraphView === 'colas' && scales.yColasPlants) {
       splitColasPlants = Object.keys(scales.yColasPlants);
     }
 
@@ -431,7 +431,7 @@ function setupInteraction(
       .style("pointer-events", "none");
     const activeColasLabels = colasLabels.merge(newColasLabels);
 
-    if (currentGraphView === 'colas_xp' && scales.yColasPlants) {
+    if (currentGraphView === 'colas' && scales.yColasPlants) {
       activeColasCircles.each(function(pCode) {
         const yVal = metrics.plantStacks?.[pCode]?.metrics?.envolvente?.[t] || 0;
         const y = scales.yColasPlants[pCode];
@@ -484,7 +484,7 @@ function setupInteraction(
       .style("pointer-events", "none");
     const activeDelayLabels = delayLabels.merge(newDelayLabels);
 
-    if (currentGraphView === 'colas_xp' && scales.yColasPlants) {
+    if (currentGraphView === 'colas' && scales.yColasPlants) {
       activeDelayCircles.each(function(pCode) {
         const delayVal = metrics.plantStacks?.[pCode]?.metrics?.delay2ByTime?.[t] || 0;
         const yDelay = scales.yDelayPlants?.[pCode];
@@ -531,7 +531,7 @@ function setupInteraction(
 
     // 4. Delay (global)
     const delayVal = metrics.delay2ByTime ? metrics.delay2ByTime[t] : 0;
-    if (scales.yDelay && delayVal > 0 && !(currentGraphView === 'colas_xp' && scales.yColasPlants)) {
+    if (scales.yDelay && delayVal > 0 && !(currentGraphView === 'colas' && scales.yColasPlants)) {
       const delayMin = delayVal * granularidad;
       circleDelay.attr("cx", xPos).attr("cy", scales.yDelay(delayMin)).style("opacity", 1);
       labelDelay.attr("x", xPos + 8).attr("y", scales.yDelay(delayMin) - 5).text(delayMin).style("opacity", 1);
