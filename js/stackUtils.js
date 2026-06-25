@@ -279,11 +279,16 @@ function buildPlantLoadStack(pedidos, granularidadMin) {
     return (a.XG?.offset ?? 0) - (b.XG?.offset ?? 0);
   });
 
-  const horaMax = Math.max(0, d3.max(pedidos, p => {
+  const xMin = CFG.horaInicio * (60 / granularidadMin);
+  const xMax = CFG.horaFin * (60 / granularidadMin);
+
+  const rawHoraMax = d3.max(pedidos, p => {
     const numViajes = p.CantCargas || 1;
     const freqSlots = Math.floor((p.Frecuencia || 0) / granularidadMin);
     return (p.XG?.offset ?? 0) + (numViajes - 1) * freqSlots + 1;
-  }) || 0);
+  }) || 0;
+
+  const horaMax = Math.max(rawHoraMax, xMax);
 
   const ocupacionCargas = Array(horaMax + 1).fill(0);
 
@@ -303,7 +308,7 @@ function buildPlantLoadStack(pedidos, granularidadMin) {
 
     for (let i = 0; i < numViajes; i++) {
       const x = pedido.XG.offset + i * freqSlots;
-      if (x < 0 || x > horaMax) continue;
+      if (x < xMin || x > xMax) continue;
 
       const y0 = ocupacionCargas[x] || 0;
       const y1 = y0 + 1; // Altura de 1 carga

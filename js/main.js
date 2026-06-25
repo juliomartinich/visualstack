@@ -103,6 +103,7 @@ Promise.all([
           <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
             <option value="camiones">Camiones</option>
             <option value="plantas">Asignaciones</option>
+            <option value="plantas_xp">Asignaciones xP</option>
             <option value="colas">Plantas</option>
             <option value="recursos">Recursos</option>
           </select>
@@ -448,6 +449,7 @@ Promise.all([
       const currentGanttView = (vg2 || vg1 || getCookie("viewGantt") || 'pedidos').trim();
       const cacheKey = `${selectedDate}_${filterKey}_${currentGraphView}_${currentGanttView}`;
       let subsetPedidos = [];
+      let stackResult;
       let currentMetrics, curHoraMax, curOcupacionMax, curOcupacionMaxCamiones = 0, curOcupacionMaxColas = 0, curOcupacionMaxAsignaciones = 0, totalBocas = 0;
 
       if (window.appCache[cacheKey]) {
@@ -459,6 +461,14 @@ Promise.all([
         curOcupacionMaxCamiones = cached.ocupacionMaxCamiones || 0;
         curOcupacionMaxColas = cached.ocupacionMaxColas || 0;
         curOcupacionMaxAsignaciones = cached.ocupacionMaxAsignaciones || 0;
+        stackResult = {
+          isSplit: cached.isSplit,
+          plants: cached.plants,
+          plantStacks: cached.plantStacks,
+          metrics: currentMetrics,
+          horaMax: curHoraMax,
+          ocupacionMax: curOcupacionMax
+        };
       } else {
         let permitidas = [];
         if (filterKey.startsWith("Grupo:")) {
@@ -485,17 +495,55 @@ Promise.all([
         });
         if (totalBocas <= 0) totalBocas = 1;
 
-        let stackResult;
         if (currentGraphView === 'plantas') {
           stackResult = buildPlantLoadStack(subsetPedidos, CFG.granularidadMin);
+          stackResult.isSplit = false;
+        } else if (currentGraphView === 'plantas_xp') {
+          if (filterKey.startsWith("Grupo:")) {
+            const groupName = filterKey.split(":")[1];
+            const permitidasGrupo = grupos[groupName] || [];
+            const activePlants = permitidasGrupo.filter(pCode =>
+              subsetPedidos.some(p => p.Planta === pCode)
+            ).sort(); // ordenadas alfabéticamente
+            
+            if (activePlants.length > 1) {
+              const plantStacks = {};
+              activePlants.forEach(pCode => {
+                const plantPedidos = subsetPedidos.filter(p => p.Planta === pCode);
+                plantStacks[pCode] = buildPlantLoadStack(plantPedidos, CFG.granularidadMin);
+              });
+              
+              stackResult = {
+                isSplit: true,
+                plants: activePlants,
+                plantStacks: plantStacks,
+                metrics: {
+                  volumenT: d3.sum(activePlants, p => plantStacks[p].metrics.volumenT),
+                  volConfirmado: d3.sum(activePlants, p => plantStacks[p].metrics.volConfirmado),
+                  volNoConfirmado: d3.sum(activePlants, p => plantStacks[p].metrics.volNoConfirmado),
+                  envolvente: [], // dummy
+                  plantStacks: plantStacks
+                },
+                horaMax: d3.max(activePlants, p => plantStacks[p].horaMax) || 0,
+                ocupacionMax: d3.max(activePlants, p => plantStacks[p].ocupacionMax) || 0
+              };
+            }
+          }
+          
+          if (!stackResult) {
+            stackResult = buildPlantLoadStack(subsetPedidos, CFG.granularidadMin);
+            stackResult.isSplit = false;
+          }
         } else if (currentGraphView === 'colas') {
           stackResult = buildColasStack(subsetPedidos, totalBocas, CFG.granularidadMin);
+          stackResult.isSplit = false;
         } else if (currentGraphView === 'recursos') {
           // Ejecutar las tres simulaciones (Camiones, Colas, Asignaciones)
           const resCamiones = buildStack(subsetPedidos);
           const resColas = buildColasStack(subsetPedidos, totalBocas, CFG.granularidadMin);
           const resAsignaciones = buildPlantLoadStack(subsetPedidos, CFG.granularidadMin);
           stackResult = {
+            isSplit: false,
             metrics: { 
               ...resColas.metrics, 
               envolventeColas: resColas.metrics.envolvente, 
@@ -510,6 +558,7 @@ Promise.all([
           };
         } else {
           stackResult = buildStack(subsetPedidos);
+          stackResult.isSplit = false;
         }
         currentMetrics = stackResult.metrics;
         curHoraMax = stackResult.horaMax || 0;
@@ -524,7 +573,10 @@ Promise.all([
           ocupacionMax: curOcupacionMax,
           ocupacionMaxCamiones: curOcupacionMaxCamiones,
           ocupacionMaxColas: curOcupacionMaxColas,
-          ocupacionMaxAsignaciones: curOcupacionMaxAsignaciones
+          ocupacionMaxAsignaciones: curOcupacionMaxAsignaciones,
+          isSplit: stackResult.isSplit,
+          plants: stackResult.plants,
+          plantStacks: stackResult.plantStacks
         };
       }
 
@@ -568,7 +620,37 @@ Promise.all([
           .range([innerH * 0.12 - 5, innerH * 0.02]);
 
         yMax = 0; // para evitar ejes extra
-      } else if (currentGraphView === "plantas" || currentGraphView === "colas") {
+      } else if (currentGraphView === "plantas_xp" && stackResult.isSplit) {
+        // En modo plantas_xp dividido creamos una escala y por cada planta en el grupo
+        scales = createScales({ xMin, xMax, yMax: 1, innerW, innerH }); // x global
+        scales.yPlants = {};
+
+        const N = stackResult.plants.length;
+        const gap = 15;
+        const availableHeightForPlots = innerH - (N - 1) * gap;
+        const plotH = availableHeightForPlots / N;
+
+        // Calcular el máximo de escala compartido para todas las plantas
+        let maxScaleVal = 0;
+        stackResult.plants.forEach(pCode => {
+          const capacity = window.plantasData[pCode]?.cant_bocas || 0;
+          const curOcupacionMax_pCode = stackResult.plantStacks[pCode].ocupacionMax;
+          let yMax_p = Math.max(capacity + 2, Math.ceil(curOcupacionMax_pCode / 2) * 2 + 2);
+          if (yMax_p < 5) yMax_p = 5;
+          if (yMax_p > maxScaleVal) maxScaleVal = yMax_p;
+        });
+
+        stackResult.plants.forEach((pCode, i) => {
+          const yTop = i * (plotH + gap);
+          const yBottom = yTop + plotH;
+
+          scales.yPlants[pCode] = d3.scaleLinear()
+            .domain([0, maxScaleVal])
+            .range([yBottom, yTop]);
+        });
+        
+        yMax = 0; // evitar eje global
+      } else if (currentGraphView === "plantas" || currentGraphView === "colas" || currentGraphView === "plantas_xp") {
         const uniquePlantas = new Set(pedidos.map(p => p.Planta));
         let capacity = 0;
         uniquePlantas.forEach(pCode => {
@@ -585,7 +667,7 @@ Promise.all([
       }
 
       drawGrids(g, scales, curHoraMax, CFG.granularidadMin, innerW, innerH, yMax);
-      drawAxes(g, scales, curHoraMax, CFG.granularidadMin, innerH, currentGraphView === 'recursos');
+      drawAxes(g, scales, curHoraMax, CFG.granularidadMin, innerH, currentGraphView === 'recursos' || (currentGraphView === 'plantas_xp' && stackResult.isSplit));
       drawTopOverlay(svg, g, meta, scales, currentMetrics, width, filterKey);
 
       band = drawBand(g, scales, innerH, CFG.granularidadMin);
@@ -604,6 +686,31 @@ Promise.all([
           }
         });
         drawCapacityLine(g, capacity, scales, innerW);
+      } else if (currentGraphView === 'plantas_xp') {
+        if (stackResult.isSplit) {
+          stackResult.plants.forEach(pCode => {
+            const plantPedidos = pedidos.filter(p => p.Planta === pCode);
+            const gPlant = g.append("g").attr("class", `zona-planta-${pCode}`);
+            drawPlantLoads(gPlant, plantPedidos, scales, CFG.granularidadMin, scales.yPlants[pCode]);
+            
+            const capacity = window.plantasData[pCode]?.cant_bocas || 0;
+            drawCapacityLine(gPlant, 0, scales, innerW, scales.yPlants[pCode]);
+            drawCapacityLine(gPlant, capacity, scales, innerW, scales.yPlants[pCode]);
+            drawLeftAxis(gPlant, scales.yPlants[pCode], pCode);
+          });
+          layers = g.selectAll(".pedido");
+        } else {
+          layers = drawPlantLoads(g, pedidos, scales, CFG.granularidadMin);
+          
+          const uniquePlantas = new Set(pedidos.map(p => p.Planta));
+          let capacity = 0;
+          uniquePlantas.forEach(pCode => {
+            if (window.plantasData && window.plantasData[pCode]) {
+              capacity += window.plantasData[pCode].cant_bocas || 0;
+            }
+          });
+          drawCapacityLine(g, capacity, scales, innerW);
+        }
       } else if (currentGraphView === 'colas') {
         layers = drawColasLoads(g, pedidos, scales, CFG.granularidadMin);
         

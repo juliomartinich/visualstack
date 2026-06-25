@@ -76,8 +76,16 @@ function findActiveLayer(capasReversa, t, my, scales) {
       }
     }
     
-    // 3. Caso Plantas
-    if (currentGraphView === 'plantas' && capa.STK_PLANTAS?.bloquesXY) {
+    // 3. Caso Plantas / Asignaciones xP
+    if (currentGraphView === 'plantas_xp' && scales.yPlants && capa.STK_PLANTAS?.bloquesXY) {
+      const y = scales.yPlants[capa.Planta];
+      if (y) {
+        const found = capa.STK_PLANTAS.bloquesXY.some(seg => 
+          seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
+        );
+        if (found) return capa;
+      }
+    } else if ((currentGraphView === 'plantas' || (currentGraphView === 'plantas_xp' && !scales.yPlants)) && capa.STK_PLANTAS?.bloquesXY) {
       const found = capa.STK_PLANTAS.bloquesXY.some(seg => 
         seg.x === t && seg.v > 0 && my >= scales.y(seg.y1) - 2 && my <= scales.y(seg.y0) + 2
       );
@@ -291,6 +299,8 @@ function setupInteraction(
       circleAsignaciones.style("opacity", 0); labelAsignaciones.style("opacity", 0);
       circleDelay.style("opacity", 0); labelDelay.style("opacity", 0);
       d3.select("#gantt-chart svg line.cursor").style("opacity", 0);
+      g.selectAll("circle.cursor-circle-plant").style("opacity", 0);
+      g.selectAll("text.cursor-label-plant").style("opacity", 0);
       return;
     }
 
@@ -321,8 +331,66 @@ function setupInteraction(
       circleColas.style("opacity", 0); labelColas.style("opacity", 0);
     }
 
-    // 3. Asignaciones (solo en recursos o plantas)
-    if (currentGraphView === 'recursos' || currentGraphView === 'plantas') {
+    // Manejo dinámico de círculos e indicadores para plantas en la vista split Asignaciones xP
+    let splitPlants = [];
+    if (currentGraphView === 'plantas_xp' && scales.yPlants) {
+      splitPlants = Object.keys(scales.yPlants);
+    }
+
+    const circles = g.selectAll("circle.cursor-circle-plant")
+      .data(splitPlants);
+    circles.exit().remove();
+    const newCircles = circles.enter()
+      .append("circle")
+      .attr("class", "cursor-circle-plant")
+      .attr("r", 4)
+      .attr("fill", "#777")
+      .style("pointer-events", "none");
+    const activeCircles = circles.merge(newCircles);
+
+    const labels = g.selectAll("text.cursor-label-plant")
+      .data(splitPlants);
+    labels.exit().remove();
+    const newLabels = labels.enter()
+      .append("text")
+      .attr("class", "cursor-label-plant")
+      .attr("fill", "#777")
+      .attr("font-size", "11px")
+      .attr("font-weight", "bold")
+      .style("pointer-events", "none");
+    const activeLabels = labels.merge(newLabels);
+
+    if (currentGraphView === 'plantas_xp' && scales.yPlants) {
+      activeCircles.each(function(pCode) {
+        const yVal = metrics.plantStacks?.[pCode]?.metrics?.envolvente?.[t] || 0;
+        const y = scales.yPlants[pCode];
+        if (y && yVal > 0) {
+          d3.select(this)
+            .attr("cx", xPos)
+            .attr("cy", y(yVal))
+            .style("opacity", 1);
+        } else {
+          d3.select(this).style("opacity", 0);
+        }
+      });
+
+      activeLabels.each(function(pCode) {
+        const yVal = metrics.plantStacks?.[pCode]?.metrics?.envolvente?.[t] || 0;
+        const y = scales.yPlants[pCode];
+        if (y && yVal > 0) {
+          d3.select(this)
+            .attr("x", xPos + 8)
+            .attr("y", y(yVal) - 5)
+            .text(yVal)
+            .style("opacity", 1);
+        } else {
+          d3.select(this).style("opacity", 0);
+        }
+      });
+    }
+
+    // 3. Asignaciones (solo en recursos, plantas, o plantas_xp sin dividir)
+    if (currentGraphView === 'recursos' || currentGraphView === 'plantas' || (currentGraphView === 'plantas_xp' && !scales.yPlants)) {
       const envAsignaciones = (currentGraphView === 'recursos' ? metrics.envolventeAsignaciones : metrics.envolvente)?.[t] || 0;
       const yAs = (currentGraphView === 'recursos' ? scales.yAsignaciones : scales.y);
       if (yAs && envAsignaciones > 0) {

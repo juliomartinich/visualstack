@@ -147,15 +147,31 @@ function drawLeftAxis(g, scale, label, customRange) {
   const rangeToUse = customRange || scale.range();
   const centerPos = -(rangeToUse[0] + rangeToUse[1]) / 2;
 
-  axisG.append("text")
+  const textEl = axisG.append("text")
     .attr("transform", "rotate(-90)")
-    .attr("y", -35) // Espacio para los números del eje
+    .attr("y", -38) // Desplazado ligeramente a la derecha para dejar margen con el borde izquierdo
     .attr("x", centerPos)
     .attr("fill", "#333")
     .attr("text-anchor", "middle")
     .attr("font-size", "11px")
-    .attr("font-weight", "bold")
-    .text(label);
+    .attr("font-weight", "bold");
+
+  const plantName = window.plantasData?.[label]?.nombre || "";
+  if (plantName) {
+    textEl.append("tspan")
+      .attr("x", centerPos)
+      .text(label);
+    
+    textEl.append("tspan")
+      .attr("x", centerPos)
+      .attr("dy", "1.1em") // Desplazar hacia la derecha para el nombre de la planta
+      .attr("font-size", "8.5px")
+      .attr("font-weight", "normal")
+      .attr("fill", "#666")
+      .text(plantName);
+  } else {
+    textEl.attr("y", -35).text(label); // Si no hay nombre, mantener centrado por defecto
+  }
 }
 
 function drawRightAxis(g, scale, innerW, label, color = "#666") {
