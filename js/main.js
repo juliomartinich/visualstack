@@ -104,6 +104,7 @@ Promise.all([
             <option value="camiones">Camiones</option>
             <option value="plantas">Asignaciones</option>
             <option value="colas">Plantas</option>
+            <option value="colas_xp">Plantas xP</option>
             <option value="recursos">Recursos</option>
           </select>
         </div>
@@ -533,6 +534,43 @@ Promise.all([
         } else if (currentGraphView === 'colas') {
           stackResult = buildColasStack(subsetPedidos, totalBocas, CFG.granularidadMin);
           stackResult.isSplit = false;
+        } else if (currentGraphView === 'colas_xp') {
+          if (filterKey.startsWith("Grupo:")) {
+            const groupName = filterKey.split(":")[1];
+            const permitidasGrupo = grupos[groupName] || [];
+            const activePlants = permitidasGrupo.filter(pCode =>
+              subsetPedidos.some(p => p.Planta === pCode)
+            ).sort(); // ordenadas alfabéticamente
+            
+            if (activePlants.length > 1) {
+              const plantStacks = {};
+              activePlants.forEach(pCode => {
+                const plantPedidos = subsetPedidos.filter(p => p.Planta === pCode);
+                const plantBocas = window.plantasData[pCode]?.cant_bocas || 1;
+                plantStacks[pCode] = buildColasStack(plantPedidos, plantBocas, CFG.granularidadMin);
+              });
+              
+              stackResult = {
+                isSplit: true,
+                plants: activePlants,
+                plantStacks: plantStacks,
+                metrics: {
+                  volumenT: d3.sum(activePlants, p => plantStacks[p].metrics.volumenT),
+                  volConfirmado: d3.sum(activePlants, p => plantStacks[p].metrics.volConfirmado),
+                  volNoConfirmado: d3.sum(activePlants, p => plantStacks[p].metrics.volNoConfirmado),
+                  envolvente: [], // dummy
+                  plantStacks: plantStacks
+                },
+                horaMax: d3.max(activePlants, p => plantStacks[p].horaMax) || 0,
+                ocupacionMax: d3.max(activePlants, p => plantStacks[p].ocupacionMax) || 0
+              };
+            }
+          }
+          
+          if (!stackResult) {
+            stackResult = buildColasStack(subsetPedidos, totalBocas, CFG.granularidadMin);
+            stackResult.isSplit = false;
+          }
         } else if (currentGraphView === 'recursos') {
           // Ejecutar las tres simulaciones (Camiones, Colas, Asignaciones)
           const resCamiones = buildStack(subsetPedidos);
@@ -646,7 +684,52 @@ Promise.all([
         });
         
         yMax = 0; // evitar eje global
-      } else if (currentGraphView === "plantas" || currentGraphView === "colas") {
+      } else if (currentGraphView === "colas_xp" && stackResult.isSplit) {
+        // En modo colas_xp dividido creamos escalas y de colas y de delay por cada planta
+        scales = createScales({ xMin, xMax, yMax: 1, innerW, innerH }); // x global
+        scales.yColasPlants = {};
+        scales.yDelayPlants = {};
+
+        const N = stackResult.plants.length;
+        const gap = 20; // un poco más de gap para que no se encimen los textos/ejes de delay
+        const availableHeightForPlots = innerH - (N - 1) * gap;
+        const plotH = availableHeightForPlots / N;
+
+        // Compartir el máximo de cola/bocas de todas las plantas para visualización comparable
+        let maxColasVal = 0;
+        stackResult.plants.forEach(pCode => {
+          const cap = window.plantasData[pCode]?.cant_bocas || 1;
+          const occ = stackResult.plantStacks[pCode].ocupacionMax || 0;
+          const val = Math.max(cap + 2, Math.ceil(occ / 2) * 2 + 2);
+          if (val > maxColasVal) maxColasVal = val;
+        });
+        if (maxColasVal < 10) maxColasVal = 10;
+
+        // Compartir el máximo de delay en minutos de todas las plantas
+        let maxDelayVal = 0;
+        stackResult.plants.forEach(pCode => {
+          const delay2ByTime = stackResult.plantStacks[pCode].metrics.delay2ByTime || [];
+          const maxDelayMin = Math.max(d3.max(delay2ByTime) || 0, 10 / CFG.granularidadMin) * CFG.granularidadMin;
+          if (maxDelayMin > maxDelayVal) maxDelayVal = maxDelayMin;
+        });
+
+        stackResult.plants.forEach((pCode, i) => {
+          const yTop = i * (plotH + gap);
+          const yBottom = yTop + plotH;
+
+          // Escala de colas (ocupa todo el sub-plot vertical)
+          scales.yColasPlants[pCode] = d3.scaleLinear()
+            .domain([0, maxColasVal])
+            .range([yBottom, yTop]);
+
+          // Escala de delay (ocupa el 75% superior de cada sub-plot)
+          scales.yDelayPlants[pCode] = d3.scaleLinear()
+            .domain([0, maxDelayVal])
+            .range([yTop + plotH * 0.75, yTop + plotH * 0.05]);
+        });
+
+        yMax = 0; // evitar eje global
+      } else if (currentGraphView === "plantas" || currentGraphView === "colas" || currentGraphView === "colas_xp") {
         const uniquePlantas = new Set(pedidos.map(p => p.Planta));
         let capacity = 0;
         uniquePlantas.forEach(pCode => {
@@ -663,7 +746,7 @@ Promise.all([
       }
 
       drawGrids(g, scales, curHoraMax, CFG.granularidadMin, innerW, innerH, yMax);
-      drawAxes(g, scales, curHoraMax, CFG.granularidadMin, innerH, currentGraphView === 'recursos' || (currentGraphView === 'plantas' && stackResult.isSplit));
+      drawAxes(g, scales, curHoraMax, CFG.granularidadMin, innerH, currentGraphView === 'recursos' || (currentGraphView === 'plantas' && stackResult.isSplit) || (currentGraphView === 'colas_xp' && stackResult.isSplit));
       drawTopOverlay(svg, g, meta, scales, currentMetrics, width, filterKey);
 
       band = drawBand(g, scales, innerH, CFG.granularidadMin);
@@ -713,10 +796,60 @@ Promise.all([
           const maxDelayMin = Math.max(d3.max(currentMetrics.delay2ByTime) || 0, 10 / CFG.granularidadMin) * CFG.granularidadMin;
           scales.yDelay = d3.scaleLinear()
             .domain([0, maxDelayMin])
-            .range([innerH * 0.3, innerH * 0.05]); 
+            .range([innerH * 0.75, innerH * 0.05]); 
           
           drawDelayCurve(g, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
           drawRightAxis(g, scales.yDelay, innerW, "Delay Max [min]", "red");
+        }
+      } else if (currentGraphView === 'colas_xp') {
+        if (stackResult.isSplit) {
+          stackResult.plants.forEach(pCode => {
+            const plantPedidos = pedidos.filter(p => p.Planta === pCode);
+            const gPlant = g.append("g").attr("class", `zona-planta-colas-${pCode}`);
+            const yScale = scales.yColasPlants[pCode];
+            const yDelayScale = scales.yDelayPlants[pCode];
+
+            // 1. Dibujar cargas/colas
+            drawColasLoads(gPlant, plantPedidos, scales, CFG.granularidadMin, yScale);
+            
+            // 2. Líneas de capacidad
+            const capacity = window.plantasData[pCode]?.cant_bocas || 0;
+            drawCapacityLine(gPlant, 0, scales, innerW, yScale);
+            drawCapacityLine(gPlant, capacity, scales, innerW, yScale);
+
+            // 3. Eje izquierdo de la planta
+            drawLeftAxis(gPlant, yScale, pCode);
+
+            // 4. Delay curve de la planta
+            const plantMetrics = stackResult.plantStacks[pCode].metrics;
+            if (plantMetrics.delay2ByTime) {
+              drawDelayCurve(gPlant, plantMetrics.delay2ByTime, scales, CFG.granularidadMin, yDelayScale);
+              drawRightAxis(gPlant, yDelayScale, innerW, "Delay Max [min]", "red");
+            }
+          });
+          layers = g.selectAll(".pedido");
+        } else {
+          // Fallback a vista normal de colas
+          layers = drawColasLoads(g, pedidos, scales, CFG.granularidadMin);
+          
+          const uniquePlantas = new Set(pedidos.map(p => p.Planta));
+          let capacity = 0;
+          uniquePlantas.forEach(pCode => {
+            if (window.plantasData && window.plantasData[pCode]) {
+              capacity += window.plantasData[pCode].cant_bocas || 0;
+            }
+          });
+          drawCapacityLine(g, capacity, scales, innerW);
+
+          if (currentMetrics.delay2ByTime) {
+            const maxDelayMin = Math.max(d3.max(currentMetrics.delay2ByTime) || 0, 10 / CFG.granularidadMin) * CFG.granularidadMin;
+            scales.yDelay = d3.scaleLinear()
+              .domain([0, maxDelayMin])
+              .range([innerH * 0.75, innerH * 0.05]); 
+            
+            drawDelayCurve(g, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
+            drawRightAxis(g, scales.yDelay, innerW, "Delay Max [min]", "red");
+          }
         }
       } else if (currentGraphView === 'recursos') {
         // 1. Dibujar Camiones (Abajo: 55% - 100% of innerH)

@@ -96,8 +96,9 @@ function drawCapacityLine(g, capacity, scales, innerW, yScale) {
   }
 }
 
-function drawDelayCurve(g, data, scales, granularidadMin) {
-  if (!data || data.length === 0 || !scales.yDelay) return;
+function drawDelayCurve(g, data, scales, granularidadMin, yDelayScale) {
+  const yD = yDelayScale || scales.yDelay;
+  if (!data || data.length === 0 || !yD) return;
 
   const [xMin, xMax] = scales.x.domain();
 
@@ -108,7 +109,7 @@ function drawDelayCurve(g, data, scales, granularidadMin) {
 
   const line = d3.line()
     .x(d => scales.x(d.i))
-    .y(d => scales.yDelay(d.v * granularidadMin))
+    .y(d => yD(d.v * granularidadMin))
     .curve(d3.curveMonotoneX);
 
   g.append("path")
@@ -123,8 +124,8 @@ function drawDelayCurve(g, data, scales, granularidadMin) {
   // Área bajo la curva
   const area = d3.area()
     .x(d => scales.x(d.i))
-    .y0(scales.yDelay(0))
-    .y1(d => scales.yDelay(d.v * granularidadMin))
+    .y0(yD(0))
+    .y1(d => yD(d.v * granularidadMin))
     .curve(d3.curveMonotoneX);
 
   g.append("path")

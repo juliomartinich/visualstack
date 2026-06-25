@@ -58,13 +58,23 @@ function findActiveLayer(capasReversa, t, my, scales) {
       continue;
     }
 
-    // 1. Zona de Colas (Si el ratón está en la parte superior del gráfico en vista colas)
-    if (currentGraphView === 'colas' && capa.STK_COLAS?.bloquesXY) {
-      const y = scales.y;
-      const found = capa.STK_COLAS.bloquesXY.some(seg => 
-        seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
-      );
-      if (found) return capa;
+    // 1. Zona de Colas (Si el ratón está en la parte superior del gráfico en vista colas o colas_xp)
+    if ((currentGraphView === 'colas' || currentGraphView === 'colas_xp') && capa.STK_COLAS?.bloquesXY) {
+      if (scales.yColasPlants) {
+        const y = scales.yColasPlants[capa.Planta];
+        if (y) {
+          const found = capa.STK_COLAS.bloquesXY.some(seg => 
+            seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
+          );
+          if (found) return capa;
+        }
+      } else {
+        const y = scales.y;
+        const found = capa.STK_COLAS.bloquesXY.some(seg => 
+          seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
+        );
+        if (found) return capa;
+      }
     }
 
     // 2. Zona de Camiones
@@ -319,8 +329,8 @@ function setupInteraction(
       circleCamiones.style("opacity", 0); labelCamiones.style("opacity", 0);
     }
 
-    // 2. Colas (solo en recursos o colas)
-    if (currentGraphView === 'recursos' || currentGraphView === 'colas') {
+    // 2. Colas (solo en recursos, colas, o colas_xp sin dividir)
+    if (currentGraphView === 'recursos' || currentGraphView === 'colas' || (currentGraphView === 'colas_xp' && !scales.yColasPlants)) {
       const envColas = (currentGraphView === 'recursos' ? metrics.envolventeColas : metrics.envolvente)?.[t] || 0;
       const yCol = (currentGraphView === 'recursos' ? scales.yColas : scales.y);
       if (yCol && envColas > 0) {
@@ -391,6 +401,120 @@ function setupInteraction(
       });
     }
 
+    // Manejo dinámico de círculos e indicadores para plantas en la vista split Plantas xP (Colas y Delay)
+    let splitColasPlants = [];
+    if (currentGraphView === 'colas_xp' && scales.yColasPlants) {
+      splitColasPlants = Object.keys(scales.yColasPlants);
+    }
+
+    // Círculos/labels para Colas en split
+    const colasCircles = g.selectAll("circle.cursor-circle-colas-plant")
+      .data(splitColasPlants);
+    colasCircles.exit().remove();
+    const newColasCircles = colasCircles.enter()
+      .append("circle")
+      .attr("class", "cursor-circle-colas-plant")
+      .attr("r", 4)
+      .attr("fill", "#555")
+      .style("pointer-events", "none");
+    const activeColasCircles = colasCircles.merge(newColasCircles);
+
+    const colasLabels = g.selectAll("text.cursor-label-colas-plant")
+      .data(splitColasPlants);
+    colasLabels.exit().remove();
+    const newColasLabels = colasLabels.enter()
+      .append("text")
+      .attr("class", "cursor-label-colas-plant")
+      .attr("fill", "#555")
+      .attr("font-size", "11px")
+      .attr("font-weight", "bold")
+      .style("pointer-events", "none");
+    const activeColasLabels = colasLabels.merge(newColasLabels);
+
+    if (currentGraphView === 'colas_xp' && scales.yColasPlants) {
+      activeColasCircles.each(function(pCode) {
+        const yVal = metrics.plantStacks?.[pCode]?.metrics?.envolvente?.[t] || 0;
+        const y = scales.yColasPlants[pCode];
+        if (y && yVal > 0) {
+          d3.select(this)
+            .attr("cx", xPos)
+            .attr("cy", y(yVal))
+            .style("opacity", 1);
+        } else {
+          d3.select(this).style("opacity", 0);
+        }
+      });
+
+      activeColasLabels.each(function(pCode) {
+        const yVal = metrics.plantStacks?.[pCode]?.metrics?.envolvente?.[t] || 0;
+        const y = scales.yColasPlants[pCode];
+        if (y && yVal > 0) {
+          d3.select(this)
+            .attr("x", xPos + 8)
+            .attr("y", y(yVal) - 5)
+            .text(yVal)
+            .style("opacity", 1);
+        } else {
+          d3.select(this).style("opacity", 0);
+        }
+      });
+    }
+
+    // Círculos/labels para Delay en split
+    const delayCircles = g.selectAll("circle.cursor-circle-delay-plant")
+      .data(splitColasPlants);
+    delayCircles.exit().remove();
+    const newDelayCircles = delayCircles.enter()
+      .append("circle")
+      .attr("class", "cursor-circle-delay-plant")
+      .attr("r", 4)
+      .attr("fill", "red")
+      .style("pointer-events", "none");
+    const activeDelayCircles = delayCircles.merge(newDelayCircles);
+
+    const delayLabels = g.selectAll("text.cursor-label-delay-plant")
+      .data(splitColasPlants);
+    delayLabels.exit().remove();
+    const newDelayLabels = delayLabels.enter()
+      .append("text")
+      .attr("class", "cursor-label-delay-plant")
+      .attr("fill", "red")
+      .attr("font-size", "11px")
+      .attr("font-weight", "bold")
+      .style("pointer-events", "none");
+    const activeDelayLabels = delayLabels.merge(newDelayLabels);
+
+    if (currentGraphView === 'colas_xp' && scales.yColasPlants) {
+      activeDelayCircles.each(function(pCode) {
+        const delayVal = metrics.plantStacks?.[pCode]?.metrics?.delay2ByTime?.[t] || 0;
+        const yDelay = scales.yDelayPlants?.[pCode];
+        if (yDelay && delayVal > 0) {
+          const delayMin = delayVal * granularidad;
+          d3.select(this)
+            .attr("cx", xPos)
+            .attr("cy", yDelay(delayMin))
+            .style("opacity", 1);
+        } else {
+          d3.select(this).style("opacity", 0);
+        }
+      });
+
+      activeDelayLabels.each(function(pCode) {
+        const delayVal = metrics.plantStacks?.[pCode]?.metrics?.delay2ByTime?.[t] || 0;
+        const yDelay = scales.yDelayPlants?.[pCode];
+        if (yDelay && delayVal > 0) {
+          const delayMin = delayVal * granularidad;
+          d3.select(this)
+            .attr("x", xPos + 8)
+            .attr("y", yDelay(delayMin) - 5)
+            .text(delayMin)
+            .style("opacity", 1);
+        } else {
+          d3.select(this).style("opacity", 0);
+        }
+      });
+    }
+
     // 3. Asignaciones (solo en recursos o plantas sin dividir)
     if (currentGraphView === 'recursos' || (currentGraphView === 'plantas' && !scales.yPlants)) {
       const envAsignaciones = (currentGraphView === 'recursos' ? metrics.envolventeAsignaciones : metrics.envolvente)?.[t] || 0;
@@ -405,9 +529,9 @@ function setupInteraction(
       circleAsignaciones.style("opacity", 0); labelAsignaciones.style("opacity", 0);
     }
 
-    // 4. Delay
+    // 4. Delay (global)
     const delayVal = metrics.delay2ByTime ? metrics.delay2ByTime[t] : 0;
-    if (scales.yDelay && delayVal > 0) {
+    if (scales.yDelay && delayVal > 0 && !(currentGraphView === 'colas_xp' && scales.yColasPlants)) {
       const delayMin = delayVal * granularidad;
       circleDelay.attr("cx", xPos).attr("cy", scales.yDelay(delayMin)).style("opacity", 1);
       labelDelay.attr("x", xPos + 8).attr("y", scales.yDelay(delayMin) - 5).text(delayMin).style("opacity", 1);
