@@ -103,7 +103,6 @@ Promise.all([
           <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
             <option value="camiones">Camiones</option>
             <option value="plantas">Asignaciones</option>
-            <option value="plantas_xp">Asignaciones xP</option>
             <option value="colas">Plantas</option>
             <option value="recursos">Recursos</option>
           </select>
@@ -496,9 +495,6 @@ Promise.all([
         if (totalBocas <= 0) totalBocas = 1;
 
         if (currentGraphView === 'plantas') {
-          stackResult = buildPlantLoadStack(subsetPedidos, CFG.granularidadMin);
-          stackResult.isSplit = false;
-        } else if (currentGraphView === 'plantas_xp') {
           if (filterKey.startsWith("Grupo:")) {
             const groupName = filterKey.split(":")[1];
             const permitidasGrupo = grupos[groupName] || [];
@@ -620,8 +616,8 @@ Promise.all([
           .range([innerH * 0.12 - 5, innerH * 0.02]);
 
         yMax = 0; // para evitar ejes extra
-      } else if (currentGraphView === "plantas_xp" && stackResult.isSplit) {
-        // En modo plantas_xp dividido creamos una escala y por cada planta en el grupo
+      } else if (currentGraphView === "plantas" && stackResult.isSplit) {
+        // En modo plantas dividido creamos una escala y por cada planta en el grupo
         scales = createScales({ xMin, xMax, yMax: 1, innerW, innerH }); // x global
         scales.yPlants = {};
 
@@ -650,7 +646,7 @@ Promise.all([
         });
         
         yMax = 0; // evitar eje global
-      } else if (currentGraphView === "plantas" || currentGraphView === "colas" || currentGraphView === "plantas_xp") {
+      } else if (currentGraphView === "plantas" || currentGraphView === "colas") {
         const uniquePlantas = new Set(pedidos.map(p => p.Planta));
         let capacity = 0;
         uniquePlantas.forEach(pCode => {
@@ -667,7 +663,7 @@ Promise.all([
       }
 
       drawGrids(g, scales, curHoraMax, CFG.granularidadMin, innerW, innerH, yMax);
-      drawAxes(g, scales, curHoraMax, CFG.granularidadMin, innerH, currentGraphView === 'recursos' || (currentGraphView === 'plantas_xp' && stackResult.isSplit));
+      drawAxes(g, scales, curHoraMax, CFG.granularidadMin, innerH, currentGraphView === 'recursos' || (currentGraphView === 'plantas' && stackResult.isSplit));
       drawTopOverlay(svg, g, meta, scales, currentMetrics, width, filterKey);
 
       band = drawBand(g, scales, innerH, CFG.granularidadMin);
@@ -676,17 +672,6 @@ Promise.all([
       window.currentGanttPanel = ganttPanel;
 
       if (currentGraphView === 'plantas') {
-        layers = drawPlantLoads(g, pedidos, scales, CFG.granularidadMin);
-        
-        const uniquePlantas = new Set(pedidos.map(p => p.Planta));
-        let capacity = 0;
-        uniquePlantas.forEach(pCode => {
-          if (window.plantasData && window.plantasData[pCode]) {
-            capacity += window.plantasData[pCode].cant_bocas || 0;
-          }
-        });
-        drawCapacityLine(g, capacity, scales, innerW);
-      } else if (currentGraphView === 'plantas_xp') {
         if (stackResult.isSplit) {
           stackResult.plants.forEach(pCode => {
             const plantPedidos = pedidos.filter(p => p.Planta === pCode);

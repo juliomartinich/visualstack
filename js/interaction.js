@@ -76,20 +76,22 @@ function findActiveLayer(capasReversa, t, my, scales) {
       }
     }
     
-    // 3. Caso Plantas / Asignaciones xP
-    if (currentGraphView === 'plantas_xp' && scales.yPlants && capa.STK_PLANTAS?.bloquesXY) {
-      const y = scales.yPlants[capa.Planta];
-      if (y) {
+    // 3. Caso Plantas / Asignaciones (soporta vista dividida y normal)
+    if (currentGraphView === 'plantas' && capa.STK_PLANTAS?.bloquesXY) {
+      if (scales.yPlants) {
+        const y = scales.yPlants[capa.Planta];
+        if (y) {
+          const found = capa.STK_PLANTAS.bloquesXY.some(seg => 
+            seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
+          );
+          if (found) return capa;
+        }
+      } else {
         const found = capa.STK_PLANTAS.bloquesXY.some(seg => 
-          seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
+          seg.x === t && seg.v > 0 && my >= scales.y(seg.y1) - 2 && my <= scales.y(seg.y0) + 2
         );
         if (found) return capa;
       }
-    } else if ((currentGraphView === 'plantas' || (currentGraphView === 'plantas_xp' && !scales.yPlants)) && capa.STK_PLANTAS?.bloquesXY) {
-      const found = capa.STK_PLANTAS.bloquesXY.some(seg => 
-        seg.x === t && seg.v > 0 && my >= scales.y(seg.y1) - 2 && my <= scales.y(seg.y0) + 2
-      );
-      if (found) return capa;
     }
   }
   return null;
@@ -331,9 +333,9 @@ function setupInteraction(
       circleColas.style("opacity", 0); labelColas.style("opacity", 0);
     }
 
-    // Manejo dinámico de círculos e indicadores para plantas en la vista split Asignaciones xP
+    // Manejo dinámico de círculos e indicadores para plantas en la vista split Asignaciones
     let splitPlants = [];
-    if (currentGraphView === 'plantas_xp' && scales.yPlants) {
+    if (currentGraphView === 'plantas' && scales.yPlants) {
       splitPlants = Object.keys(scales.yPlants);
     }
 
@@ -360,7 +362,7 @@ function setupInteraction(
       .style("pointer-events", "none");
     const activeLabels = labels.merge(newLabels);
 
-    if (currentGraphView === 'plantas_xp' && scales.yPlants) {
+    if (currentGraphView === 'plantas' && scales.yPlants) {
       activeCircles.each(function(pCode) {
         const yVal = metrics.plantStacks?.[pCode]?.metrics?.envolvente?.[t] || 0;
         const y = scales.yPlants[pCode];
@@ -389,8 +391,8 @@ function setupInteraction(
       });
     }
 
-    // 3. Asignaciones (solo en recursos, plantas, o plantas_xp sin dividir)
-    if (currentGraphView === 'recursos' || currentGraphView === 'plantas' || (currentGraphView === 'plantas_xp' && !scales.yPlants)) {
+    // 3. Asignaciones (solo en recursos o plantas sin dividir)
+    if (currentGraphView === 'recursos' || (currentGraphView === 'plantas' && !scales.yPlants)) {
       const envAsignaciones = (currentGraphView === 'recursos' ? metrics.envolventeAsignaciones : metrics.envolvente)?.[t] || 0;
       const yAs = (currentGraphView === 'recursos' ? scales.yAsignaciones : scales.y);
       if (yAs && envAsignaciones > 0) {
