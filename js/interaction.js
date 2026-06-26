@@ -22,6 +22,9 @@ function getCurrentGraphView() {
   if (graphView === 'camiones' && ganttView === 'despachos') {
     return 'camionesd';
   }
+  if (graphView === 'camiones' && ganttView === 'despachos_reales') {
+    return 'camiones_cd';
+  }
   return graphView;
 }
 
@@ -78,7 +81,7 @@ function findActiveLayer(capasReversa, t, my, scales) {
     }
 
     // 2. Zona de Camiones
-    if ((currentGraphView === 'camiones' || currentGraphView === 'camionesd') && capa.STK?.segmentosXY) {
+    if ((currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd') && capa.STK?.segmentosXY) {
       const y = scales.y;
       const seg = capa.STK.segmentosXY.find(s => s.x === t);
       if (seg && seg.v > 0 && my >= y(seg.y1) - 2 && my <= y(seg.y0) + 2) {
@@ -195,7 +198,7 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, colorOrigen
 
   /* ==== DESCARGAS – OVERLAY =====*/
   const currentGraphView = getCurrentGraphView();
-  const descargas = ((currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'recursos') && activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
+  const descargas = ((currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd' || currentGraphView === 'recursos') && activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
   const tris = overlay
     .selectAll("path.descarga-activa")
     .data(descargas, d => d.key);
@@ -206,7 +209,7 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, colorOrigen
     .attr("d", d3.symbol().type(d3.symbolTriangle).size(170))
     .merge(tris)
     .attr("transform", d => {
-      const y = (currentGraphView === 'recursos' || currentGraphView === 'camiones' || currentGraphView === 'camionesd') && scales.yCamiones ? scales.yCamiones : scales.y;
+      const y = (currentGraphView === 'recursos' || currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd') && scales.yCamiones ? scales.yCamiones : scales.y;
       return `translate(${scales.x(d.x)}, ${y(d.y)}) rotate(180)`;
     })
     .attr("fill", getColorSort(activa))
@@ -225,16 +228,31 @@ function renderTooltip(panel, activa, t, granularidad) {
   const mm = totalMin % 60;
 
   const ref = p.isDespacho ? p.parentPedido : p;
+  const isReal = p.isRealDespacho;
+  const headerTitle = isReal 
+    ? `Ticket #${p.ticketId} (Camión ${p.Camion})` 
+    : (p.isDespacho ? `Despacho ${p.despachoIndex} de ${ref.CantCargas} (Pedido #${ref.id})` : `Pedido #${p.id}`);
 
-  panel.html(`
-    <div class="tooltip-card">
-      <div class="tooltip-header">
-        <div class="pedido">${p.isDespacho ? `Despacho ${p.despachoIndex} de ${ref.CantCargas} (Pedido #${ref.id})` : `Pedido #${p.id}`}</div>
-        <div><b>${p.CantProgramada} m³</b></div>
-        <div class="planta">Planta ${p.Planta}${window.plantasData && window.plantasData[p.Planta] ? ` - ${window.plantasData[p.Planta].nombre}` : ''}</div>
-      </div>
+  let gridContent = "";
+  if (isReal) {
+    gridContent = `
+        <div class="full-row product-row"><span>Producto</span><b>${p.Producto}</b></div>
+        <span>Impreso / Carga</span><b>${p.ticketTimes.Impreso || "00:00"} / ${p.ticketTimes.InicioCarga || "00:00"}</b>
+        <span>Fin Carga / Salida</span><b>${p.ticketTimes.FinCarga || "00:00"} / ${p.ticketTimes.AObra || "00:00"}</b>
+        <span>Llegada / Inicio Desc.</span><b>${p.ticketTimes.EnObra || "00:00"} / ${p.ticketTimes.InicioDescarga || "00:00"}</b>
+        <span>Retorno / Fin Ciclo</span><b>${p.ticketTimes.Aplanta || "00:00"} / ${p.ticketTimes.Enplanta || "00:00"}</b>
+        
+        <div class="cycle-time-box">
+          <div class="cycle-time-label">Tiempo Ciclo Real</div>
+          <div class="cycle-time-value">${Math.round(p.HoraFinalMin - p.HoraAsignacionMin)} min</div>
+        </div>
 
-      <div class="tooltip-grid">
+        <span>Volumen Ticket</span><b>${p.CantProgramada} m³</b>
+        <span>Confirmado</span><b>${p.Confirmado}</b>
+        <span>Pedidos de la Obra</span><b>${ref.CantPedidosObra}</b>
+    `;
+  } else {
+    gridContent = `
         <div class="full-row product-row"><span>Producto</span><b>${p.Producto}</b></div>
         <span>Hora Asignación</span><b>${p.HoraAsignacionHhmm}</b>
         <span>Tiempo de Carga + Prep</span><b>${p.TiempoCarga} min</b>
@@ -250,6 +268,19 @@ function renderTooltip(panel, activa, t, granularidad) {
         <span>Viajes / Camiones</span><b>${ref.CantCargas} / ${ref.MaxCamiones}</b>
         <span>Confirmado</span><b>${p.Confirmado}</b>
         <span>Pedidos de la Obra</span><b>${ref.CantPedidosObra}</b>
+    `;
+  }
+
+  panel.html(`
+    <div class="tooltip-card">
+      <div class="tooltip-header">
+        <div class="pedido">${headerTitle}</div>
+        <div><b>${isReal ? "" : `${p.CantProgramada} m³`}</b></div>
+        <div class="planta">Planta ${p.Planta}${window.plantasData && window.plantasData[p.Planta] ? ` - ${window.plantasData[p.Planta].nombre}` : ''}</div>
+      </div>
+
+      <div class="tooltip-grid">
+        ${gridContent}
       </div>
 
       <div class="tooltip-footer">

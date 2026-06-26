@@ -31,10 +31,12 @@ window.appCache = {};
 Promise.all([
   fetch(`data/Pedidos.json?v=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
   fetch(`data/colores.json?v=${Date.now()}`, { cache: "no-store" }).then(r => r.json()).catch(() => []),
-  fetch(`data/plantas.json?v=${Date.now()}`, { cache: "no-store" }).then(r => r.json()).catch(() => ({}))
+  fetch(`data/plantas.json?v=${Date.now()}`, { cache: "no-store" }).then(r => r.json()).catch(() => ({})),
+  fetch(`data/Tick.json?v=${Date.now()}`, { cache: "no-store" }).then(r => r.json()).catch(() => ({}))
 ])
-  .then(([data, coloresData, plantasData]) => {
+  .then(([data, coloresData, plantasData, ticketsData]) => {
     window.plantasData = plantasData;
+    window.ticketsData = ticketsData.Ticket || {};
     window.pedidoColorsMap = new Map(coloresData.map(c => [c.id, c.color]));
     /* ===== META INFO ===== */
     const rawReportDate = data.DiaReporte;
@@ -54,6 +56,13 @@ Promise.all([
           : 0;
         const result = { ...pedidoNeg, XG, MaxCamiones };
         result.despachos = calculateDespachosForPedido(result, CFG.granularidadMin);
+
+        // Map real dispatches from Tick.json
+        const orderTickets = Object.entries(window.ticketsData)
+          .filter(([tId, t]) => String(t.Pedido) === id)
+          .map(([tId, t]) => ({ ...t, ticketId: tId }));
+        result.realDespachos = calculateRealDespachosForPedido(result, orderTickets, CFG.granularidadMin);
+
         return result;
       });
 
@@ -114,6 +123,7 @@ Promise.all([
           <select id="header-viewgantt" name="headerViewGantt" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
             <option value="pedidos">Pedidos</option>
             <option value="despachos">Despachos</option>
+            <option value="despachos_reales">Despachos reales</option>
           </select>
         </div>
       </div>
@@ -424,7 +434,10 @@ Promise.all([
       if (!headerFilterCheck.empty()) headerFilterCheck.property("checked", isChecked);
 
       const filtered = isChecked
-        ? pedidos.filter(p => p.Confirmado === "SI" && p.MaxCamiones === 1)
+        ? pedidos.filter(p => {
+            const ref = p.parentPedido || p;
+            return ref.Confirmado === "SI" && ref.MaxCamiones === 1;
+          })
         : pedidos;
       ganttPanel.show(filtered);
     }
@@ -480,8 +493,12 @@ Promise.all([
           .map(p => ({ ...p }));
         enrichPedidosForDate(subsetPedidos);
 
-        if (currentGanttView === 'despachos') {
-          subsetPedidos = subsetPedidos.flatMap(p => p.despachos.map(d => ({ ...d, parentPedido: p })));
+        if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales') {
+          if (currentGanttView === 'despachos_reales') {
+            subsetPedidos = subsetPedidos.flatMap(p => (p.realDespachos || []).map(d => ({ ...d, parentPedido: p })));
+          } else {
+            subsetPedidos = subsetPedidos.flatMap(p => (p.despachos || []).map(d => ({ ...d, parentPedido: p })));
+          }
         }
 
         // Calcular totalBocas para la simulación
@@ -870,10 +887,13 @@ Promise.all([
       }
 
       let filteredForGantt = (filterCheck.property("checked") || (!headerFilterCheck.empty() && headerFilterCheck.property("checked")))
-        ? pedidos.filter(p => p.Confirmado === "SI" && p.MaxCamiones === 1)
+        ? pedidos.filter(p => {
+            const ref = p.parentPedido || p;
+            return ref.Confirmado === "SI" && ref.MaxCamiones === 1;
+          })
         : pedidos.slice(); // Create a shallow copy before sorting
 
-      if (currentGanttView === 'despachos') {
+      if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales') {
         filteredForGantt = decomposePedidosIntoVoyages(filteredForGantt, CFG.granularidadMin);
       }
 
@@ -902,14 +922,14 @@ Promise.all([
 
     // View Mode Selects
     let savedGraphView = getCookie("viewGraph") || "camiones";
-    if (savedGraphView === "camionesd") {
+    if (savedGraphView === "camionesd" || savedGraphView === "camiones_cd") {
       savedGraphView = "camiones";
       setCookie("viewGraph", "camiones");
     } else if (savedGraphView === "recursos2") {
       savedGraphView = "recursos";
       setCookie("viewGraph", "recursos");
     }
-    const savedGanttView = getCookie("viewGantt") || "pedidos";
+    let savedGanttView = getCookie("viewGantt") || "pedidos";
     
     const selectViewGraph = document.getElementById("filter-viewgraph");
     const headerViewGraph = document.getElementById("header-viewgraph");

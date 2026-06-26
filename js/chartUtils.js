@@ -524,10 +524,14 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
         .attr("y", rowHeight - 2)
         .attr("fill", "#444")
         .attr("font-size", 11)
-        .text(d => d.isDespacho
-          ? `Despacho ${d.despachoIndex} (Ped #${d.parentPedido.id}) - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`
-          : `${d.id} - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`
-        )
+        .text(d => {
+          if (d.isRealDespacho) {
+            return `Ticket #${d.ticketId} (Camión ${d.Camion}) (Ped #${d.parentPedido.id}) - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`;
+          }
+          return d.isDespacho
+            ? `Despacho ${d.despachoIndex} (Ped #${d.parentPedido.id}) - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`
+            : `${d.id} - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`;
+        })
         .each(function (d) {
           const self = d3.select(this);
           const labelWidth = this.getComputedTextLength();

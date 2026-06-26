@@ -216,6 +216,10 @@ function computeGlobalMetrics(ocupacion, granularidadMin) {
 function decomposePedidosIntoVoyages(pedidos, granularidadMin) {
   const voyages = [];
   pedidos.forEach(p => {
+    if (p.isRealDespacho) {
+      voyages.push({ ...p });
+      return;
+    }
     const numViajes = p.CantCargas || 1;
     const cycleTime = (p.TiempoCarga || 0) + (p.Frecuencia || 0) + 2 * (p.TiempoViaje || 0);
     const cycleSlots = Math.ceil(cycleTime / granularidadMin);

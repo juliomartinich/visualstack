@@ -171,3 +171,109 @@ function calculateDespachosForPedido(p, granularidad) {
     return despachos;
 }
 
+function safeHhmmssToMin(timeStr) {
+    if (!timeStr || timeStr === "0" || timeStr === "") return null;
+    const parts = timeStr.split(":");
+    if (parts.length < 2) return null;
+    const hh = parseInt(parts[0], 10);
+    const mm = parseInt(parts[1], 10);
+    if (isNaN(hh) || isNaN(mm)) return null;
+    const ss = parts[2] ? parseFloat(parts[2]) : 0;
+    return hh * 60 + mm + (isNaN(ss) ? 0 : ss / 60);
+}
+
+function repairTicketTimes(t) {
+    const fields = ["Impreso", "InicioCarga", "FinCarga", "AObra", "EnObra", "InicioDescarga", "Aplanta", "Enplanta"];
+    
+    // 1. Parse all fields to minutes. If "0" or invalid, map to null.
+    const minutes = {};
+    fields.forEach(f => {
+        const val = t[f];
+        minutes[f] = safeHhmmssToMin(val);
+    });
+
+    // 2. We need to enforce a strict temporal sequence.
+    // Find the first valid time to initialize our sequence.
+    let currentVal = 0;
+    for (let i = 0; i < fields.length; i++) {
+        const f = fields[i];
+        if (minutes[f] !== null && minutes[f] > 0) {
+            currentVal = minutes[f];
+            break;
+        }
+    }
+
+    // 3. Forward pass: fill in missing or out-of-order values.
+    const repaired = {};
+    fields.forEach(f => {
+        let val = minutes[f];
+        if (val === null || val < currentVal) {
+            val = currentVal;
+        }
+        repaired[f] = val;
+        currentVal = val;
+    });
+
+    return repaired;
+}
+
+function calculateRealDespachosForPedido(p, tickets, granularidad) {
+    if (!tickets || tickets.length === 0) return [];
+    
+    return tickets.map((t, idx) => {
+        const ticketId = t.ticketId || "";
+        const despachoIndex = idx + 1;
+        
+        // Repair/Enforce temporal sequence
+        const repaired = repairTicketTimes(t);
+        const HoraAsignacionMin = repaired.InicioCarga; // Or repaired.Impreso, they are in minutes now
+        const HoraInicioMin = repaired.InicioDescarga;
+        const HoraFinalMin = repaired.Enplanta;
+        
+        const offset = Math.floor(HoraAsignacionMin / granularidad);
+        const cicloSlots = Math.max(1, Math.ceil((HoraFinalMin - HoraAsignacionMin) / granularidad));
+        const descargaRel = Math.max(0, Math.min(cicloSlots - 1, Math.floor(HoraInicioMin / granularidad) - offset));
+        
+        return {
+            ...p,
+            id: `${p.id}_t${ticketId}`, // Make it unique with 't' prefix and ticketId
+            parentPedidoId: p.id,
+            parentPedido: p,
+            despachoIndex,
+            isDespacho: true,
+            isRealDespacho: true,
+            CantProgramada: Number(t.Volumen) || 8,
+            CantCargas: 1,
+            MaxCamiones: 1,
+            HoraAsignacionMin,
+            HoraInicioMin,
+            HoraFinalMin,
+            HoraAsignacionHhmm: minToHHMM(HoraAsignacionMin),
+            HoraInicio: minToHHMM(HoraInicioMin),
+            HoraFinalHhmm: minToHHMM(HoraFinalMin),
+            Descargas: [{ idx: 0, Min: HoraInicioMin, Hhmm: minToHHMM(HoraInicioMin) }],
+            descargasBandXY: [{ key: 0, x: offset + descargaRel }],
+            XG: {
+                offset,
+                descargarel: [descargaRel],
+                finrel: cicloSlots,
+                ciclo: cicloSlots,
+                freq: 0,
+                demanda: new Array(cicloSlots).fill(1)
+            },
+            ticketId,
+            Camion: t.Camion,
+            Planta: t.Planta || p.Planta,
+            ticketTimes: {
+                Impreso: t.Impreso,
+                InicioCarga: t.InicioCarga,
+                FinCarga: t.FinCarga,
+                AObra: t.AObra,
+                EnObra: t.EnObra,
+                InicioDescarga: t.InicioDescarga,
+                Aplanta: t.Aplanta,
+                Enplanta: t.Enplanta
+            }
+        };
+    });
+}
