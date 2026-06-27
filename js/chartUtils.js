@@ -211,7 +211,7 @@ function createArea(scales, yScale) {
 
 function getColorSort(pedido) {
   const ref = pedido.isDespacho ? pedido.parentPedido : pedido;
-  const isRealView = (typeof getCurrentGraphView === 'function' && getCurrentGraphView() === 'camiones_cd') || (pedido.isRealDespacho);
+  const isRealView = (typeof getCurrentGraphView === 'function' && (getCurrentGraphView() === 'camiones_cd' || getCurrentGraphView() === 'camiones_mix')) || (pedido.isRealDespacho || pedido.isMixedDespacho);
   const maxCam = (isRealView && ref.MaxRealCamiones !== undefined) ? ref.MaxRealCamiones : ref.MaxCamiones;
 
   if (ref.CantProgramada > 100) {
@@ -245,7 +245,7 @@ function getColorOrigen(pedido) {
 
 function getAreaColor(pedido) {
   const ref = pedido.isDespacho ? pedido.parentPedido : pedido;
-  const isRealView = (typeof getCurrentGraphView === 'function' && getCurrentGraphView() === 'camiones_cd') || (pedido.isRealDespacho);
+  const isRealView = (typeof getCurrentGraphView === 'function' && (getCurrentGraphView() === 'camiones_cd' || getCurrentGraphView() === 'camiones_mix')) || (pedido.isRealDespacho || pedido.isMixedDespacho);
   const maxCam = (isRealView && ref.MaxRealCamiones !== undefined) ? ref.MaxRealCamiones : ref.MaxCamiones;
 
   if (ref.CantProgramada > 100) return AREACOLORS.masivo;

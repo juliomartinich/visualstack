@@ -144,6 +144,7 @@ Promise.all([
             <option value="pedidos">Pedidos</option>
             <option value="despachos">Despachos</option>
             <option value="despachos_reales">Despachos reales</option>
+            <option value="despachos_mix">Despachos Mix</option>
           </select>
         </div>
       </div>
@@ -456,7 +457,7 @@ Promise.all([
       const filtered = isChecked
         ? pedidos.filter(p => {
             const ref = p.parentPedido || p;
-            const isRealView = (typeof getCurrentGraphView === 'function' && getCurrentGraphView() === 'camiones_cd') || (p.isRealDespacho);
+            const isRealView = (typeof getCurrentGraphView === 'function' && (getCurrentGraphView() === 'camiones_cd' || getCurrentGraphView() === 'camiones_mix')) || (p.isRealDespacho || p.isMixedDespacho);
             const maxCam = (isRealView && ref.MaxRealCamiones !== undefined) ? ref.MaxRealCamiones : ref.MaxCamiones;
             return ref.Confirmado === "SI" && maxCam === 1;
           })
@@ -516,22 +517,27 @@ Promise.all([
           .map(p => ({ ...p }));
         enrichPedidosForDate(subsetPedidos);
 
-        // Precompute maximum truck occupancy across the three Gantt views (pedidos, despachos, despachos_reales)
+        // Precompute maximum truck occupancy across the four Gantt views (pedidos, despachos, despachos_reales, despachos_mix)
         const baseOrders = subsetPedidos.map(p => ({ ...p }));
         const stackPed = buildStack(baseOrders);
         const teoDesp = baseOrders.flatMap(p => (p.despachos || []).map(d => ({ ...d, parentPedido: p })));
         const stackTeo = buildStack(teoDesp);
         const realDesp = baseOrders.flatMap(p => (p.realDespachos || []).map(d => ({ ...d, parentPedido: p })));
         const stackReal = buildStack(realDesp);
+        const mixDesp = baseOrders.flatMap(p => calculateMixedDespachosForPedido(p, p.realDespachos || [], CFG.granularidadMin));
+        const stackMix = buildStack(mixDesp);
         globalMaxOcupacionCamiones = Math.max(
           stackPed.ocupacionMax || 0,
           stackTeo.ocupacionMax || 0,
-          stackReal.ocupacionMax || 0
+          stackReal.ocupacionMax || 0,
+          stackMix.ocupacionMax || 0
         );
 
-        if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales') {
+        if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales' || currentGanttView === 'despachos_mix') {
           if (currentGanttView === 'despachos_reales') {
             subsetPedidos = subsetPedidos.flatMap(p => (p.realDespachos || []).map(d => ({ ...d, parentPedido: p })));
+          } else if (currentGanttView === 'despachos_mix') {
+            subsetPedidos = subsetPedidos.flatMap(p => calculateMixedDespachosForPedido(p, p.realDespachos || [], CFG.granularidadMin));
           } else {
             subsetPedidos = subsetPedidos.flatMap(p => (p.despachos || []).map(d => ({ ...d, parentPedido: p })));
           }
@@ -931,13 +937,13 @@ Promise.all([
       let filteredForGantt = (filterCheck.property("checked") || (!headerFilterCheck.empty() && headerFilterCheck.property("checked")))
         ? pedidos.filter(p => {
             const ref = p.parentPedido || p;
-            const isRealView = (typeof getCurrentGraphView === 'function' && getCurrentGraphView() === 'camiones_cd') || (p.isRealDespacho);
+            const isRealView = (typeof getCurrentGraphView === 'function' && (getCurrentGraphView() === 'camiones_cd' || getCurrentGraphView() === 'camiones_mix')) || (p.isRealDespacho || p.isMixedDespacho);
             const maxCam = (isRealView && ref.MaxRealCamiones !== undefined) ? ref.MaxRealCamiones : ref.MaxCamiones;
             return ref.Confirmado === "SI" && maxCam === 1;
           })
         : pedidos.slice(); // Create a shallow copy before sorting
 
-      if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales') {
+      if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales' || currentGanttView === 'despachos_mix') {
         filteredForGantt = decomposePedidosIntoVoyages(filteredForGantt, CFG.granularidadMin);
       }
 
@@ -966,7 +972,7 @@ Promise.all([
 
     // View Mode Selects
     let savedGraphView = getCookie("viewGraph") || "camiones";
-    if (savedGraphView === "camionesd" || savedGraphView === "camiones_cd") {
+    if (savedGraphView === "camionesd" || savedGraphView === "camiones_cd" || savedGraphView === "camiones_mix") {
       savedGraphView = "camiones";
       setCookie("viewGraph", "camiones");
     } else if (savedGraphView === "recursos2") {

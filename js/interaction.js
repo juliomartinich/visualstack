@@ -25,6 +25,9 @@ function getCurrentGraphView() {
   if (graphView === 'camiones' && ganttView === 'despachos_reales') {
     return 'camiones_cd';
   }
+  if (graphView === 'camiones' && ganttView === 'despachos_mix') {
+    return 'camiones_mix';
+  }
   return graphView;
 }
 
@@ -81,7 +84,7 @@ function findActiveLayer(capasReversa, t, my, scales) {
     }
 
     // 2. Zona de Camiones
-    if ((currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd') && capa.STK?.segmentosXY) {
+    if ((currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd' || currentGraphView === 'camiones_mix') && capa.STK?.segmentosXY) {
       const y = scales.y;
       const seg = capa.STK.segmentosXY.find(s => s.x === t);
       if (seg && seg.v > 0 && my >= y(seg.y1) - 2 && my <= y(seg.y0) + 2) {
@@ -198,7 +201,7 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, colorOrigen
 
   /* ==== DESCARGAS – OVERLAY =====*/
   const currentGraphView = getCurrentGraphView();
-  const descargas = ((currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd' || currentGraphView === 'recursos') && activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
+  const descargas = ((currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd' || currentGraphView === 'camiones_mix' || currentGraphView === 'recursos') && activa.STK && activa.STK.descargasXY) ? activa.STK.descargasXY : [];
   const tris = overlay
     .selectAll("path.descarga-activa")
     .data(descargas, d => d.key);
@@ -209,7 +212,7 @@ function drawActiveArea({ overlay, layers, getCapas, activa, scales, colorOrigen
     .attr("d", d3.symbol().type(d3.symbolTriangle).size(170))
     .merge(tris)
     .attr("transform", d => {
-      const y = (currentGraphView === 'recursos' || currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd') && scales.yCamiones ? scales.yCamiones : scales.y;
+      const y = (currentGraphView === 'recursos' || currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd' || currentGraphView === 'camiones_mix') && scales.yCamiones ? scales.yCamiones : scales.y;
       return `translate(${scales.x(d.x)}, ${y(d.y)}) rotate(180)`;
     })
     .attr("fill", getColorSort(activa))
@@ -229,12 +232,10 @@ function renderTooltip(panel, activa, t, granularidad) {
 
   const ref = p.isDespacho ? p.parentPedido : p;
   const isReal = p.isRealDespacho;
-  const headerTitle = isReal 
-    ? `Despacho Real ${p.despachoIndex} de ${ref.CantRealDespachos} (Pedido #${ref.id})` 
-    : (p.isDespacho ? `Despacho ${p.despachoIndex} de ${ref.CantCargas} (Pedido #${ref.id})` : `Pedido #${p.id}`);
+  const isMixed = p.isMixedDespacho;
 
   let gridContent = "";
-  if (isReal) {
+  if (isReal || isMixed) {
     const repaired = repairTicketTimes(p.ticketTimes);
     const cargaPrep = repaired.AObra - repaired.Impreso;
     const viaje = repaired.EnObra - repaired.AObra;
@@ -242,7 +243,7 @@ function renderTooltip(panel, activa, t, granularidad) {
     const retorno = repaired.Enplanta - repaired.Aplanta;
     const ciclo = repaired.Enplanta - repaired.Impreso;
 
-    const teo = ref.despachos ? ref.despachos.find(d => d.despachoIndex === p.despachoIndex) : null;
+    const teo = p.mixedType === "teorico" ? p : (ref.despachos ? ref.despachos.find(d => d.despachoIndex === p.despachoIndex) : null);
     const teoAsignacion = teo ? teo.HoraAsignacionHhmm : "-";
     const teoCarga = teo ? `${teo.TiempoCarga} min` : "-";
     const teoViaje = teo ? `${teo.TiempoViaje} min` : "-";
@@ -250,6 +251,7 @@ function renderTooltip(panel, activa, t, granularidad) {
     const teoEstadia = teo ? `${teo.Frecuencia} min` : "-";
     const teoRetorno = teo ? `${teo.TiempoViaje} min` : "-";
     const teoCiclo = teo ? `${teo.TiempoCiclo} min` : "-";
+
     const getIndicatorHtml = (valReal, valTeo) => {
       if (valReal === undefined || valTeo === undefined || valReal === null || valTeo === null || isNaN(valReal) || isNaN(valTeo)) {
         return `<span style="grid-column: 4;"></span>`;
@@ -264,29 +266,68 @@ function renderTooltip(panel, activa, t, granularidad) {
       }
     };
 
+    const isStepReal = p.isStepReal || {
+      Impreso: true,
+      InicioCarga: true,
+      FinCarga: true,
+      AObra: true,
+      EnObra: true,
+      InicioDescarga: true,
+      Aplanta: true,
+      Enplanta: true
+    };
+
+    const renderCell = (fieldName, valRealStr, valTeo, isStepRealFlag) => {
+      if (p.mixedType === "teorico") {
+        return `<b style="grid-column: 3;">-</b><span style="grid-column: 4;"></span>`;
+      }
+      if (isStepRealFlag) {
+        let diffHtml = "";
+        const realMin = safeHhmmssToMin(valRealStr);
+        if (fieldName === "Asignacion") {
+          diffHtml = getIndicatorHtml(realMin, teo ? teo.HoraAsignacionMin : null);
+        } else if (fieldName === "Carga") {
+          diffHtml = getIndicatorHtml(Math.round(cargaPrep), teo ? teo.TiempoCarga : null);
+        } else if (fieldName === "Viaje") {
+          diffHtml = getIndicatorHtml(Math.round(viaje), teo ? teo.TiempoViaje : null);
+        } else if (fieldName === "Llegada") {
+          diffHtml = getIndicatorHtml(realMin, teo ? teo.HoraInicioMin : null);
+        } else if (fieldName === "Estadia") {
+          diffHtml = getIndicatorHtml(Math.round(estadia), teo ? teo.Frecuencia : null);
+        } else if (fieldName === "Retorno") {
+          diffHtml = getIndicatorHtml(Math.round(retorno), teo ? teo.TiempoViaje : null);
+        } else if (fieldName === "Ciclo") {
+          diffHtml = getIndicatorHtml(Math.round(ciclo), teo ? teo.TiempoCiclo : null);
+        }
+        return `<b style="grid-column: 3;">${valRealStr}</b>${diffHtml}`;
+      } else {
+        return `<b style="grid-column: 3; color: #888; font-weight: normal;">${valRealStr}*</b><span style="grid-column: 4; text-align: center; color: #888;">─</span>`;
+      }
+    };
+
     gridContent = `
         <div class="full-row product-row"><span>Producto</span><b style="grid-column: 2 / span 3;">${p.Producto}</b></div>
         
         <!-- Header row for comparison -->
         <span>Concepto</span><b style="color: #888; font-size: 11px; font-weight: 600; text-align: right; padding-right: 5px;">Teórico</b><b style="grid-column: 3; color: #333; font-size: 11px;">Real</b><span style="grid-column: 4; font-size: 10px; color: #888; text-align: center; font-weight: 600;">+/-</span>
         
-        <span>Ticket / Camión</span><b style="grid-column: 2 / span 2; text-align: left;">#${p.ticketId} / ${p.Camion}</b><span style="grid-column: 4;"></span>
+        <span>Ticket / Camión</span><b style="grid-column: 2 / span 2; text-align: left;">${p.mixedType === "teorico" ? "No asignado" : `#${p.ticketId} / ${p.Camion}`}</b><span style="grid-column: 4;"></span>
         
-        <span>Hora Asignación</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoAsignacion}</b><b style="grid-column: 3;">${minToHHMM(repaired.Impreso)}</b>${getIndicatorHtml(repaired.Impreso, teo ? teo.HoraAsignacionMin : null)}
+        <span>Hora Asignación</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoAsignacion}</b>${renderCell("Asignacion", minToHHMM(repaired.Impreso), teo, isStepReal.Impreso)}
         
-        <span>Tiempo de Carga</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoCarga}</b><b style="grid-column: 3;">${Math.round(cargaPrep)} min</b>${getIndicatorHtml(cargaPrep, teo ? teo.TiempoCarga : null)}
+        <span>Tiempo de Carga</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoCarga}</b>${renderCell("Carga", `${Math.round(cargaPrep)} min`, teo, isStepReal.FinCarga)}
         
-        <span>Tiempo de Viaje</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoViaje}</b><b style="grid-column: 3;">${Math.round(viaje)} min</b>${getIndicatorHtml(viaje, teo ? teo.TiempoViaje : null)}
+        <span>Tiempo de Viaje</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoViaje}</b>${renderCell("Viaje", `${Math.round(viaje)} min`, teo, isStepReal.EnObra)}
         
-        <span>Hora en Obra</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoLlegada}</b><b style="grid-column: 3;">${minToHHMM(repaired.EnObra)}</b>${getIndicatorHtml(repaired.EnObra, teo ? teo.HoraInicioMin : null)}
+        <span>Hora en Obra</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoLlegada}</b>${renderCell("Llegada", minToHHMM(repaired.EnObra), teo, isStepReal.EnObra)}
         
-        <span>Estadía en Obra</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoEstadia}</b><b style="grid-column: 3;">${Math.round(estadia)} min</b>${getIndicatorHtml(estadia, teo ? teo.Frecuencia : null)}
+        <span>Estadía en Obra</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoEstadia}</b>${renderCell("Estadia", `${Math.round(estadia)} min`, teo, isStepReal.Aplanta)}
         
-        <span>Tiempo de Retorno</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoRetorno}</b><b style="grid-column: 3;">${Math.round(retorno)} min</b>${getIndicatorHtml(retorno, teo ? teo.TiempoViaje : null)}
+        <span>Tiempo de Retorno</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoRetorno}</b>${renderCell("Retorno", `${Math.round(retorno)} min`, teo, isStepReal.Enplanta)}
         
-        <span>Tiempo de Ciclo</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoCiclo}</b><b style="grid-column: 3;">${Math.round(ciclo)} min</b>${getIndicatorHtml(ciclo, teo ? teo.TiempoCiclo : null)}
+        <span>Tiempo de Ciclo</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoCiclo}</b>${renderCell("Ciclo", `${Math.round(ciclo)} min`, teo, isStepReal.Enplanta)}
  
-        <span>Viajes / Camiones</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">(${ref.CantCargas} / ${ref.MaxCamiones})</b><b style="grid-column: 3;">${ref.CantRealDespachos} / ${ref.MaxRealCamiones}</b><span style="grid-column: 4;"></span>
+        <span>Viajes / Camiones</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">(${ref.CantCargas} / ${ref.MaxCamiones})</b><b style="grid-column: 3;">${p.mixedType === "teorico" ? "-" : `${ref.CantRealDespachos || 0} / ${ref.MaxRealCamiones || 0}`}</b><span style="grid-column: 4;"></span>
         
         <span>Confirmado</span><b style="grid-column: 2 / span 3; text-align: left;">${p.Confirmado}</b>
         
@@ -321,7 +362,15 @@ function renderTooltip(panel, activa, t, granularidad) {
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div style="font-weight: 600; font-size: 12px; color: #444;">
-            ${p.isDespacho ? (isReal ? `Despacho Real ${p.despachoIndex} de ${ref.CantRealDespachos}` : `Despacho ${p.despachoIndex} de ${ref.CantCargas}`) : ''}
+            ${p.isDespacho ? (
+              isMixed ? (
+                p.mixedType === "real" ? `Despacho Mix ${p.despachoIndex} (Real)` :
+                p.mixedType === "en_curso" ? `Despacho Mix ${p.despachoIndex} (En Curso)` :
+                `Despacho Mix ${p.despachoIndex} (Teórico)`
+              ) : (
+                isReal ? `Despacho Real ${p.despachoIndex} de ${ref.CantRealDespachos}` : `Despacho ${p.despachoIndex} de ${ref.CantCargas}`
+              )
+            ) : ''}
           </div>
           <div class="planta" style="font-size: 11px; color: #666; font-weight: normal; margin-left: auto;">
             Planta ${p.Planta}${window.plantasData && window.plantasData[p.Planta] ? ` - ${window.plantasData[p.Planta].nombre}` : ''}
@@ -329,7 +378,7 @@ function renderTooltip(panel, activa, t, granularidad) {
         </div>
       </div>
 
-      <div class="tooltip-grid ${isReal ? 'comparison' : ''}">
+      <div class="tooltip-grid ${(isReal || isMixed) ? 'comparison' : ''}">
         ${gridContent}
       </div>
 
