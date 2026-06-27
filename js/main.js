@@ -484,7 +484,7 @@ Promise.all([
       const cacheKey = `${selectedDate}_${filterKey}_${currentGraphView}_${currentGanttView}`;
       let subsetPedidos = [];
       let stackResult;
-      let currentMetrics, curHoraMax, curOcupacionMax, curOcupacionMaxCamiones = 0, curOcupacionMaxColas = 0, curOcupacionMaxAsignaciones = 0, totalBocas = 0;
+      let currentMetrics, curHoraMax, curOcupacionMax, curOcupacionMaxCamiones = 0, curOcupacionMaxColas = 0, curOcupacionMaxAsignaciones = 0, totalBocas = 0, globalMaxOcupacionCamiones = 0;
 
       if (window.appCache[cacheKey]) {
         const cached = window.appCache[cacheKey];
@@ -495,6 +495,7 @@ Promise.all([
         curOcupacionMaxCamiones = cached.ocupacionMaxCamiones || 0;
         curOcupacionMaxColas = cached.ocupacionMaxColas || 0;
         curOcupacionMaxAsignaciones = cached.ocupacionMaxAsignaciones || 0;
+        globalMaxOcupacionCamiones = cached.globalMaxOcupacionCamiones || 0;
         stackResult = {
           isSplit: cached.isSplit,
           plants: cached.plants,
@@ -514,6 +515,19 @@ Promise.all([
           .filter(p => p["Fecha Pedido"] === selectedDate && permitidas.includes(p.Planta))
           .map(p => ({ ...p }));
         enrichPedidosForDate(subsetPedidos);
+
+        // Precompute maximum truck occupancy across the three Gantt views (pedidos, despachos, despachos_reales)
+        const baseOrders = subsetPedidos.map(p => ({ ...p }));
+        const stackPed = buildStack(baseOrders);
+        const teoDesp = baseOrders.flatMap(p => (p.despachos || []).map(d => ({ ...d, parentPedido: p })));
+        const stackTeo = buildStack(teoDesp);
+        const realDesp = baseOrders.flatMap(p => (p.realDespachos || []).map(d => ({ ...d, parentPedido: p })));
+        const stackReal = buildStack(realDesp);
+        globalMaxOcupacionCamiones = Math.max(
+          stackPed.ocupacionMax || 0,
+          stackTeo.ocupacionMax || 0,
+          stackReal.ocupacionMax || 0
+        );
 
         if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales') {
           if (currentGanttView === 'despachos_reales') {
@@ -643,6 +657,7 @@ Promise.all([
           ocupacionMaxCamiones: curOcupacionMaxCamiones,
           ocupacionMaxColas: curOcupacionMaxColas,
           ocupacionMaxAsignaciones: curOcupacionMaxAsignaciones,
+          globalMaxOcupacionCamiones: globalMaxOcupacionCamiones,
           isSplit: stackResult.isSplit,
           plants: stackResult.plants,
           plantStacks: stackResult.plantStacks
@@ -669,7 +684,7 @@ Promise.all([
         
         // Zona Inferior: Camiones (de 0.55 a 1.0 de innerH)
         scales.yCamiones = d3.scaleLinear()
-          .domain([0, Math.ceil(curOcupacionMaxCamiones / CFG.yStep) * CFG.yStep])
+          .domain([0, Math.max(CFG.yStep, Math.ceil(globalMaxOcupacionCamiones / CFG.yStep) * CFG.yStep)])
           .range([innerH, innerH * 0.55]);
           
         // Zona Media-Baja: Asignaciones (de 0.35 a 0.55 de innerH)
@@ -776,7 +791,12 @@ Promise.all([
         if (yMax < 10) yMax = 10;
         scales = createScales({ xMin, xMax, yMax, innerW, innerH });
       } else {
-        yMax = Math.ceil(curOcupacionMax / CFG.yStep) * CFG.yStep;
+        if (currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd') {
+          yMax = Math.ceil(globalMaxOcupacionCamiones / CFG.yStep) * CFG.yStep;
+        } else {
+          yMax = Math.ceil(curOcupacionMax / CFG.yStep) * CFG.yStep;
+        }
+        if (yMax < CFG.yStep) yMax = CFG.yStep; // safety minimum
         scales = createScales({ xMin, xMax, yMax, innerW, innerH });
       }
 

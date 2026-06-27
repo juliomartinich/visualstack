@@ -314,10 +314,19 @@ function renderTooltip(panel, activa, t, granularidad) {
 
   panel.html(`
     <div class="tooltip-card">
-      <div class="tooltip-header">
-        <div class="pedido">${headerTitle}</div>
-        <div><b>${p.CantProgramada} m³</b></div>
-        <div class="planta">Planta ${p.Planta}${window.plantasData && window.plantasData[p.Planta] ? ` - ${window.plantasData[p.Planta].nombre}` : ''}</div>
+      <div class="tooltip-header" style="display: flex; flex-direction: column; gap: 4px; align-items: stretch; width: 100%; border-bottom: 1px solid #eee; padding-bottom: 6px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="pedido" style="font-weight: 700; font-size: 14px;">Pedido #${ref.id}</div>
+          <div style="font-size: 12.5px;"><b>${p.CantProgramada} m³</b></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="font-weight: 600; font-size: 12px; color: #444;">
+            ${p.isDespacho ? (isReal ? `Despacho Real ${p.despachoIndex} de ${ref.CantRealDespachos}` : `Despacho ${p.despachoIndex} de ${ref.CantCargas}`) : ''}
+          </div>
+          <div class="planta" style="font-size: 11px; color: #666; font-weight: normal; margin-left: auto;">
+            Planta ${p.Planta}${window.plantasData && window.plantasData[p.Planta] ? ` - ${window.plantasData[p.Planta].nombre}` : ''}
+          </div>
+        </div>
       </div>
 
       <div class="tooltip-grid ${isReal ? 'comparison' : ''}">
