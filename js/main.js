@@ -62,6 +62,26 @@ Promise.all([
           .filter(([tId, t]) => String(t.Pedido) === id)
           .map(([tId, t]) => ({ ...t, ticketId: tId }));
         result.realDespachos = calculateRealDespachosForPedido(result, orderTickets, CFG.granularidadMin);
+        result.CantRealDespachos = result.realDespachos.length;
+
+        // Calculate MaxRealCamiones (maximum simultaneous trucks active at any minute)
+        if (result.realDespachos.length === 0) {
+          result.MaxRealCamiones = 0;
+        } else {
+          const tMin = Math.min(...result.realDespachos.map(d => d.HoraAsignacionMin));
+          const tMax = Math.max(...result.realDespachos.map(d => d.HoraFinalMin));
+          const timeline = new Array(Math.max(1, tMax - tMin + 1)).fill(0);
+          result.realDespachos.forEach(d => {
+            const start = d.HoraAsignacionMin - tMin;
+            const end = d.HoraFinalMin - tMin;
+            for (let t = start; t < end; t++) {
+              if (t >= 0 && t < timeline.length) {
+                timeline[t]++;
+              }
+            }
+          });
+          result.MaxRealCamiones = Math.max(...timeline);
+        }
 
         return result;
       });
@@ -436,7 +456,9 @@ Promise.all([
       const filtered = isChecked
         ? pedidos.filter(p => {
             const ref = p.parentPedido || p;
-            return ref.Confirmado === "SI" && ref.MaxCamiones === 1;
+            const isRealView = (typeof getCurrentGraphView === 'function' && getCurrentGraphView() === 'camiones_cd') || (p.isRealDespacho);
+            const maxCam = (isRealView && ref.MaxRealCamiones !== undefined) ? ref.MaxRealCamiones : ref.MaxCamiones;
+            return ref.Confirmado === "SI" && maxCam === 1;
           })
         : pedidos;
       ganttPanel.show(filtered);
@@ -889,7 +911,9 @@ Promise.all([
       let filteredForGantt = (filterCheck.property("checked") || (!headerFilterCheck.empty() && headerFilterCheck.property("checked")))
         ? pedidos.filter(p => {
             const ref = p.parentPedido || p;
-            return ref.Confirmado === "SI" && ref.MaxCamiones === 1;
+            const isRealView = (typeof getCurrentGraphView === 'function' && getCurrentGraphView() === 'camiones_cd') || (p.isRealDespacho);
+            const maxCam = (isRealView && ref.MaxRealCamiones !== undefined) ? ref.MaxRealCamiones : ref.MaxCamiones;
+            return ref.Confirmado === "SI" && maxCam === 1;
           })
         : pedidos.slice(); // Create a shallow copy before sorting
 

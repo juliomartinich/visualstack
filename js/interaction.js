@@ -230,26 +230,67 @@ function renderTooltip(panel, activa, t, granularidad) {
   const ref = p.isDespacho ? p.parentPedido : p;
   const isReal = p.isRealDespacho;
   const headerTitle = isReal 
-    ? `Ticket #${p.ticketId} (Camión ${p.Camion})` 
+    ? `Despacho Real ${p.despachoIndex} de ${ref.CantRealDespachos} (Pedido #${ref.id})` 
     : (p.isDespacho ? `Despacho ${p.despachoIndex} de ${ref.CantCargas} (Pedido #${ref.id})` : `Pedido #${p.id}`);
 
   let gridContent = "";
   if (isReal) {
-    gridContent = `
-        <div class="full-row product-row"><span>Producto</span><b>${p.Producto}</b></div>
-        <span>Impreso / Carga</span><b>${p.ticketTimes.Impreso || "00:00"} / ${p.ticketTimes.InicioCarga || "00:00"}</b>
-        <span>Fin Carga / Salida</span><b>${p.ticketTimes.FinCarga || "00:00"} / ${p.ticketTimes.AObra || "00:00"}</b>
-        <span>Llegada / Inicio Desc.</span><b>${p.ticketTimes.EnObra || "00:00"} / ${p.ticketTimes.InicioDescarga || "00:00"}</b>
-        <span>Retorno / Fin Ciclo</span><b>${p.ticketTimes.Aplanta || "00:00"} / ${p.ticketTimes.Enplanta || "00:00"}</b>
-        
-        <div class="cycle-time-box">
-          <div class="cycle-time-label">Tiempo Ciclo Real</div>
-          <div class="cycle-time-value">${Math.round(p.HoraFinalMin - p.HoraAsignacionMin)} min</div>
-        </div>
+    const repaired = repairTicketTimes(p.ticketTimes);
+    const cargaPrep = repaired.AObra - repaired.Impreso;
+    const viaje = repaired.EnObra - repaired.AObra;
+    const estadia = repaired.Aplanta - repaired.EnObra;
+    const retorno = repaired.Enplanta - repaired.Aplanta;
+    const ciclo = repaired.Enplanta - repaired.Impreso;
 
-        <span>Volumen Ticket</span><b>${p.CantProgramada} m³</b>
-        <span>Confirmado</span><b>${p.Confirmado}</b>
-        <span>Pedidos de la Obra</span><b>${ref.CantPedidosObra}</b>
+    const teo = ref.despachos ? ref.despachos.find(d => d.despachoIndex === p.despachoIndex) : null;
+    const teoAsignacion = teo ? teo.HoraAsignacionHhmm : "-";
+    const teoCarga = teo ? `${teo.TiempoCarga} min` : "-";
+    const teoViaje = teo ? `${teo.TiempoViaje} min` : "-";
+    const teoLlegada = teo ? teo.HoraInicio : "-";
+    const teoEstadia = teo ? `${teo.Frecuencia} min` : "-";
+    const teoRetorno = teo ? `${teo.TiempoViaje} min` : "-";
+    const teoCiclo = teo ? `${teo.TiempoCiclo} min` : "-";
+    const getIndicatorHtml = (valReal, valTeo) => {
+      if (valReal === undefined || valTeo === undefined || valReal === null || valTeo === null || isNaN(valReal) || isNaN(valTeo)) {
+        return `<span style="grid-column: 4;"></span>`;
+      }
+      const diff = valReal - valTeo;
+      if (diff > 0) {
+        return `<span style="grid-column: 4; text-align: center; color: #e63946; font-size: 11px; font-weight: bold; display: flex; justify-content: center; align-items: center; gap: 2px; cursor: default;" title="Atrasado/Mayor por ${diff} min">▲ +${diff}</span>`;
+      } else if (diff < 0) {
+        return `<span style="grid-column: 4; text-align: center; color: #2ec4b6; font-size: 11px; font-weight: bold; display: flex; justify-content: center; align-items: center; gap: 2px; cursor: default;" title="Anticipado/Menor por ${Math.abs(diff)} min">▼ ${diff}</span>`;
+      } else {
+        return `<span style="grid-column: 4; text-align: center; color: #2ec4b6; font-size: 11px; font-weight: bold; display: flex; justify-content: center; align-items: center; gap: 2px; cursor: default;" title="Igual a lo teórico">─ 0</span>`;
+      }
+    };
+
+    gridContent = `
+        <div class="full-row product-row"><span>Producto</span><b style="grid-column: 2 / span 3;">${p.Producto}</b></div>
+        
+        <!-- Header row for comparison -->
+        <span>Concepto</span><b style="color: #888; font-size: 11px; font-weight: 600; text-align: right; padding-right: 5px;">Teórico</b><b style="grid-column: 3; color: #333; font-size: 11px;">Real</b><span style="grid-column: 4; font-size: 10px; color: #888; text-align: center; font-weight: 600;">+/-</span>
+        
+        <span>Ticket / Camión</span><b style="grid-column: 2 / span 2; text-align: left;">#${p.ticketId} / ${p.Camion}</b><span style="grid-column: 4;"></span>
+        
+        <span>Hora Asignación</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoAsignacion}</b><b style="grid-column: 3;">${minToHHMM(repaired.Impreso)}</b>${getIndicatorHtml(repaired.Impreso, teo ? teo.HoraAsignacionMin : null)}
+        
+        <span>Tiempo de Carga</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoCarga}</b><b style="grid-column: 3;">${Math.round(cargaPrep)} min</b>${getIndicatorHtml(cargaPrep, teo ? teo.TiempoCarga : null)}
+        
+        <span>Tiempo de Viaje</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoViaje}</b><b style="grid-column: 3;">${Math.round(viaje)} min</b>${getIndicatorHtml(viaje, teo ? teo.TiempoViaje : null)}
+        
+        <span>Hora en Obra</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoLlegada}</b><b style="grid-column: 3;">${minToHHMM(repaired.EnObra)}</b>${getIndicatorHtml(repaired.EnObra, teo ? teo.HoraInicioMin : null)}
+        
+        <span>Estadía en Obra</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoEstadia}</b><b style="grid-column: 3;">${Math.round(estadia)} min</b>${getIndicatorHtml(estadia, teo ? teo.Frecuencia : null)}
+        
+        <span>Tiempo de Retorno</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoRetorno}</b><b style="grid-column: 3;">${Math.round(retorno)} min</b>${getIndicatorHtml(retorno, teo ? teo.TiempoViaje : null)}
+        
+        <span>Tiempo de Ciclo</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">${teoCiclo}</b><b style="grid-column: 3;">${Math.round(ciclo)} min</b>${getIndicatorHtml(ciclo, teo ? teo.TiempoCiclo : null)}
+ 
+        <span>Viajes / Camiones</span><b style="color: #888; font-weight: normal; text-align: right; padding-right: 5px;">(${ref.CantCargas} / ${ref.MaxCamiones})</b><b style="grid-column: 3;">${ref.CantRealDespachos} / ${ref.MaxRealCamiones}</b><span style="grid-column: 4;"></span>
+        
+        <span>Confirmado</span><b style="grid-column: 2 / span 3; text-align: left;">${p.Confirmado}</b>
+        
+        <span>Pedidos de la Obra</span><b style="grid-column: 2 / span 3; text-align: left;">${ref.CantPedidosObra}</b>
     `;
   } else {
     gridContent = `
@@ -275,11 +316,11 @@ function renderTooltip(panel, activa, t, granularidad) {
     <div class="tooltip-card">
       <div class="tooltip-header">
         <div class="pedido">${headerTitle}</div>
-        <div><b>${isReal ? "" : `${p.CantProgramada} m³`}</b></div>
+        <div><b>${p.CantProgramada} m³</b></div>
         <div class="planta">Planta ${p.Planta}${window.plantasData && window.plantasData[p.Planta] ? ` - ${window.plantasData[p.Planta].nombre}` : ''}</div>
       </div>
 
-      <div class="tooltip-grid">
+      <div class="tooltip-grid ${isReal ? 'comparison' : ''}">
         ${gridContent}
       </div>
 

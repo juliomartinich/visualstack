@@ -211,6 +211,9 @@ function createArea(scales, yScale) {
 
 function getColorSort(pedido) {
   const ref = pedido.isDespacho ? pedido.parentPedido : pedido;
+  const isRealView = (typeof getCurrentGraphView === 'function' && getCurrentGraphView() === 'camiones_cd') || (pedido.isRealDespacho);
+  const maxCam = (isRealView && ref.MaxRealCamiones !== undefined) ? ref.MaxRealCamiones : ref.MaxCamiones;
+
   if (ref.CantProgramada > 100) {
     return COLORS.multi;
   }
@@ -221,7 +224,7 @@ function getColorSort(pedido) {
     return COLORS.unconfirmed;
   }
   // Si tiene más de 1 camión en simultáneo, siempre es AZUL
-  if (ref.MaxCamiones > 1) {
+  if (maxCam > 1) {
     return COLORS.multi;
   }
   // Solo los de 1 camión pueden ser verdes
@@ -242,10 +245,13 @@ function getColorOrigen(pedido) {
 
 function getAreaColor(pedido) {
   const ref = pedido.isDespacho ? pedido.parentPedido : pedido;
+  const isRealView = (typeof getCurrentGraphView === 'function' && getCurrentGraphView() === 'camiones_cd') || (pedido.isRealDespacho);
+  const maxCam = (isRealView && ref.MaxRealCamiones !== undefined) ? ref.MaxRealCamiones : ref.MaxCamiones;
+
   if (ref.CantProgramada > 100) return AREACOLORS.masivo;
   if (ref.ColorPedido == 11 || ref.ColorPedido == 12) return AREACOLORS.color11_12;
   if (ref.Confirmado !== "SI") return AREACOLORS.unconfirmed;
-  if (ref.MaxCamiones === 1 && ref.CantPedidosObra === 1) return AREACOLORS.singleOrder;
+  if (maxCam === 1 && ref.CantPedidosObra === 1) return AREACOLORS.singleOrder;
   return "none";
 }
 
@@ -526,7 +532,7 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
         .attr("font-size", 11)
         .text(d => {
           if (d.isRealDespacho) {
-            return `Ticket #${d.ticketId} (Camión ${d.Camion}) (Ped #${d.parentPedido.id}) - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`;
+            return `Despacho Real ${d.despachoIndex} de ${d.parentPedido.CantRealDespachos} (Ticket #${d.ticketId}, Camión ${d.Camion}) (Ped #${d.parentPedido.id}) - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`;
           }
           return d.isDespacho
             ? `Despacho ${d.despachoIndex} (Ped #${d.parentPedido.id}) - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`

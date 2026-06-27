@@ -31,7 +31,9 @@ function buildStack(pedidos) {
       if (p.Confirmado !== "SI") return 5;
 
       // 4. Confirmados (Azules > 1 camión)
-      if (p.MaxCamiones > 1) return 2;
+      const isRealView = (typeof getCurrentGraphView === 'function' && getCurrentGraphView() === 'camiones_cd') || (p.isRealDespacho);
+      const maxCam = (isRealView && p.MaxRealCamiones !== undefined) ? p.MaxRealCamiones : p.MaxCamiones;
+      if (maxCam > 1) return 2;
 
       // 5. Verdes (1 camión)
       if (p.CantPedidosObra === 1) return 4; // Verde Oscuro

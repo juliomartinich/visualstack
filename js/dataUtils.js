@@ -220,13 +220,20 @@ function repairTicketTimes(t) {
 function calculateRealDespachosForPedido(p, tickets, granularidad) {
     if (!tickets || tickets.length === 0) return [];
     
-    return tickets.map((t, idx) => {
+    // Sort tickets chronologically by Impreso/InicioCarga first, to be absolutely sure of correct ordering
+    const sortedTickets = tickets.slice().sort((a, b) => {
+        const aMin = safeHhmmssToMin(a.Impreso) || safeHhmmssToMin(a.InicioCarga) || 0;
+        const bMin = safeHhmmssToMin(b.Impreso) || safeHhmmssToMin(b.InicioCarga) || 0;
+        return aMin - bMin;
+    });
+    
+    return sortedTickets.map((t, idx) => {
         const ticketId = t.ticketId || "";
         const despachoIndex = idx + 1;
         
         // Repair/Enforce temporal sequence
         const repaired = repairTicketTimes(t);
-        const HoraAsignacionMin = repaired.InicioCarga; // Or repaired.Impreso, they are in minutes now
+        const HoraAsignacionMin = repaired.Impreso; // Start of cycle is Impreso
         const HoraInicioMin = repaired.InicioDescarga;
         const HoraFinalMin = repaired.Enplanta;
         
