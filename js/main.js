@@ -972,9 +972,9 @@ Promise.all([
         if (offsetA !== offsetB) return offsetA - offsetB;
 
         if (refA.id === refB.id) {
-          const idxA = a.despachoIndex ?? a.viajeIndex ?? 0;
-          const idxB = b.despachoIndex ?? b.viajeIndex ?? 0;
-          return idxA - idxB;
+          const timeA = a.HoraAsignacionMin ?? 0;
+          const timeB = b.HoraAsignacionMin ?? 0;
+          return timeA - timeB;
         }
 
         return String(refA.id).localeCompare(String(refB.id));

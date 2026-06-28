@@ -562,15 +562,43 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
         .attr("fill", d => d.isAnulado ? "#ffffff" : "#444")
         .attr("font-size", 11)
         .text(d => {
-          if (d.isRealDespacho) {
-            if (d.isAnulado) {
-              return `Ticket #${d.ticketId} (ANULADO) (Camión ${d.Camion}) (Ped #${d.parentPedido.id}) - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`;
+          const parentId = d.parentPedido ? d.parentPedido.id : d.id;
+          const isFirst = pedidos.find(x => (x.parentPedido ? x.parentPedido.id : x.id) === parentId) === d;
+
+          const isRealItem = d.isRealDespacho || (d.isMixedDespacho && (d.mixedType === "real" || d.mixedType === "en_curso" || d.mixedType === "anulado"));
+
+          if (isRealItem) {
+            const isAnulado = d.isAnulado || d.mixedType === "anulado";
+            const isEnCurso = d.isEnCursoDespacho || d.mixedType === "en_curso";
+            const totalCount = d.parentPedido ? (d.parentPedido.despachos ? Math.max(d.parentPedido.despachos.length, d.parentPedido.CantRealDespachos) : (d.parentPedido.CantRealDespachos || 1)) : 1;
+
+            let descTime = "-";
+            if (d.isStepReal && d.isStepReal.InicioDescarga) {
+              descTime = d.HoraInicio;
+            } else if (isEnCurso) {
+              descTime = d.HoraInicio + "*";
             }
-            return `Despacho Real ${d.despachoIndex} de ${d.parentPedido.CantRealDespachos} (Ticket #${d.ticketId}, Camión ${d.Camion}) (Ped #${d.parentPedido.id}) - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`;
+
+            const baseLabel = isAnulado 
+              ? `Ticket #${d.ticketId} (ANULADO, Camión ${d.Camion}) - ${d.CantProgramada} m3 - Descarga ${descTime}`
+              : `Despacho ${d.despachoIndex} de ${totalCount} (Ticket #${d.ticketId}, Camión ${d.Camion}) - ${d.CantProgramada} m3 - Descarga ${descTime}`;
+            
+            if (isFirst) {
+              return `Ped #${d.parentPedido.id} - ${d.parentPedido.Cliente} - ${d.Obra} - ${d.parentPedido.CantProgramada} m3 / ${baseLabel}`;
+            }
+            return baseLabel;
           }
-          return d.isDespacho
-            ? `Despacho ${d.despachoIndex} (Ped #${d.parentPedido.id}) - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`
-            : `${d.id} - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`;
+
+          if (d.isDespacho) {
+            const totalTeo = d.parentPedido ? (d.parentPedido.despachos ? Math.max(d.parentPedido.despachos.length, d.parentPedido.CantRealDespachos) : (d.parentPedido.CantCargas || 1)) : 1;
+            const baseLabel = `Despacho ${d.despachoIndex} de ${totalTeo} - ${d.CantProgramada} m3 - Descarga ${d.HoraInicio}`;
+            if (isFirst) {
+              return `Ped #${d.parentPedido.id} - ${d.parentPedido.Cliente} - ${d.Obra} - ${d.parentPedido.CantProgramada} m3 / ${baseLabel}`;
+            }
+            return baseLabel;
+          }
+
+          return `${d.id} - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`;
         })
         .each(function (d) {
           const self = d3.select(this);
