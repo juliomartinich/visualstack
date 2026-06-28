@@ -49,6 +49,38 @@ function drawGrids(g, scales, maxX, granularidad, innerW, innerH, yMax) {
         .tickSize(-innerH)
         .tickFormat("")
     );
+
+  // Draw vertical line for report time
+  const vg1 = document.getElementById("filter-viewgantt")?.value;
+  const vg2 = document.getElementById("header-viewgantt")?.value;
+  const currentGanttView = (vg2 || vg1 || "pedidos").trim();
+
+  if ((currentGanttView === "despachos_reales" || currentGanttView === "despachos_mix") && window.horaReporte) {
+    const reportMin = safeHhmmssToMin(window.horaReporte);
+    if (reportMin !== null) {
+      const xPos = scales.x(reportMin / granularidad);
+      g.append("line")
+        .attr("class", "report-time-line")
+        .attr("x1", xPos)
+        .attr("x2", xPos)
+        .attr("y1", 0)
+        .attr("y2", innerH)
+        .attr("stroke", "#d62728")
+        .attr("stroke-width", 1.5)
+        .attr("stroke-dasharray", "4,4")
+        .style("pointer-events", "none");
+
+      g.append("text")
+        .attr("class", "report-time-label")
+        .attr("x", xPos + 4)
+        .attr("y", 12)
+        .attr("font-size", 9)
+        .attr("fill", "#d62728")
+        .attr("font-weight", "bold")
+        .text(`Reporte: ${window.horaReporte.substring(0, 5)}`)
+        .style("pointer-events", "none");
+    }
+  }
 }
 
 /* ==== * Ejes * ===================== */
@@ -210,9 +242,11 @@ function createArea(scales, yScale) {
 }
 
 function getColorSort(pedido) {
+  if (pedido.isAnulado) {
+    return "#e63946";
+  }
   const ref = pedido.isDespacho ? pedido.parentPedido : pedido;
-  const isRealView = (typeof getCurrentGraphView === 'function' && (getCurrentGraphView() === 'camiones_cd' || getCurrentGraphView() === 'camiones_mix')) || (pedido.isRealDespacho || pedido.isMixedDespacho);
-  const maxCam = (isRealView && ref.MaxRealCamiones !== undefined) ? ref.MaxRealCamiones : ref.MaxCamiones;
+  const maxCam = ref.MaxCamiones;
 
   if (ref.CantProgramada > 100) {
     return COLORS.multi;
@@ -236,6 +270,9 @@ function getColorSort(pedido) {
 
 /* ==== * Color de Área * ===================== */
 function getColorOrigen(pedido) {
+  if (pedido.isAnulado) {
+    return "#e63946";
+  }
   const ref = pedido.isDespacho ? pedido.parentPedido : pedido;
   if (!window.pedidoColorsMap) return getColorSort(ref);
   // ColorPedido suele ser el ID en el mapa
@@ -244,9 +281,11 @@ function getColorOrigen(pedido) {
 }
 
 function getAreaColor(pedido) {
+  if (pedido.isAnulado) {
+    return "#e63946";
+  }
   const ref = pedido.isDespacho ? pedido.parentPedido : pedido;
-  const isRealView = (typeof getCurrentGraphView === 'function' && (getCurrentGraphView() === 'camiones_cd' || getCurrentGraphView() === 'camiones_mix')) || (pedido.isRealDespacho || pedido.isMixedDespacho);
-  const maxCam = (isRealView && ref.MaxRealCamiones !== undefined) ? ref.MaxRealCamiones : ref.MaxCamiones;
+  const maxCam = ref.MaxCamiones;
 
   if (ref.CantProgramada > 100) return AREACOLORS.masivo;
   if (ref.ColorPedido == 11 || ref.ColorPedido == 12) return AREACOLORS.color11_12;
@@ -506,7 +545,7 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
       // Descargas
       rowsG.each(function (pedido) {
         const offset = pedido.XG?.offset ?? 0;
-        const descargasX = (pedido.XG?.descargarel ?? []).map((rel, i) => ({
+        const descargasX = (pedido.isAnulado || !pedido.XG?.descargarel) ? [] : (pedido.XG.descargarel ?? []).map((rel, i) => ({
           key: i,
           x: offset + rel
         }));
@@ -528,10 +567,13 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
         .join("text")
         .attr("class", "gantt-label")
         .attr("y", rowHeight - 2)
-        .attr("fill", "#444")
+        .attr("fill", d => d.isAnulado ? "#ffffff" : "#444")
         .attr("font-size", 11)
         .text(d => {
           if (d.isRealDespacho) {
+            if (d.isAnulado) {
+              return `Ticket #${d.ticketId} (ANULADO) (Camión ${d.Camion}) (Ped #${d.parentPedido.id}) - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`;
+            }
             return `Despacho Real ${d.despachoIndex} de ${d.parentPedido.CantRealDespachos} (Ticket #${d.ticketId}, Camión ${d.Camion}) (Ped #${d.parentPedido.id}) - ${d.Obra} - ${d.CantProgramada} m3 - ${d.HoraInicio}`;
           }
           return d.isDespacho
@@ -589,6 +631,44 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
           .lower(); // Mandar al fondo para no bloquear clics en filas
       } else {
         interactionRect.attr("height", "100%");
+      }
+
+      // Draw vertical line for report time in Gantt panel
+      g.selectAll(".report-time-line-gantt").remove();
+      g.selectAll(".report-time-label-gantt").remove();
+
+      const vg1 = document.getElementById("filter-viewgantt")?.value;
+      const vg2 = document.getElementById("header-viewgantt")?.value;
+      const currentGanttView = (vg2 || vg1 || "pedidos").trim();
+
+      if ((currentGanttView === "despachos_reales" || currentGanttView === "despachos_mix") && window.horaReporte) {
+        const reportMin = safeHhmmssToMin(window.horaReporte);
+        if (reportMin !== null) {
+          const configGran = window.CFG ? window.CFG.granularidadMin : 5;
+          const xPos = scales.x(reportMin / configGran);
+          const ganttHeight = totalHeight - 20;
+
+          g.append("line")
+            .attr("class", "report-time-line-gantt")
+            .attr("x1", xPos)
+            .attr("x2", xPos)
+            .attr("y1", 0)
+            .attr("y2", ganttHeight)
+            .attr("stroke", "#d62728")
+            .attr("stroke-width", 1.5)
+            .attr("stroke-dasharray", "4,4")
+            .style("pointer-events", "none");
+
+          g.append("text")
+            .attr("class", "report-time-label-gantt")
+            .attr("x", xPos + 4)
+            .attr("y", ganttHeight - 4)
+            .attr("font-size", 9)
+            .attr("fill", "#d62728")
+            .attr("font-weight", "bold")
+            .text(`Reporte: ${window.horaReporte.substring(0, 5)}`)
+            .style("pointer-events", "none");
+        }
       }
 
       return { svg, g, interactionRect };

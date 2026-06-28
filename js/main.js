@@ -40,6 +40,7 @@ Promise.all([
     window.pedidoColorsMap = new Map(coloresData.map(c => [c.id, c.color]));
     /* ===== META INFO ===== */
     const rawReportDate = data.DiaReporte;
+    window.horaReporte = data.HoraReporte;
     const meta = {
       DiaReporte: formatFecha(rawReportDate),
       HoraReporte: data.HoraReporte
@@ -62,7 +63,7 @@ Promise.all([
           .filter(([tId, t]) => String(t.Pedido) === id)
           .map(([tId, t]) => ({ ...t, ticketId: tId }));
         result.realDespachos = calculateRealDespachosForPedido(result, orderTickets, CFG.granularidadMin);
-        result.CantRealDespachos = result.realDespachos.length;
+        result.CantRealDespachos = result.realDespachos.filter(d => !d.isAnulado).length;
 
         // Calculate MaxRealCamiones (maximum simultaneous trucks active at any minute)
         if (result.realDespachos.length === 0) {
@@ -457,8 +458,7 @@ Promise.all([
       const filtered = isChecked
         ? pedidos.filter(p => {
             const ref = p.parentPedido || p;
-            const isRealView = (typeof getCurrentGraphView === 'function' && (getCurrentGraphView() === 'camiones_cd' || getCurrentGraphView() === 'camiones_mix')) || (p.isRealDespacho || p.isMixedDespacho);
-            const maxCam = (isRealView && ref.MaxRealCamiones !== undefined) ? ref.MaxRealCamiones : ref.MaxCamiones;
+            const maxCam = ref.MaxCamiones;
             return ref.Confirmado === "SI" && maxCam === 1;
           })
         : pedidos;
@@ -797,7 +797,7 @@ Promise.all([
         if (yMax < 10) yMax = 10;
         scales = createScales({ xMin, xMax, yMax, innerW, innerH });
       } else {
-        if (currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd') {
+        if (currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd' || currentGraphView === 'camiones_mix') {
           yMax = Math.ceil(globalMaxOcupacionCamiones / CFG.yStep) * CFG.yStep;
         } else {
           yMax = Math.ceil(curOcupacionMax / CFG.yStep) * CFG.yStep;
@@ -937,8 +937,7 @@ Promise.all([
       let filteredForGantt = (filterCheck.property("checked") || (!headerFilterCheck.empty() && headerFilterCheck.property("checked")))
         ? pedidos.filter(p => {
             const ref = p.parentPedido || p;
-            const isRealView = (typeof getCurrentGraphView === 'function' && (getCurrentGraphView() === 'camiones_cd' || getCurrentGraphView() === 'camiones_mix')) || (p.isRealDespacho || p.isMixedDespacho);
-            const maxCam = (isRealView && ref.MaxRealCamiones !== undefined) ? ref.MaxRealCamiones : ref.MaxCamiones;
+            const maxCam = ref.MaxCamiones;
             return ref.Confirmado === "SI" && maxCam === 1;
           })
         : pedidos.slice(); // Create a shallow copy before sorting
@@ -947,8 +946,37 @@ Promise.all([
         filteredForGantt = decomposePedidosIntoVoyages(filteredForGantt, CFG.granularidadMin);
       }
 
-      // Force flat chronological sort by start time, overriding the stack's color grouping
-      filteredForGantt.sort((a, b) => a.XG.offset - b.XG.offset);
+      // Sort using stack priority to maintain visual order consistency across views
+      filteredForGantt.sort((a, b) => {
+        const refA = a.parentPedido || a;
+        const refB = b.parentPedido || b;
+
+        const getPriority = (p) => {
+          if ((p.CantProgramada ?? 0) > 100) return 0;
+          if (p.ColorPedido == 11 || p.ColorPedido == 12) return 1;
+          if (p.Confirmado !== "SI") return 5;
+          const maxCam = p.MaxCamiones;
+          if (maxCam > 1) return 2;
+          if (p.CantPedidosObra === 1) return 4;
+          return 3;
+        };
+
+        const prioA = getPriority(refA);
+        const prioB = getPriority(refB);
+        if (prioA !== prioB) return prioA - prioB;
+
+        const offsetA = refA.XG?.offset ?? 0;
+        const offsetB = refB.XG?.offset ?? 0;
+        if (offsetA !== offsetB) return offsetA - offsetB;
+
+        if (refA.id === refB.id) {
+          const idxA = a.despachoIndex ?? a.viajeIndex ?? 0;
+          const idxB = b.despachoIndex ?? b.viajeIndex ?? 0;
+          return idxA - idxB;
+        }
+
+        return String(refA.id).localeCompare(String(refB.id));
+      });
       
       ganttPanel.show(filteredForGantt);
 

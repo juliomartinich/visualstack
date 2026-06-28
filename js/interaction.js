@@ -234,6 +234,44 @@ function renderTooltip(panel, activa, t, granularidad) {
   const isReal = p.isRealDespacho;
   const isMixed = p.isMixedDespacho;
 
+  let rawTicketHtml = "";
+  if (p.rawTicket) {
+    const raw = p.rawTicket;
+    rawTicketHtml = `
+      <div style="margin-top: 8px; border-top: 1px dashed #ddd; padding-top: 6px; text-align: left;">
+        <span style="font-size: 10px; font-weight: 700; color: #555;">Datos Ticket Real Originales:</span>
+        <div style="background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 4px; margin-top: 4px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 8.5px; color: #777; text-align: center; table-layout: fixed;">
+            <thead>
+              <tr style="border-bottom: 1px solid #eee; background-color: #fafafa;">
+                <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Impreso">Impreso</th>
+                <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="InicioCarga">InicioCarga</th>
+                <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="FinCarga">FinCarga</th>
+                <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="AObra">AObra</th>
+                <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="EnObra">EnObra</th>
+                <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="InicioDescarga">InicioDescarga</th>
+                <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Aplanta">Aplanta</th>
+                <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Enplanta">Enplanta</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding: 3px 1px; border-bottom: 1px solid #f0f0f0;">${raw.Impreso || '-'}</td>
+                <td style="padding: 3px 1px; border-bottom: 1px solid #f0f0f0;">${raw.InicioCarga || '-'}</td>
+                <td style="padding: 3px 1px; border-bottom: 1px solid #f0f0f0;">${raw.FinCarga || '-'}</td>
+                <td style="padding: 3px 1px; border-bottom: 1px solid #f0f0f0;">${raw.AObra || '-'}</td>
+                <td style="padding: 3px 1px; border-bottom: 1px solid #f0f0f0;">${raw.EnObra || '-'}</td>
+                <td style="padding: 3px 1px; border-bottom: 1px solid #f0f0f0;">${raw.InicioDescarga || '-'}</td>
+                <td style="padding: 3px 1px; border-bottom: 1px solid #f0f0f0;">${raw.Aplanta || '-'}</td>
+                <td style="padding: 3px 1px; border-bottom: 1px solid #f0f0f0;">${raw.Enplanta || '-'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
   let gridContent = "";
   if (isReal || isMixed) {
     const repaired = repairTicketTimes(p.ticketTimes);
@@ -242,6 +280,26 @@ function renderTooltip(panel, activa, t, granularidad) {
     const estadia = repaired.Aplanta - repaired.EnObra;
     const retorno = repaired.Enplanta - repaired.Aplanta;
     const ciclo = repaired.Enplanta - repaired.Impreso;
+
+    let anulacionHtml = "";
+    if (p.rawTicket && p.rawTicket.CodAnulacion !== undefined) {
+      const cod = p.rawTicket.CodAnulacion;
+      if (cod !== "0" && cod !== "") {
+        anulacionHtml = `<span>Cod. Anulación</span><b style="grid-column: 2 / span 3; text-align: left; color: #e63946; font-weight: bold;">${cod} (ANULADO)</b>`;
+      } else {
+        anulacionHtml = `<span>Cod. Anulación</span><b style="grid-column: 2 / span 3; text-align: left; color: #777; font-weight: normal;">0 (No anulado)</b>`;
+      }
+    }
+
+    let redestinoHtml = "";
+    if (p.rawTicket && p.rawTicket.TicketRedestino !== undefined) {
+      const red = p.rawTicket.TicketRedestino;
+      if (red !== "0" && red !== "") {
+        redestinoHtml = `<span>Ticket Redestino</span><b style="grid-column: 2 / span 3; text-align: left; color: #ff8c00; font-weight: bold;">${red}</b>`;
+      } else {
+        redestinoHtml = `<span>Ticket Redestino</span><b style="grid-column: 2 / span 3; text-align: left; color: #777; font-weight: normal;">0 (Ninguno)</b>`;
+      }
+    }
 
     const teo = p.mixedType === "teorico" ? p : (ref.despachos ? ref.despachos.find(d => d.despachoIndex === p.despachoIndex) : null);
     const teoAsignacion = teo ? teo.HoraAsignacionHhmm : "-";
@@ -301,6 +359,9 @@ function renderTooltip(panel, activa, t, granularidad) {
         }
         return `<b style="grid-column: 3;">${valRealStr}</b>${diffHtml}`;
       } else {
+        if (p.isRealDespacho || valRealStr === "00:00" || valRealStr === "-") {
+          return `<b style="grid-column: 3; color: #bbb; font-weight: normal;">-</b><span style="grid-column: 4; text-align: center; color: #bbb;">─</span>`;
+        }
         return `<b style="grid-column: 3; color: #888; font-weight: normal;">${valRealStr}*</b><span style="grid-column: 4; text-align: center; color: #888;">─</span>`;
       }
     };
@@ -332,6 +393,8 @@ function renderTooltip(panel, activa, t, granularidad) {
         <span>Confirmado</span><b style="grid-column: 2 / span 3; text-align: left;">${p.Confirmado}</b>
         
         <span>Pedidos de la Obra</span><b style="grid-column: 2 / span 3; text-align: left;">${ref.CantPedidosObra}</b>
+        ${anulacionHtml}
+        ${redestinoHtml}
     `;
   } else {
     gridContent = `
@@ -364,11 +427,15 @@ function renderTooltip(panel, activa, t, granularidad) {
           <div style="font-weight: 600; font-size: 12px; color: #444;">
             ${p.isDespacho ? (
               isMixed ? (
-                p.mixedType === "real" ? `Despacho Mix ${p.despachoIndex} (Real)` :
-                p.mixedType === "en_curso" ? `Despacho Mix ${p.despachoIndex} (En Curso)` :
+                p.mixedType === "real" ? `Despacho Mix ${p.despachoIndex} (Real - Ticket #${p.ticketId})` :
+                p.mixedType === "en_curso" ? `Despacho Mix ${p.despachoIndex} (En Curso - Ticket #${p.ticketId})` :
+                p.mixedType === "anulado" ? `Despacho Mix (ANULADO - Ticket #${p.ticketId})` :
                 `Despacho Mix ${p.despachoIndex} (Teórico)`
               ) : (
-                isReal ? `Despacho Real ${p.despachoIndex} de ${ref.CantRealDespachos}` : `Despacho ${p.despachoIndex} de ${ref.CantCargas}`
+                isReal ? (
+                  p.isAnulado ? `Despacho Real (ANULADO - Ticket #${p.ticketId})` :
+                  p.isEnCursoDespacho ? `Despacho Real ${p.despachoIndex} de ${ref.CantRealDespachos} (En Curso - Ticket #${p.ticketId})` : `Despacho Real ${p.despachoIndex} de ${ref.CantRealDespachos} (Ticket #${p.ticketId})`
+                ) : `Despacho ${p.despachoIndex} de ${ref.CantCargas}`
               )
             ) : ''}
           </div>
@@ -389,6 +456,7 @@ function renderTooltip(panel, activa, t, granularidad) {
           <span>Cursor: ${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")} &middot; Color: ${p.ColorPedido}</span>
           <span style="flex-grow: 1; margin-left: 10px; margin-right: 10px; height: 12px; background-color: ${window.pedidoColorsMap ? window.pedidoColorsMap.get(p.ColorPedido) : '#ccc'}; border: 1px solid #ccc; border-radius: 2px;"></span>
         </div>
+        ${rawTicketHtml}
       </div>
     </div>
   `);
