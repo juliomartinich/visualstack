@@ -55,7 +55,9 @@ function drawGrids(g, scales, maxX, granularidad, innerW, innerH, yMax) {
   const vg2 = document.getElementById("header-viewgantt")?.value;
   const currentGanttView = (vg2 || vg1 || "pedidos").trim();
 
-  if ((currentGanttView === "despachos_reales" || currentGanttView === "despachos_mix") && window.horaReporte) {
+  const isSameDay = window.selectedDate && window.diaReporte && window.selectedDate.replace(/-/g, "") === window.diaReporte;
+
+  if (isSameDay && (currentGanttView === "despachos_reales" || currentGanttView === "despachos_mix") && window.horaReporte) {
     const reportMin = safeHhmmssToMin(window.horaReporte);
     if (reportMin !== null) {
       const xPos = scales.x(reportMin / granularidad);
@@ -68,16 +70,6 @@ function drawGrids(g, scales, maxX, granularidad, innerW, innerH, yMax) {
         .attr("stroke", "#d62728")
         .attr("stroke-width", 1.5)
         .attr("stroke-dasharray", "4,4")
-        .style("pointer-events", "none");
-
-      g.append("text")
-        .attr("class", "report-time-label")
-        .attr("x", xPos + 4)
-        .attr("y", 12)
-        .attr("font-size", 9)
-        .attr("fill", "#d62728")
-        .attr("font-weight", "bold")
-        .text(`Reporte: ${window.horaReporte.substring(0, 5)}`)
         .style("pointer-events", "none");
     }
   }
@@ -641,7 +633,9 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
       const vg2 = document.getElementById("header-viewgantt")?.value;
       const currentGanttView = (vg2 || vg1 || "pedidos").trim();
 
-      if ((currentGanttView === "despachos_reales" || currentGanttView === "despachos_mix") && window.horaReporte) {
+      const isSameDay = window.selectedDate && window.diaReporte && window.selectedDate.replace(/-/g, "") === window.diaReporte;
+
+      if (isSameDay && (currentGanttView === "despachos_reales" || currentGanttView === "despachos_mix") && window.horaReporte) {
         const reportMin = safeHhmmssToMin(window.horaReporte);
         if (reportMin !== null) {
           const configGran = window.CFG ? window.CFG.granularidadMin : 5;
@@ -657,16 +651,6 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
             .attr("stroke", "#d62728")
             .attr("stroke-width", 1.5)
             .attr("stroke-dasharray", "4,4")
-            .style("pointer-events", "none");
-
-          g.append("text")
-            .attr("class", "report-time-label-gantt")
-            .attr("x", xPos + 4)
-            .attr("y", ganttHeight - 4)
-            .attr("font-size", 9)
-            .attr("fill", "#d62728")
-            .attr("font-weight", "bold")
-            .text(`Reporte: ${window.horaReporte.substring(0, 5)}`)
             .style("pointer-events", "none");
         }
       }

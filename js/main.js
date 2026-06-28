@@ -41,6 +41,7 @@ Promise.all([
     /* ===== META INFO ===== */
     const rawReportDate = data.DiaReporte;
     window.horaReporte = data.HoraReporte;
+    window.diaReporte = data.DiaReporte;
     const meta = {
       DiaReporte: formatFecha(rawReportDate),
       HoraReporte: data.HoraReporte
@@ -475,6 +476,7 @@ Promise.all([
         d3.select("#gantt-chart").selectAll("*").remove();
       }
       const selectedDate = filterFechaPanel.value;
+      window.selectedDate = selectedDate;
       meta.DiaDespacho = formatFecha(selectedDate);
       meta.styles = getDateStyles(selectedDate);
 
