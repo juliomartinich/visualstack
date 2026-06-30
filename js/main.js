@@ -1019,7 +1019,6 @@ function initApp() {
       });
       codObraInput.dispatchEvent(new Event('input'));
     }
-}
 
 function drawTopOverlay(svg, g, meta, scales, metrics, width, filterKey = "") {
   const TRI_Y = 2;   // Pegado al borde superior (adentro)
