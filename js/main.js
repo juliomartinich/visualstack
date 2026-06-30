@@ -26,390 +26,372 @@ svg.on("mouseleave", () => resetInteraction({
 }));
 
 let pedidos, layers, area, scales, band, ganttPanel;
+let fullPedidos, meta, rawReportDate, grupos = {}, tomorrowStr, uniqueDates;
 window.appCache = {};
 
-loadAppData().then(({ fullPedidos, meta, rawReportDate }) => {
+loadAppData().then((res) => {
+  fullPedidos = res.fullPedidos;
+  meta = res.meta;
+  rawReportDate = res.rawReportDate;
 
-    // Helpers for dynamic styling based on date
-    function getTomorrow(yyyymmdd) {
-      if (!yyyymmdd || yyyymmdd.length !== 8) return null;
-      const y = Number(yyyymmdd.slice(0, 4));
-      const m = Number(yyyymmdd.slice(4, 6)) - 1;
-      const d = Number(yyyymmdd.slice(6, 8));
-      const dt = new Date(y, m, d);
-      dt.setDate(dt.getDate() + 1);
-      return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, "0")}${String(dt.getDate()).padStart(2, "0")}`;
+  // Build groups from plantsData
+  Object.entries(window.plantasData).forEach(([code, p]) => {
+    const g = p.grupo_despacho;
+    if (g) {
+      if (!grupos[g]) grupos[g] = [];
+      grupos[g].push(code);
     }
+  });
 
-    const tomorrowStr = getTomorrow(rawReportDate);
+  tomorrowStr = getTomorrow(rawReportDate);
+  uniqueDates = [...new Set(fullPedidos.map(p => p["Fecha Pedido"]))].sort();
 
-    function getDateStyles(dateStr) {
-      if (dateStr === rawReportDate) return { bg: "#ff8c00", text: "#fff", label: " (Hoy)" };
-      if (dateStr === tomorrowStr) return { bg: "#28a745", text: "#fff", label: " (Mañana)" };
-      if (dateStr > tomorrowStr) return { bg: "#add8e6", text: "#000", label: "" };
-      return { bg: "#eee", text: "#555", label: "" };
+  initApp();
+});
+
+// Helpers for dynamic styling based on date
+function getTomorrow(yyyymmdd) {
+  if (!yyyymmdd || yyyymmdd.length !== 8) return null;
+  const y = Number(yyyymmdd.slice(0, 4));
+  const m = Number(yyyymmdd.slice(4, 6)) - 1;
+  const d = Number(yyyymmdd.slice(6, 8));
+  const dt = new Date(y, m, d);
+  dt.setDate(dt.getDate() + 1);
+  return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, "0")}${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+function getDateStyles(dateStr) {
+  if (dateStr === rawReportDate) return { bg: "#ff8c00", text: "#fff", label: " (Hoy)" };
+  if (dateStr === tomorrowStr) return { bg: "#28a745", text: "#fff", label: " (Mañana)" };
+  if (dateStr > tomorrowStr) return { bg: "#add8e6", text: "#000", label: "" };
+  return { bg: "#eee", text: "#555", label: "" };
+}
+
+function populateDateSelect(selectEl, customDates = null) {
+  const datesToUse = customDates || uniqueDates;
+  const currentVal = selectEl.value;
+  selectEl.innerHTML = "";
+  datesToUse.forEach(date => {
+    const opt = document.createElement("option");
+    const styles = getDateStyles(date);
+    opt.value = date;
+    opt.textContent = (selectEl.id === "header-filter-fecha" ? "Despacho: " : "") + formatFecha(date) + styles.label;
+    opt.style.backgroundColor = styles.bg;
+    opt.style.color = styles.text;
+    selectEl.appendChild(opt);
+  });
+  if (datesToUse.includes(currentVal)) {
+    selectEl.value = currentVal;
+  }
+}
+
+function updateSelectStyle(dateSelect, plantSelect) {
+  const styles = getDateStyles(dateSelect.value);
+  dateSelect.style.backgroundColor = styles.bg;
+  dateSelect.style.color = styles.text;
+  if (plantSelect) {
+    plantSelect.style.backgroundColor = styles.bg;
+    plantSelect.style.color = styles.text;
+  }
+}
+
+function enrichPedidosForDate(pedidosForDay) {
+  const plantToScope = {};
+  Object.entries(window.plantasData).forEach(([code, p]) => {
+    plantToScope[code] = p.grupo_despacho || code;
+  });
+  const obraScopeCounts = {};
+  pedidosForDay.forEach(p => {
+    const scope = plantToScope[p.Planta] || p.Planta;
+    const key = `${p.CodObra}_${scope}`;
+    obraScopeCounts[key] = (obraScopeCounts[key] || 0) + 1;
+  });
+  pedidosForDay.forEach(p => {
+    const scope = plantToScope[p.Planta] || p.Planta;
+    const key = `${p.CodObra}_${scope}`;
+    p.CantPedidosObra = obraScopeCounts[key];
+
+    p.descargasBandXY = (p.XG?.descargarel ?? []).map(idx => ({
+      key: idx,
+      x: (p.XG?.offset ?? 0) + idx
+    }));
+  });
+}
+
+function updateFiltersForDate() {
+  const filterSelect = document.getElementById("filter-plantagrupo");
+  const headerFilterSelect = document.getElementById("header-filter-plantagrupo");
+  const reportDatePedidos = fullPedidos.filter(p => p["Fecha Pedido"] === rawReportDate);
+  filterSelect.innerHTML = "";
+  headerFilterSelect.innerHTML = "";
+  const plantVolumes = {};
+  let totalVolumen = 0;
+  reportDatePedidos.forEach(p => {
+    const vol = p.CantProgramada || 0;
+    plantVolumes[p.Planta] = (plantVolumes[p.Planta] || 0) + vol;
+    totalVolumen += vol;
+  });
+  const totalHeader = document.createElement("optgroup");
+  totalHeader.label = `TOTAL GENERAL (${formatM3(totalVolumen)} m³)`;
+  filterSelect.appendChild(totalHeader);
+
+  const groupVolumes = {};
+  Object.keys(grupos).forEach(gName => {
+    groupVolumes[gName] = grupos[gName].reduce((acc, pCode) => acc + (plantVolumes[pCode] || 0), 0);
+  });
+
+  const uniquePlantas = [...new Set(reportDatePedidos.map(p => p.Planta))].sort();
+  const ungrouped = uniquePlantas.filter(p => !window.plantasData[p]?.grupo_despacho);
+
+  Object.keys(grupos).sort().forEach(gName => {
+    const plantsInGroup = grupos[gName].filter(p => uniquePlantas.includes(p));
+    if (plantsInGroup.length === 0) return;
+    const gOpt = document.createElement("option");
+    gOpt.value = `Grupo:${gName}`;
+    gOpt.textContent = `Grupo: ${gName} (${formatM3(groupVolumes[gName])} m³)`;
+    gOpt.style.fontWeight = "bold";
+    filterSelect.appendChild(gOpt);
+    plantsInGroup.sort().forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = `Planta:${p}`;
+      const name = window.plantasData[p]?.nombre || "";
+      const pVol = plantVolumes[p] || 0;
+      opt.textContent = `\u00A0\u00A0\u00A0${name ? `${p} - ${name} (${formatM3(pVol)} m³)` : `${p} (${formatM3(pVol)} m³)`}`;
+      filterSelect.appendChild(opt);
+    });
+  });
+
+  if (ungrouped.length > 0) {
+    const otherGroup = document.createElement("optgroup");
+    const otherVol = ungrouped.reduce((acc, p) => acc + (plantVolumes[p] || 0), 0);
+    otherGroup.label = `Otras Plantas (${formatM3(otherVol)} m³)`;
+    ungrouped.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = `Planta:${p}`;
+      const name = window.plantasData[p]?.nombre || "";
+      opt.textContent = name ? `${p} - ${name} (${formatM3(plantVolumes[p] || 0)} m³)` : `${p} (${formatM3(plantVolumes[p] || 0)} m³)`;
+      otherGroup.appendChild(opt);
+    });
+    filterSelect.appendChild(otherGroup);
+  }
+
+  headerFilterSelect.innerHTML = filterSelect.innerHTML;
+  [...headerFilterSelect.options].forEach(opt => {
+    opt.textContent = opt.textContent
+      .replace(/^\u00A0\u00A0\u00A0/, "")
+      .replace(/\s*\([^)]+m³\)/, "");
+  });
+
+  let savedFilter = localStorage.getItem("filterPlantaGrupo");
+  if (!savedFilter || ![...filterSelect.options].some(o => o.value === savedFilter)) {
+    const rmExists = Object.keys(grupos).includes("RM") && grupos["RM"].some(p => uniquePlantas.includes(p));
+    savedFilter = rmExists ? "Grupo:RM" : (filterSelect.options[0]?.value || "");
+  }
+  filterSelect.value = savedFilter;
+  headerFilterSelect.value = savedFilter;
+  return savedFilter;
+}
+
+function renderDateOptionsForFilter(filterKey) {
+  let allowedPlants = [];
+  if (filterKey.startsWith("Grupo:")) {
+    allowedPlants = grupos[filterKey.split(":")[1]] || [];
+  } else {
+    allowedPlants = [filterKey.split(":")[1]];
+  }
+
+  const datesForFilter = [...new Set(
+    fullPedidos
+      .filter(p => allowedPlants.includes(p.Planta))
+      .map(p => p["Fecha Pedido"])
+  )].sort();
+
+  const filterFechaPanel = document.getElementById("filter-fecha");
+  const filterFechaHeader = document.getElementById("header-filter-fecha");
+  const currentDate = filterFechaPanel.value;
+  populateDateSelect(filterFechaPanel, datesForFilter);
+  populateDateSelect(filterFechaHeader, datesForFilter);
+
+  if (!datesForFilter.includes(currentDate)) {
+    const fallback = datesForFilter.includes(rawReportDate) ? rawReportDate : (datesForFilter[0] || "");
+    filterFechaPanel.value = fallback;
+    filterFechaHeader.value = fallback;
+  }
+  updateSelectStyle(filterFechaHeader, document.getElementById("header-filter-plantagrupo"));
+}
+
+function handleDateChange(e) {
+  const filterFechaPanel = document.getElementById("filter-fecha");
+  const filterFechaHeader = document.getElementById("header-filter-fecha");
+  const newDate = e.target.value;
+  filterFechaPanel.value = newDate;
+  filterFechaHeader.value = newDate;
+  updateSelectStyle(filterFechaHeader, document.getElementById("header-filter-plantagrupo"));
+  window.appCache = {};
+  const newSaved = updateFiltersForDate();
+  renderDateOptionsForFilter(newSaved);
+  renderDashboard(newSaved);
+}
+
+function handleObraInput(e) {
+  const codObraInput = document.getElementById("filter-codobra");
+  const headerCodObraInput = document.getElementById("header-filter-codobra");
+  const val = e.target.value;
+  codObraInput.value = val;
+  if (headerCodObraInput) headerCodObraInput.value = val;
+
+  const selectedId = val ? val.split(" - ")[0].trim() : "";
+  d3.selectAll(".pedido").select("path.area").style("fill", d => {
+    if (selectedId && String(d.CodObra) === selectedId) return "red";
+    return getAreaColor(d);
+  });
+  if (selectedId) {
+    const matchingPedidos = pedidos.filter(p => String(p.CodObra) === selectedId).sort((a, b) => a.XG.offset - b.XG.offset);
+    if (matchingPedidos.length > 0) {
+      const current = window.selectedPedido.current;
+      const alreadySelected = current && String(current.CodObra) === selectedId;
+      
+      if (!alreadySelected) {
+        const first = matchingPedidos[0];
+        window.selectPedido(first, false, true);
+        if (window.moveCursorTo) {
+          const midT = first.XG.offset + Math.floor(first.XG.finrel / 2);
+          window.moveCursorTo(midT);
+        }
+      }
     }
+  } else {
+    if (e.isTrusted) {
+      window.selectPedido(null, false, true);
+      if (window.moveCursorTo) window.moveCursorTo(null);
+    }
+  }
+}
 
-    // Populate Date Filter (Synchronized pair)
-    const uniqueDates = [...new Set(fullPedidos.map(p => p["Fecha Pedido"]))].sort();
-    const filterFechaPanel = document.getElementById("filter-fecha");
+function handleFilterCheck() {
+  const filterCheck = d3.select("#filter-green");
+  const headerFilterCheck = d3.select("#header-filter-green");
+  const isChecked = d3.select(this).property("checked");
+  filterCheck.property("checked", isChecked);
+  if (!headerFilterCheck.empty()) headerFilterCheck.property("checked", isChecked);
 
-    // Create header selects transparent container
-    const dateContainer = document.getElementById("header-date-container");
-    dateContainer.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 10px; font-size: 11px; background: transparent; padding: 0; flex-wrap: nowrap; overflow: hidden;">
-        <!-- Grupo Día -->
-        <div style="display: flex; align-items: center; gap: 4px;">
-          <label for="header-filter-fecha" style="font-weight: 600; color: #555;">Día:</label>
-          <select id="header-filter-fecha" title="Cambiar Fecha" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
-        </div>
-        
-        <!-- Grupo Planta -->
-        <div style="display: flex; align-items: center; gap: 4px;">
-          <label for="header-filter-plantagrupo" style="font-weight: 600; color: #555;">Planta:</label>
-          <select id="header-filter-plantagrupo" title="Cambiar Planta" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
-        </div>      
+  const filtered = isChecked
+    ? pedidos.filter(p => {
+        const ref = p.parentPedido || p;
+        const maxCam = ref.MaxCamiones;
+        return ref.Confirmado === "SI" && maxCam === 1;
+      })
+    : pedidos;
+  ganttPanel.show(filtered);
+}
 
-        <!-- Grupo Vista -->
-        <div style="display: flex; align-items: center; gap: 4px;">
-          <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
-          <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
-            <option value="camiones">Camiones</option>
-            <option value="plantas">Asignaciones</option>
-            <option value="colas">Plantas</option>
-            <option value="recursos">Recursos</option>
-          </select>
-        </div>
+function initApp() {
+  const filterFechaPanel = document.getElementById("filter-fecha");
 
-        <!-- Grupo Gantt -->
-        <div style="display: flex; align-items: center; gap: 4px;">
-          <label for="header-viewgantt" style="font-weight: 600; color: #555;">Gantt:</label>
-          <select id="header-viewgantt" name="headerViewGantt" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
-            <option value="pedidos">Pedidos</option>
-            <option value="despachos">Despachos</option>
-            <option value="despachos_reales">Despachos reales</option>
-            <option value="despachos_mix">Despachos Mix</option>
-          </select>
-        </div>
+  // Create header selects transparent container
+  const dateContainer = document.getElementById("header-date-container");
+  dateContainer.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 10px; font-size: 11px; background: transparent; padding: 0; flex-wrap: nowrap; overflow: hidden;">
+      <!-- Grupo Día -->
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <label for="header-filter-fecha" style="font-weight: 600; color: #555;">Día:</label>
+        <select id="header-filter-fecha" title="Cambiar Fecha" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
       </div>
-    `;
-    const filterFechaHeader = document.getElementById("header-filter-fecha");
-    const filterPlantaHeader = document.getElementById("header-filter-plantagrupo");
+      
+      <!-- Grupo Planta -->
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <label for="header-filter-plantagrupo" style="font-weight: 600; color: #555;">Planta:</label>
+        <select id="header-filter-plantagrupo" title="Cambiar Planta" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
+      </div>      
 
-    function populateDateSelect(selectEl, customDates = null) {
-      const datesToUse = customDates || uniqueDates;
-      const currentVal = selectEl.value;
-      selectEl.innerHTML = "";
-      datesToUse.forEach(date => {
-        const opt = document.createElement("option");
-        const styles = getDateStyles(date);
-        opt.value = date;
-        opt.textContent = (selectEl.id === "header-filter-fecha" ? "Despacho: " : "") + formatFecha(date) + styles.label;
-        opt.style.backgroundColor = styles.bg;
-        opt.style.color = styles.text;
-        selectEl.appendChild(opt);
-      });
-      // Restore value if still valid
-      if (datesToUse.includes(currentVal)) {
-        selectEl.value = currentVal;
-      }
+      <!-- Grupo Vista -->
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
+        <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
+          <option value="camiones">Camiones</option>
+          <option value="plantas">Asignaciones</option>
+          <option value="colas">Plantas</option>
+          <option value="recursos">Recursos</option>
+        </select>
+      </div>
+
+      <!-- Grupo Gantt -->
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <label for="header-viewgantt" style="font-weight: 600; color: #555;">Gantt:</label>
+        <select id="header-viewgantt" name="headerViewGantt" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
+          <option value="pedidos">Pedidos</option>
+          <option value="despachos">Despachos</option>
+          <option value="despachos_reales">Despachos reales</option>
+          <option value="despachos_mix">Despachos Mix</option>
+        </select>
+      </div>
+    </div>
+  `;
+
+  const filterFechaHeader = document.getElementById("header-filter-fecha");
+  const filterPlantaHeader = document.getElementById("header-filter-plantagrupo");
+
+  populateDateSelect(filterFechaPanel);
+  populateDateSelect(filterFechaHeader);
+
+  const initialDate = uniqueDates.includes(rawReportDate) ? rawReportDate : (uniqueDates[0] || "");
+  filterFechaPanel.value = initialDate;
+  filterFechaHeader.value = initialDate;
+
+  updateSelectStyle(filterFechaHeader, filterPlantaHeader);
+
+  const filterSelect = document.getElementById("filter-plantagrupo");
+  const codObraInput = document.getElementById("filter-codobra");
+  const headerCodObraInput = document.getElementById("header-filter-codobra");
+  const filterCheck = d3.select("#filter-green");
+  const headerFilterCheck = d3.select("#header-filter-green");
+
+  filterFechaPanel.addEventListener("change", handleDateChange);
+  filterFechaHeader.addEventListener("change", handleDateChange);
+
+  const handlePlantaChange = (e) => {
+    const val = e.target.value;
+    filterSelect.value = val;
+    filterPlantaHeader.value = val;
+    localStorage.setItem("filterPlantaGrupo", val);
+    if (codObraInput) codObraInput.value = "";
+    if (headerCodObraInput) headerCodObraInput.value = "";
+
+    const currentDate = filterFechaPanel.value;
+    let allowedPlants = [];
+    if (val.startsWith("Grupo:")) {
+      allowedPlants = grupos[val.split(":")[1]] || [];
+    } else {
+      allowedPlants = [val.split(":")[1]];
     }
 
-    populateDateSelect(filterFechaPanel);
-    populateDateSelect(filterFechaHeader);
+    const hasOrdersCurrentDate = fullPedidos.some(p =>
+      p["Fecha Pedido"] === currentDate && allowedPlants.includes(p.Planta)
+    );
 
-    const initialDate = uniqueDates.includes(rawReportDate) ? rawReportDate : (uniqueDates[0] || "");
-    filterFechaPanel.value = initialDate;
-    filterFechaHeader.value = initialDate;
-
-    function updateSelectStyle(dateSelect, plantSelect) {
-      const styles = getDateStyles(dateSelect.value);
-      dateSelect.style.backgroundColor = styles.bg;
-      dateSelect.style.color = styles.text;
-      if (plantSelect) {
-        plantSelect.style.backgroundColor = styles.bg;
-        plantSelect.style.color = styles.text;
-      }
-    }
-    updateSelectStyle(filterFechaHeader, filterPlantaHeader);
-
-    function enrichPedidosForDate(pedidosForDay) {
-      const plantToScope = {};
-      Object.entries(plantasData).forEach(([code, p]) => {
-        plantToScope[code] = p.grupo_despacho || code;
-      });
-      const obraScopeCounts = {};
-      pedidosForDay.forEach(p => {
-        const scope = plantToScope[p.Planta] || p.Planta;
-        const key = `${p.CodObra}_${scope}`;
-        obraScopeCounts[key] = (obraScopeCounts[key] || 0) + 1;
-      });
-      pedidosForDay.forEach(p => {
-        const scope = plantToScope[p.Planta] || p.Planta;
-        const key = `${p.CodObra}_${scope}`;
-        p.CantPedidosObra = obraScopeCounts[key];
-
-        // Derivar posiciones de tiempo para la banda inferior (común a todas las vistas)
-        p.descargasBandXY = (p.XG?.descargarel ?? []).map(idx => ({
-          key: idx,
-          x: (p.XG?.offset ?? 0) + idx
-        }));
-      });
-    }
-
-    const grupos = {};
-    Object.entries(plantasData).forEach(([code, p]) => {
-      const g = p.grupo_despacho;
-      if (g) {
-        if (!grupos[g]) grupos[g] = [];
-        grupos[g].push(code);
-      }
-    });
-
-    function updateFiltersForDate() {
-      const filterSelect = document.getElementById("filter-plantagrupo");
-      const headerFilterSelect = document.getElementById("header-filter-plantagrupo");
-      // Always populate the plant list based on "Hoy" (Report Date)
-      const reportDatePedidos = fullPedidos.filter(p => p["Fecha Pedido"] === rawReportDate);
-      filterSelect.innerHTML = "";
-      headerFilterSelect.innerHTML = "";
-      const plantVolumes = {};
-      let totalVolumen = 0;
-      reportDatePedidos.forEach(p => {
-        const vol = p.CantProgramada || 0;
-        plantVolumes[p.Planta] = (plantVolumes[p.Planta] || 0) + vol;
-        totalVolumen += vol;
-      });
-      const totalHeader = document.createElement("optgroup");
-      totalHeader.label = `TOTAL GENERAL (${formatM3(totalVolumen)} m³)`;
-      filterSelect.appendChild(totalHeader);
-
-      const groupVolumes = {};
-      Object.keys(grupos).forEach(gName => {
-        groupVolumes[gName] = grupos[gName].reduce((acc, pCode) => acc + (plantVolumes[pCode] || 0), 0);
-      });
-
-      const uniquePlantas = [...new Set(reportDatePedidos.map(p => p.Planta))].sort();
-      const ungrouped = uniquePlantas.filter(p => !plantasData[p]?.grupo_despacho);
-
-      Object.keys(grupos).sort().forEach(gName => {
-        const plantsInGroup = grupos[gName].filter(p => uniquePlantas.includes(p));
-        if (plantsInGroup.length === 0) return;
-        const gOpt = document.createElement("option");
-        gOpt.value = `Grupo:${gName}`;
-        gOpt.textContent = `Grupo: ${gName} (${formatM3(groupVolumes[gName])} m³)`;
-        gOpt.style.fontWeight = "bold";
-        filterSelect.appendChild(gOpt);
-        plantsInGroup.sort().forEach(p => {
-          const opt = document.createElement("option");
-          opt.value = `Planta:${p}`;
-          const name = plantasData[p]?.nombre || "";
-          const pVol = plantVolumes[p] || 0;
-          opt.textContent = `\u00A0\u00A0\u00A0${name ? `${p} - ${name} (${formatM3(pVol)} m³)` : `${p} (${formatM3(pVol)} m³)`}`;
-          filterSelect.appendChild(opt);
-        });
-      });
-
-      if (ungrouped.length > 0) {
-        const otherGroup = document.createElement("optgroup");
-        const otherVol = ungrouped.reduce((acc, p) => acc + (plantVolumes[p] || 0), 0);
-        otherGroup.label = `Otras Plantas (${formatM3(otherVol)} m³)`;
-        ungrouped.forEach(p => {
-          const opt = document.createElement("option");
-          opt.value = `Planta:${p}`;
-          const name = plantasData[p]?.nombre || "";
-          opt.textContent = name ? `${p} - ${name} (${formatM3(plantVolumes[p] || 0)} m³)` : `${p} (${formatM3(plantVolumes[p] || 0)} m³)`;
-          otherGroup.appendChild(opt);
-        });
-        filterSelect.appendChild(otherGroup);
-      }
-
-      // Sync header filter with the same options (simple version for header)
-      headerFilterSelect.innerHTML = filterSelect.innerHTML;
-      // Clean up header filter labels for better space usage if needed
-      [...headerFilterSelect.options].forEach(opt => {
-        // Remove indentation and volume info like (123 m³)
-        opt.textContent = opt.textContent
-          .replace(/^\u00A0\u00A0\u00A0/, "")
-          .replace(/\s*\([^)]+m³\)/, "");
-      });
-
-      let savedFilter = localStorage.getItem("filterPlantaGrupo");
-      if (!savedFilter || ![...filterSelect.options].some(o => o.value === savedFilter)) {
-        const rmExists = Object.keys(grupos).includes("RM") && grupos["RM"].some(p => uniquePlantas.includes(p));
-        savedFilter = rmExists ? "Grupo:RM" : (filterSelect.options[0]?.value || "");
-      }
-      filterSelect.value = savedFilter;
-      headerFilterSelect.value = savedFilter;
-      return savedFilter;
-    }
-
-    const filterSelect = document.getElementById("filter-plantagrupo");
-    const codObraInput = document.getElementById("filter-codobra");
-    const headerCodObraInput = document.getElementById("header-filter-codobra");
-    const codObraList = document.getElementById("codobras-list");
-    const filterCheck = d3.select("#filter-green");
-    const headerFilterCheck = d3.select("#header-filter-green");
-
-    function renderDateOptionsForFilter(filterKey) {
-      let allowedPlants = [];
-      if (filterKey.startsWith("Grupo:")) {
-        allowedPlants = grupos[filterKey.split(":")[1]] || [];
-      } else {
-        allowedPlants = [filterKey.split(":")[1]];
-      }
-
-      const datesForFilter = [...new Set(
-        fullPedidos
-          .filter(p => allowedPlants.includes(p.Planta))
-          .map(p => p["Fecha Pedido"])
-      )].sort();
-
-      const currentDate = filterFechaPanel.value;
-      populateDateSelect(filterFechaPanel, datesForFilter);
-      populateDateSelect(filterFechaHeader, datesForFilter);
-
-      // If current date is gone, pick report date or first
-      if (!datesForFilter.includes(currentDate)) {
-        const fallback = datesForFilter.includes(rawReportDate) ? rawReportDate : (datesForFilter[0] || "");
-        filterFechaPanel.value = fallback;
-        filterFechaHeader.value = fallback;
-      }
+    if (!hasOrdersCurrentDate) {
+      filterFechaPanel.value = rawReportDate;
+      filterFechaHeader.value = rawReportDate;
       updateSelectStyle(filterFechaHeader, filterPlantaHeader);
     }
 
-    function handleDateChange(e) {
-      const newDate = e.target.value;
-      filterFechaPanel.value = newDate;
-      filterFechaHeader.value = newDate;
-      updateSelectStyle(filterFechaHeader, filterPlantaHeader);
-      window.appCache = {};
-      const newSaved = updateFiltersForDate();
-      renderDateOptionsForFilter(newSaved);
-      renderDashboard(newSaved);
-    }
-    filterFechaPanel.addEventListener("change", handleDateChange);
-    filterFechaHeader.addEventListener("change", handleDateChange);
+    renderDateOptionsForFilter(val);
+    renderDashboard(val);
+  };
 
-    filterSelect.addEventListener("change", (e) => {
-      const val = e.target.value;
-      filterPlantaHeader.value = val;
-      localStorage.setItem("filterPlantaGrupo", val);
-      if (codObraInput) codObraInput.value = "";
-      if (headerCodObraInput) headerCodObraInput.value = "";
+  filterSelect.addEventListener("change", handlePlantaChange);
+  filterPlantaHeader.addEventListener("change", handlePlantaChange);
 
-      const currentDate = filterFechaPanel.value;
-      let allowedPlants = [];
-      if (val.startsWith("Grupo:")) {
-        allowedPlants = grupos[val.split(":")[1]] || [];
-      } else {
-        allowedPlants = [val.split(":")[1]];
-      }
+  codObraInput.addEventListener("input", handleObraInput);
+  if (headerCodObraInput) headerCodObraInput.addEventListener("input", handleObraInput);
 
-      // Check if the NEW plant has orders on the CURRENT date
-      const hasOrdersCurrentDate = fullPedidos.some(p =>
-        p["Fecha Pedido"] === currentDate && allowedPlants.includes(p.Planta)
-      );
+  filterCheck.on("change", handleFilterCheck);
+  if (!headerFilterCheck.empty()) headerFilterCheck.on("change", handleFilterCheck);
 
-      if (!hasOrdersCurrentDate) {
-        // Only force back to Today if the new selection is inactive on the current date
-        filterFechaPanel.value = rawReportDate;
-        filterFechaHeader.value = rawReportDate;
-        updateSelectStyle(filterFechaHeader, filterPlantaHeader);
-      }
-
-      renderDateOptionsForFilter(val);
-      renderDashboard(val);
-    });
-
-    filterPlantaHeader.addEventListener("change", (e) => {
-      const val = e.target.value;
-      filterSelect.value = val;
-      localStorage.setItem("filterPlantaGrupo", val);
-      if (codObraInput) codObraInput.value = "";
-      if (headerCodObraInput) headerCodObraInput.value = "";
-
-      const currentDate = filterFechaPanel.value;
-      let allowedPlants = [];
-      if (val.startsWith("Grupo:")) {
-        allowedPlants = grupos[val.split(":")[1]] || [];
-      } else {
-        allowedPlants = [val.split(":")[1]];
-      }
-
-      // Check if the NEW plant has orders on the CURRENT date
-      const hasOrdersCurrentDate = fullPedidos.some(p =>
-        p["Fecha Pedido"] === currentDate && allowedPlants.includes(p.Planta)
-      );
-
-      if (!hasOrdersCurrentDate) {
-        // Only force back to Today if the new selection is inactive on the current date
-        filterFechaPanel.value = rawReportDate;
-        filterFechaHeader.value = rawReportDate;
-        updateSelectStyle(filterFechaHeader, filterPlantaHeader);
-      }
-
-      renderDateOptionsForFilter(val);
-      renderDashboard(val);
-    });
-
-    function handleObraInput(e) {
-      const val = e.target.value;
-      codObraInput.value = val;
-      if (headerCodObraInput) headerCodObraInput.value = val;
-
-      const selectedId = val ? val.split(" - ")[0].trim() : "";
-      d3.selectAll(".pedido").select("path.area").style("fill", d => {
-        if (selectedId && String(d.CodObra) === selectedId) return "red";
-        return getAreaColor(d);
-      });
-      if (selectedId) {
-        const matchingPedidos = pedidos.filter(p => String(p.CodObra) === selectedId).sort((a, b) => a.XG.offset - b.XG.offset);
-        if (matchingPedidos.length > 0) {
-          const current = window.selectedPedido.current;
-          // Si ya tenemos un pedido seleccionado que pertenece a esta obra, no lo sobreescribimos.
-          // Esto evita que al pinchar un pedido, se salte automáticamente al primero de la obra.
-          const alreadySelected = current && String(current.CodObra) === selectedId;
-          
-          if (!alreadySelected) {
-            const first = matchingPedidos[0];
-            window.selectPedido(first, false, true);
-            if (window.moveCursorTo) {
-              const midT = first.XG.offset + Math.floor(first.XG.finrel / 2);
-              window.moveCursorTo(midT);
-            }
-          }
-        }
-      } else {
-        // Solo limpiamos si es una acción directa del usuario (isTrusted)
-        // para evitar que los refrescos automáticos limpien la selección persistente
-        if (e.isTrusted) {
-          window.selectPedido(null, false, true);
-          if (window.moveCursorTo) window.moveCursorTo(null);
-        }
-      }
-    }
-
-    codObraInput.addEventListener("input", handleObraInput);
-    if (headerCodObraInput) headerCodObraInput.addEventListener("input", handleObraInput);
-
-    function handleFilterCheck() {
-      const isChecked = d3.select(this).property("checked");
-      filterCheck.property("checked", isChecked);
-      if (!headerFilterCheck.empty()) headerFilterCheck.property("checked", isChecked);
-
-      const filtered = isChecked
-        ? pedidos.filter(p => {
-            const ref = p.parentPedido || p;
-            const maxCam = ref.MaxCamiones;
-            return ref.Confirmado === "SI" && maxCam === 1;
-          })
-        : pedidos;
-      ganttPanel.show(filtered);
-    }
-
-    filterCheck.on("change", handleFilterCheck);
-    if (!headerFilterCheck.empty()) headerFilterCheck.on("change", handleFilterCheck);
+  const savedFilter = updateFiltersForDate();
+  renderDateOptionsForFilter(savedFilter);
+  renderDashboard(savedFilter);
+}
 
     function renderDashboard(filterKey) {
       svg.selectAll(".chart-header").remove();
@@ -1041,7 +1023,7 @@ loadAppData().then(({ fullPedidos, meta, rawReportDate }) => {
 
     renderDateOptionsForFilter(initialSaved);
     renderDashboard(initialSaved);
-  });
+  }
 
 function drawTopOverlay(svg, g, meta, scales, metrics, width, filterKey = "") {
   const TRI_Y = 2;   // Pegado al borde superior (adentro)
