@@ -727,10 +727,10 @@ function setupInteraction(
     const activeWaitLabels = waitLabels.merge(newWaitLabels);
 
     if (currentGraphView === 'colas' && scales.yColasPlants) {
+      const isColasAndReal = currentGraphView === 'colas' && getCurrentGanttView() === 'despachos_reales';
       activeDelayCircles.each(function(pCode) {
         const delayVal = metrics.plantStacks?.[pCode]?.metrics?.delay2ByTime?.[t] || 0;
         const yDelay = scales.yDelayPlants?.[pCode];
-        const isColasAndReal = currentGraphView === 'colas' && getCurrentGanttView() === 'despachos_reales';
         if (yDelay && delayVal > 0 && !isColasAndReal) {
           const delayMin = delayVal * granularidad;
           d3.select(this)
