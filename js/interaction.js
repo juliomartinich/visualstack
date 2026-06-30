@@ -1,5 +1,17 @@
 /* ========================= INTERACTION ========================= */
 
+function getCurrentGanttView() {
+  const vgt1 = document.getElementById("filter-viewgantt")?.value;
+  const vgt2 = document.getElementById("header-viewgantt")?.value;
+  let ganttView = 'pedidos';
+  if (vgt2 || vgt1) {
+    ganttView = (vgt2 || vgt1).trim();
+  } else if (typeof getCookie === 'function') {
+    ganttView = (getCookie("viewGantt") || 'pedidos').trim();
+  }
+  return ganttView;
+}
+
 function getCurrentGraphView() {
   const vg1 = document.getElementById("filter-viewgraph")?.value;
   const vg2 = document.getElementById("header-viewgraph")?.value;
@@ -500,6 +512,9 @@ function setupInteraction(
   const circleDelay = g.append("circle").attr("class", "cursor-circle delay").attr("r", 4).attr("fill", "red").style("opacity", 0).style("pointer-events", "none");
   const labelDelay = g.append("text").attr("class", "cursor-label delay").attr("fill", "red").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
 
+  const circleWaitCarga = g.append("circle").attr("class", "cursor-circle wait-carga").attr("r", 4).attr("fill", "blue").style("opacity", 0).style("pointer-events", "none");
+  const labelWaitCarga = g.append("text").attr("class", "cursor-label wait-carga").attr("fill", "blue").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
+
   function syncCursor(t) {
     const currentGraphView = getCurrentGraphView();
     if (t === null) {
@@ -508,9 +523,14 @@ function setupInteraction(
       circleColas.style("opacity", 0); labelColas.style("opacity", 0);
       circleAsignaciones.style("opacity", 0); labelAsignaciones.style("opacity", 0);
       circleDelay.style("opacity", 0); labelDelay.style("opacity", 0);
+      circleWaitCarga.style("opacity", 0); labelWaitCarga.style("opacity", 0);
       d3.select("#gantt-chart svg line.cursor").style("opacity", 0);
       g.selectAll("circle.cursor-circle-plant").style("opacity", 0);
       g.selectAll("text.cursor-label-plant").style("opacity", 0);
+      g.selectAll("circle.cursor-circle-delay-plant").style("opacity", 0);
+      g.selectAll("text.cursor-label-delay-plant").style("opacity", 0);
+      g.selectAll("circle.cursor-circle-wait-plant").style("opacity", 0);
+      g.selectAll("text.cursor-label-wait-plant").style("opacity", 0);
       return;
     }
 
@@ -682,11 +702,36 @@ function setupInteraction(
       .style("pointer-events", "none");
     const activeDelayLabels = delayLabels.merge(newDelayLabels);
 
+    // Círculos/labels para Wait Carga en split
+    const waitCircles = g.selectAll("circle.cursor-circle-wait-plant")
+      .data(splitColasPlants);
+    waitCircles.exit().remove();
+    const newWaitCircles = waitCircles.enter()
+      .append("circle")
+      .attr("class", "cursor-circle-wait-plant")
+      .attr("r", 4)
+      .attr("fill", "blue")
+      .style("pointer-events", "none");
+    const activeWaitCircles = waitCircles.merge(newWaitCircles);
+
+    const waitLabels = g.selectAll("text.cursor-label-wait-plant")
+      .data(splitColasPlants);
+    waitLabels.exit().remove();
+    const newWaitLabels = waitLabels.enter()
+      .append("text")
+      .attr("class", "cursor-label-wait-plant")
+      .attr("fill", "blue")
+      .attr("font-size", "11px")
+      .attr("font-weight", "bold")
+      .style("pointer-events", "none");
+    const activeWaitLabels = waitLabels.merge(newWaitLabels);
+
     if (currentGraphView === 'colas' && scales.yColasPlants) {
       activeDelayCircles.each(function(pCode) {
         const delayVal = metrics.plantStacks?.[pCode]?.metrics?.delay2ByTime?.[t] || 0;
         const yDelay = scales.yDelayPlants?.[pCode];
-        if (yDelay && delayVal > 0) {
+        const isColasAndReal = currentGraphView === 'colas' && getCurrentGanttView() === 'despachos_reales';
+        if (yDelay && delayVal > 0 && !isColasAndReal) {
           const delayMin = delayVal * granularidad;
           d3.select(this)
             .attr("cx", xPos)
@@ -700,12 +745,41 @@ function setupInteraction(
       activeDelayLabels.each(function(pCode) {
         const delayVal = metrics.plantStacks?.[pCode]?.metrics?.delay2ByTime?.[t] || 0;
         const yDelay = scales.yDelayPlants?.[pCode];
-        if (yDelay && delayVal > 0) {
+        if (yDelay && delayVal > 0 && !isColasAndReal) {
           const delayMin = delayVal * granularidad;
           d3.select(this)
             .attr("x", xPos + 8)
             .attr("y", yDelay(delayMin) - 5)
             .text(delayMin)
+            .style("opacity", 1);
+        } else {
+          d3.select(this).style("opacity", 0);
+        }
+      });
+
+      activeWaitCircles.each(function(pCode) {
+        const waitVal = metrics.plantStacks?.[pCode]?.metrics?.waitCargaByTime?.[t] || 0;
+        const yDelay = scales.yDelayPlants?.[pCode];
+        if (yDelay && waitVal > 0) {
+          const waitMin = waitVal;
+          d3.select(this)
+            .attr("cx", xPos)
+            .attr("cy", yDelay(waitMin))
+            .style("opacity", 1);
+        } else {
+          d3.select(this).style("opacity", 0);
+        }
+      });
+
+      activeWaitLabels.each(function(pCode) {
+        const waitVal = metrics.plantStacks?.[pCode]?.metrics?.waitCargaByTime?.[t] || 0;
+        const yDelay = scales.yDelayPlants?.[pCode];
+        if (yDelay && waitVal > 0) {
+          const waitMin = waitVal;
+          d3.select(this)
+            .attr("x", xPos + 8)
+            .attr("y", yDelay(waitMin) - 5)
+            .text(waitMin)
             .style("opacity", 1);
         } else {
           d3.select(this).style("opacity", 0);
@@ -729,12 +803,23 @@ function setupInteraction(
 
     // 4. Delay (global)
     const delayVal = metrics.delay2ByTime ? metrics.delay2ByTime[t] : 0;
-    if (scales.yDelay && delayVal > 0 && !(currentGraphView === 'colas' && scales.yColasPlants)) {
+    const isColasAndReal = currentGraphView === 'colas' && getCurrentGanttView() === 'despachos_reales';
+    if (scales.yDelay && delayVal > 0 && !(currentGraphView === 'colas' && scales.yColasPlants) && !isColasAndReal) {
       const delayMin = delayVal * granularidad;
       circleDelay.attr("cx", xPos).attr("cy", scales.yDelay(delayMin)).style("opacity", 1);
       labelDelay.attr("x", xPos + 8).attr("y", scales.yDelay(delayMin) - 5).text(delayMin).style("opacity", 1);
     } else {
       circleDelay.style("opacity", 0); labelDelay.style("opacity", 0);
+    }
+
+    // 4b. Espera Carga (global)
+    const waitVal = metrics.waitCargaByTime ? metrics.waitCargaByTime[t] : 0;
+    if (scales.yDelay && waitVal > 0 && !(currentGraphView === 'colas' && scales.yColasPlants)) {
+      const waitMin = waitVal;
+      circleWaitCarga.attr("cx", xPos).attr("cy", scales.yDelay(waitMin)).style("opacity", 1);
+      labelWaitCarga.attr("x", xPos + 8).attr("y", scales.yDelay(waitMin) - 5).text(waitMin).style("opacity", 1);
+    } else {
+      circleWaitCarga.style("opacity", 0); labelWaitCarga.style("opacity", 0);
     }
 
     // Cursor Gantt sincronizado

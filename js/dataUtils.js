@@ -322,7 +322,7 @@ function calculateRealDespachosForPedido(p, tickets, granularidad) {
             },
             ticketId,
             Camion: t.Camion,
-            Planta: t.Planta || p.Planta,
+            Planta: p.Planta,
             rawTicket: t,
             isStepReal,
             ticketTimes
@@ -405,7 +405,7 @@ function calculateRealDespachosForPedido(p, tickets, granularidad) {
             },
             ticketId,
             Camion: t.Camion,
-            Planta: t.Planta || p.Planta,
+            Planta: p.Planta,
             rawTicket: t,
             isStepReal,
             ticketTimes
@@ -496,7 +496,7 @@ function calculateMixedDespachosForPedido(p, tickets, granularidad) {
                 },
                 ticketId: t.ticketId,
                 Camion: t.Camion,
-                Planta: t.Planta || p.Planta,
+                Planta: p.Planta,
                 rawTicket: t.rawTicket || t,
                 isStepReal: {
                     Impreso: (t.ticketTimes.Impreso && t.ticketTimes.Impreso !== "0"),

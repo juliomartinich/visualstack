@@ -499,6 +499,7 @@ Promise.all([
         curOcupacionMaxColas = cached.ocupacionMaxColas || 0;
         curOcupacionMaxAsignaciones = cached.ocupacionMaxAsignaciones || 0;
         globalMaxOcupacionCamiones = cached.globalMaxOcupacionCamiones || 0;
+        totalBocas = cached.totalBocas || 0;
         stackResult = {
           isSplit: cached.isSplit,
           plants: cached.plants,
@@ -519,6 +520,16 @@ Promise.all([
           .map(p => ({ ...p }));
         enrichPedidosForDate(subsetPedidos);
 
+        // Calcular totalBocas para la simulación basado en pedidos padres
+        const parentPlants = new Set(subsetPedidos.map(p => p.Planta));
+        totalBocas = 0;
+        parentPlants.forEach(pCode => {
+          if (window.plantasData && window.plantasData[pCode]) {
+            totalBocas += window.plantasData[pCode].cant_bocas || 0;
+          }
+        });
+        if (totalBocas <= 0) totalBocas = 1;
+
         // Precompute maximum truck occupancy across the four Gantt views (pedidos, despachos, despachos_reales, despachos_mix)
         const baseOrders = subsetPedidos.map(p => ({ ...p }));
         const stackPed = buildStack(baseOrders);
@@ -538,6 +549,7 @@ Promise.all([
         if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales' || currentGanttView === 'despachos_mix') {
           if (currentGanttView === 'despachos_reales') {
             subsetPedidos = subsetPedidos.flatMap(p => (p.realDespachos || []).map(d => ({ ...d, parentPedido: p })));
+            subsetPedidos.sort((a, b) => (a.HoraAsignacionMin ?? 0) - (b.HoraAsignacionMin ?? 0));
           } else if (currentGanttView === 'despachos_mix') {
             subsetPedidos = subsetPedidos.flatMap(p => calculateMixedDespachosForPedido(p, p.realDespachos || [], CFG.granularidadMin));
           } else {
@@ -545,15 +557,7 @@ Promise.all([
           }
         }
 
-        // Calcular totalBocas para la simulación
-        const plantsInView = new Set(subsetPedidos.map(p => p.Planta));
-        totalBocas = 0;
-        plantsInView.forEach(pCode => {
-          if (window.plantasData && window.plantasData[pCode]) {
-            totalBocas += window.plantasData[pCode].cant_bocas || 0;
-          }
-        });
-        if (totalBocas <= 0) totalBocas = 1;
+
 
         if (currentGraphView === 'plantas') {
           if (filterKey.startsWith("Grupo:")) {
@@ -668,14 +672,22 @@ Promise.all([
           globalMaxOcupacionCamiones: globalMaxOcupacionCamiones,
           isSplit: stackResult.isSplit,
           plants: stackResult.plants,
-          plantStacks: stackResult.plantStacks
+          plantStacks: stackResult.plantStacks,
+          totalBocas: totalBocas
         };
       }
 
       pedidos = subsetPedidos;
       // Asegurar totalBocas para las escalas (útil si viene de caché)
       if (totalBocas === 0) {
-        const plants = new Set(pedidos.map(p => p.Planta));
+        let permitidas = [];
+        if (filterKey.startsWith("Grupo:")) {
+          permitidas = grupos[filterKey.split(":")[1]] || [];
+        } else {
+          permitidas = [filterKey.split(":")[1]];
+        }
+        const baseOrders = fullPedidos.filter(p => p["Fecha Pedido"] === selectedDate && permitidas.includes(p.Planta));
+        const plants = new Set(baseOrders.map(p => p.Planta));
         plants.forEach(pCode => {
           if (window.plantasData && window.plantasData[pCode]) {
             totalBocas += window.plantasData[pCode].cant_bocas || 0;
@@ -706,7 +718,11 @@ Promise.all([
           .range([innerH * 0.35, innerH * 0.12]);
           
         // Zona Superior: Delay (de 0.02 a 0.12 de innerH)
-        const maxDelayMin = Math.max(d3.max(currentMetrics.delay2ByTime) || 0, 10 / CFG.granularidadMin) * CFG.granularidadMin;
+        const maxDelayMin = Math.max(
+          (d3.max(currentMetrics.delay2ByTime) || 0) * CFG.granularidadMin,
+          d3.max(currentMetrics.waitCargaByTime || []) || 0,
+          10
+        );
         scales.yDelay = d3.scaleLinear()
           .domain([0, maxDelayMin])
           .range([innerH * 0.12 - 5, innerH * 0.02]);
@@ -767,7 +783,12 @@ Promise.all([
         let maxDelayVal = 0;
         stackResult.plants.forEach(pCode => {
           const delay2ByTime = stackResult.plantStacks[pCode].metrics.delay2ByTime || [];
-          const maxDelayMin = Math.max(d3.max(delay2ByTime) || 0, 10 / CFG.granularidadMin) * CFG.granularidadMin;
+          const waitCargaByTime = stackResult.plantStacks[pCode].metrics.waitCargaByTime || [];
+          const maxDelayMin = Math.max(
+            (d3.max(delay2ByTime) || 0) * CFG.granularidadMin,
+            d3.max(waitCargaByTime) || 0,
+            10
+          );
           if (maxDelayMin > maxDelayVal) maxDelayVal = maxDelayMin;
         });
 
@@ -851,7 +872,11 @@ Promise.all([
             const yDelayScale = scales.yDelayPlants[pCode];
 
             // 1. Dibujar cargas/colas
-            drawColasLoads(gPlant, plantPedidos, scales, CFG.granularidadMin, yScale);
+            if (currentGanttView === 'despachos_reales') {
+              drawPlantLoads(gPlant, plantPedidos, scales, CFG.granularidadMin, yScale);
+            } else {
+              drawColasLoads(gPlant, plantPedidos, scales, CFG.granularidadMin, yScale);
+            }
             
             // 2. Líneas de capacidad
             const capacity = window.plantasData[pCode]?.cant_bocas || 0;
@@ -863,15 +888,24 @@ Promise.all([
 
             // 4. Delay curve de la planta
             const plantMetrics = stackResult.plantStacks[pCode].metrics;
-            if (plantMetrics.delay2ByTime) {
+            const isColasAndReal = currentGraphView === 'colas' && currentGanttView === 'despachos_reales';
+            if (plantMetrics.delay2ByTime && !isColasAndReal) {
               drawDelayCurve(gPlant, plantMetrics.delay2ByTime, scales, CFG.granularidadMin, yDelayScale);
               drawRightAxis(gPlant, yDelayScale, innerW, "Delay Max [min]", "red");
+            }
+            if (plantMetrics.waitCargaByTime && d3.max(plantMetrics.waitCargaByTime) > 0) {
+              drawDelayCurve(gPlant, plantMetrics.waitCargaByTime, scales, CFG.granularidadMin, yDelayScale, "blue", "wait-carga-curve", true);
+              drawLeftAxis(gPlant, yDelayScale, "Espera Carga [min]", null, "blue", -30);
             }
           });
           layers = g.selectAll(".pedido");
         } else {
           // Fallback a vista normal de colas
-          layers = drawColasLoads(g, pedidos, scales, CFG.granularidadMin);
+          if (currentGanttView === 'despachos_reales') {
+            layers = drawPlantLoads(g, pedidos, scales, CFG.granularidadMin);
+          } else {
+            layers = drawColasLoads(g, pedidos, scales, CFG.granularidadMin);
+          }
           
           const uniquePlantas = new Set(pedidos.map(p => p.Planta));
           let capacity = 0;
@@ -883,13 +917,25 @@ Promise.all([
           drawCapacityLine(g, capacity, scales, innerW);
 
           if (currentMetrics.delay2ByTime) {
-            const maxDelayMin = Math.max(d3.max(currentMetrics.delay2ByTime) || 0, 10 / CFG.granularidadMin) * CFG.granularidadMin;
+            const maxDelayMin = Math.max(
+              (d3.max(currentMetrics.delay2ByTime) || 0) * CFG.granularidadMin,
+              d3.max(currentMetrics.waitCargaByTime || []) || 0,
+              10
+            );
             scales.yDelay = d3.scaleLinear()
               .domain([0, maxDelayMin])
               .range([innerH * 0.75, innerH * 0.05]); 
             
-            drawDelayCurve(g, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
-            drawRightAxis(g, scales.yDelay, innerW, "Delay Max [min]", "red");
+            const isColasAndReal = currentGraphView === 'colas' && currentGanttView === 'despachos_reales';
+            if (!isColasAndReal) {
+              drawDelayCurve(g, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
+              drawRightAxis(g, scales.yDelay, innerW, "Delay Max [min]", "red");
+            }
+
+            if (currentMetrics.waitCargaByTime && d3.max(currentMetrics.waitCargaByTime) > 0) {
+              drawDelayCurve(g, currentMetrics.waitCargaByTime, scales, CFG.granularidadMin, null, "blue", "wait-carga-curve", true);
+              drawLeftAxis(g, scales.yDelay, "Espera Carga [min]", null, "blue", -30);
+            }
           }
         }
       } else if (currentGraphView === 'recursos') {
@@ -917,7 +963,11 @@ Promise.all([
 
         // 3. Dibujar Plantas (Medio-Alta: 12% - 35% of innerH)
         const gColas = g.append("g").attr("class", "zona-colas");
-        drawColasLoads(gColas, pedidos, scales, CFG.granularidadMin, scales.yColas);
+        if (currentGanttView === 'despachos_reales') {
+          drawPlantLoads(gColas, pedidos, scales, CFG.granularidadMin, scales.yColas);
+        } else {
+          drawColasLoads(gColas, pedidos, scales, CFG.granularidadMin, scales.yColas);
+        }
         drawCapacityLine(gColas, 0, scales, innerW, scales.yColas);
         drawCapacityLine(gColas, capacity, scales, innerW, scales.yColas);
 
@@ -925,6 +975,10 @@ Promise.all([
         const gDelay = g.append("g").attr("class", "zona-delay");
         drawDelayCurve(gDelay, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
         drawRightAxis(gDelay, scales.yDelay, innerW, "Delay Max [min]", "red");
+        if (currentMetrics.waitCargaByTime && d3.max(currentMetrics.waitCargaByTime) > 0) {
+          drawDelayCurve(gDelay, currentMetrics.waitCargaByTime, scales, CFG.granularidadMin, null, "blue", "wait-carga-curve", true);
+          drawLeftAxis(gDelay, scales.yDelay, "Espera Carga [min]", null, "blue", -30);
+        }
 
         // Eje izquierdo de Plantas centrado ocupando el espacio de Plantas y Delay Max
         drawLeftAxis(gColas, scales.yColas, "Plantas", [scales.yColas.range()[0], scales.yDelay.range()[1]]);

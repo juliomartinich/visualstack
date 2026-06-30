@@ -18,44 +18,50 @@ function buildStack(pedidos) {
   });
   */
 
-  pedidos.sort((a, b) => {
-    const refA = a.parentPedido || a;
-    const refB = b.parentPedido || b;
+  const isRealDespachoView = pedidos.some(p => p.isRealDespacho);
 
-    const getPriority = (p) => {
-      // 1. Masivos (> 100 m3)
-      if ((p.CantProgramada ?? 0) > 100) return 0;
-      // 2. Color 11 y 12
-      if (p.ColorPedido == 11 || p.ColorPedido == 12) return 1;
-      // 3. No confirmados (Al final)
-      if (p.Confirmado !== "SI") return 5;
+  if (isRealDespachoView) {
+    pedidos.sort((a, b) => (a.HoraAsignacionMin ?? 0) - (b.HoraAsignacionMin ?? 0));
+  } else {
+    pedidos.sort((a, b) => {
+      const refA = a.parentPedido || a;
+      const refB = b.parentPedido || b;
 
-      // 4. Confirmados (Azules > 1 camión)
-      const maxCam = p.MaxCamiones;
-      if (maxCam > 1) return 2;
+      const getPriority = (p) => {
+        // 1. Masivos (> 100 m3)
+        if ((p.CantProgramada ?? 0) > 100) return 0;
+        // 2. Color 11 y 12
+        if (p.ColorPedido == 11 || p.ColorPedido == 12) return 1;
+        // 3. No confirmados (Al final)
+        if (p.Confirmado !== "SI") return 5;
 
-      // 5. Verdes (1 camión)
-      if (p.CantPedidosObra === 1) return 4; // Verde Oscuro
-      return 3;                              // Verde Claro
-    };
+        // 4. Confirmados (Azules > 1 camión)
+        const maxCam = p.MaxCamiones;
+        if (maxCam > 1) return 2;
 
-    const prioA = getPriority(refA);
-    const prioB = getPriority(refB);
-    if (prioA !== prioB) return prioA - prioB;
+        // 5. Verdes (1 camión)
+        if (p.CantPedidosObra === 1) return 4; // Verde Oscuro
+        return 3;                              // Verde Claro
+      };
 
-    // A igual prioridad, por hora de inicio (offset) del pedido padre
-    const offsetA = refA.XG?.offset ?? 0;
-    const offsetB = refB.XG?.offset ?? 0;
-    if (offsetA !== offsetB) return offsetA - offsetB;
+      const prioA = getPriority(refA);
+      const prioB = getPriority(refB);
+      if (prioA !== prioB) return prioA - prioB;
 
-    // Si pertenecen al mismo pedido, ordenar por su índice de despacho
-    if (refA.id === refB.id) {
-      return (a.despachoIndex ?? 0) - (b.despachoIndex ?? 0);
-    }
+      // A igual prioridad, por hora de inicio (offset) del pedido padre
+      const offsetA = refA.XG?.offset ?? 0;
+      const offsetB = refB.XG?.offset ?? 0;
+      if (offsetA !== offsetB) return offsetA - offsetB;
 
-    // Como último recurso, mantener consistencia usando el ID del pedido
-    return String(refA.id).localeCompare(String(refB.id));
-  });
+      // Si pertenecen al mismo pedido, ordenar por su índice de despacho
+      if (refA.id === refB.id) {
+        return (a.despachoIndex ?? 0) - (b.despachoIndex ?? 0);
+      }
+
+      // Como último recurso, mantener consistencia usando el ID del pedido
+      return String(refA.id).localeCompare(String(refB.id));
+    });
+  }
 
   const horaMax = Math.max(0, d3.max(pedidos, p => (p.XG?.offset ?? 0) + (p.XG?.finrel ?? 0)) || 0);
   const ocupacion = Array(horaMax + 1).fill(0);
@@ -352,6 +358,7 @@ function buildColasStack(pedidos, totalBocas, granularidadMin) {
     else totalM3NoConfirmados += cant;
 
     p.STK_COLAS = { bloquesXY: [] };
+    p.STK_PLANTAS = { bloquesXY: [] };
     const numViajes = p.CantCargas || 1;
     const freqSlots = Math.floor((p.Frecuencia || 0) / granularidadMin);
     for (let i = 0; i < numViajes; i++) {
@@ -387,6 +394,7 @@ function buildColasStack(pedidos, totalBocas, granularidadMin) {
         v.boca = b;
         bocas[b] = t + 1; // 1 slot de carga
         v.pedido.STK_COLAS.bloquesXY.push({ x: t, y0: b, y1: b + 1, v: 1, type: 'serve', voyageId: v.id });
+        v.pedido.STK_PLANTAS.bloquesXY.push({ x: t, y0: b, y1: b + 1, v: 1 });
         globalOcupacion[t] = Math.max(globalOcupacion[t], b + 1);
       }
     }
@@ -420,12 +428,31 @@ function buildColasStack(pedidos, totalBocas, granularidadMin) {
   const arrEnvolvente = Array(horaMax + 1).fill(0);
   for (let t = 0; t <= horaMax; t++) arrEnvolvente[t] = globalOcupacion[t] || 0;
 
+  // --- NUEVA LÓGICA: Calcular tiempo de espera para cargar (impresión -> inicio carga) en el timeslot de inicio ---
+  const waitCargaByTime = Array(horaMax + 1).fill(0);
+  pedidos.forEach(p => {
+    const raw = p.rawTicket;
+    if (raw && raw.Impreso && raw.Impreso !== "0" && raw.InicioCarga && raw.InicioCarga !== "0") {
+      const t_impreso = safeHhmmssToMin(raw.Impreso);
+      const t_inicio_carga = safeHhmmssToMin(raw.InicioCarga);
+      if (t_impreso !== null && t_inicio_carga !== null && t_inicio_carga >= t_impreso) {
+        // Guardamos los minutos exactos (ya no slots redondeados)
+        const wait_min = t_inicio_carga - t_impreso;
+        const slot_impreso = Math.floor(t_impreso / granularidadMin);
+        if (slot_impreso >= 0 && slot_impreso <= horaMax) {
+          waitCargaByTime[slot_impreso] = Math.max(waitCargaByTime[slot_impreso], wait_min);
+        }
+      }
+    }
+  });
+
   const metrics = {
     volumenT: totalM3,
     volConfirmado: totalM3Confirmados,
     volNoConfirmado: totalM3NoConfirmados,
     envolvente: arrEnvolvente,
     delay2ByTime: delay2ByTime,
+    waitCargaByTime: waitCargaByTime,
     ...computeGlobalMetrics(arrEnvolvente, granularidadMin)
   };
 

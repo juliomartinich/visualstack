@@ -120,7 +120,7 @@ function drawCapacityLine(g, capacity, scales, innerW, yScale) {
   }
 }
 
-function drawDelayCurve(g, data, scales, granularidadMin, yDelayScale) {
+function drawDelayCurve(g, data, scales, granularidadMin, yDelayScale, color = "red", className = "delay-curve", isMinutes = false) {
   const yD = yDelayScale || scales.yDelay;
   if (!data || data.length === 0 || !yD) return;
 
@@ -131,54 +131,63 @@ function drawDelayCurve(g, data, scales, granularidadMin, yDelayScale) {
     .map((v, i) => ({ v, i }))
     .filter(d => d.i >= xMin && d.i <= xMax);
 
+  const factor = isMinutes ? 1 : granularidadMin;
+
   const line = d3.line()
     .x(d => scales.x(d.i))
-    .y(d => yD(d.v * granularidadMin))
+    .y(d => yD(d.v * factor))
     .curve(d3.curveMonotoneX);
 
   g.append("path")
     .datum(visibleData)
-    .attr("class", "delay-curve")
+    .attr("class", className)
     .attr("d", line)
     .attr("fill", "none")
-    .attr("stroke", "red")
+    .attr("stroke", color)
     .attr("stroke-width", 2)
     .attr("opacity", 0.8);
 
-  // Área bajo la curva
-  const area = d3.area()
-    .x(d => scales.x(d.i))
-    .y0(yD(0))
-    .y1(d => yD(d.v * granularidadMin))
-    .curve(d3.curveMonotoneX);
+  // Área bajo la curva (solo si es roja)
+  if (color === "red") {
+    const area = d3.area()
+      .x(d => scales.x(d.i))
+      .y0(yD(0))
+      .y1(d => yD(d.v * factor))
+      .curve(d3.curveMonotoneX);
 
-  g.append("path")
-    .datum(visibleData)
-    .attr("class", "delay-area")
-    .attr("d", area)
-    .attr("fill", "red")
-    .attr("opacity", 0.1);
+    g.append("path")
+      .datum(visibleData)
+      .attr("class", `${className}-area`)
+      .attr("d", area)
+      .attr("fill", color)
+      .attr("opacity", 0.05);
+  }
 }
 
-
-
-function drawLeftAxis(g, scale, label, customRange) {
+function drawLeftAxis(g, scale, label, customRange, color = "#333", offset = 0) {
   if (!scale) return;
   const axis = d3.axisLeft(scale).ticks(5);
   const axisG = g.append("g")
     .attr("class", "y-axis-left")
+    .attr("transform", `translate(${offset}, 0)`)
     .call(axis);
+
+  if (color !== "#333") {
+    axisG.selectAll("line").attr("stroke", color);
+    axisG.selectAll("path").attr("stroke", color);
+    axisG.selectAll("text").attr("fill", color);
+  }
 
   const rangeToUse = customRange || scale.range();
   const centerPos = -(rangeToUse[0] + rangeToUse[1]) / 2;
 
   const textEl = axisG.append("text")
     .attr("transform", "rotate(-90)")
-    .attr("y", -38) // Desplazado ligeramente a la derecha para dejar margen con el borde izquierdo
+    .attr("y", color === "#333" ? -35 : -10)
     .attr("x", centerPos)
-    .attr("fill", "#333")
+    .attr("fill", color)
     .attr("text-anchor", "middle")
-    .attr("font-size", "11px")
+    .attr("font-size", color === "#333" ? "11px" : "9.5px")
     .attr("font-weight", "bold");
 
   const plantName = window.plantasData?.[label]?.nombre || "";
@@ -192,10 +201,10 @@ function drawLeftAxis(g, scale, label, customRange) {
       .attr("dy", "1.1em") // Desplazar hacia la derecha para el nombre de la planta
       .attr("font-size", "8.5px")
       .attr("font-weight", "normal")
-      .attr("fill", "#666")
+      .attr("fill", color === "#333" ? "#666" : color)
       .text(plantName);
   } else {
-    textEl.attr("y", -35).text(label); // Si no hay nombre, mantener centrado por defecto
+    textEl.text(label);
   }
 }
 
