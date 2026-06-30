@@ -27,6 +27,8 @@ svg.on("mouseleave", () => resetInteraction({
 
 let pedidos, layers, area, scales, band, ganttPanel;
 let fullPedidos, meta, rawReportDate, grupos = {}, tomorrowStr, uniqueDates;
+let filterFechaPanel, filterFechaHeader, filterPlantaHeader, filterSelect;
+let codObraInput, headerCodObraInput, codObraList, filterCheck, headerFilterCheck;
 window.appCache = {};
 
 loadAppData().then((res) => {
@@ -286,7 +288,7 @@ function handleFilterCheck() {
 }
 
 function initApp() {
-  const filterFechaPanel = document.getElementById("filter-fecha");
+  filterFechaPanel = document.getElementById("filter-fecha");
 
   // Create header selects transparent container
   const dateContainer = document.getElementById("header-date-container");
@@ -328,8 +330,8 @@ function initApp() {
     </div>
   `;
 
-  const filterFechaHeader = document.getElementById("header-filter-fecha");
-  const filterPlantaHeader = document.getElementById("header-filter-plantagrupo");
+  filterFechaHeader = document.getElementById("header-filter-fecha");
+  filterPlantaHeader = document.getElementById("header-filter-plantagrupo");
 
   populateDateSelect(filterFechaPanel);
   populateDateSelect(filterFechaHeader);
@@ -340,11 +342,12 @@ function initApp() {
 
   updateSelectStyle(filterFechaHeader, filterPlantaHeader);
 
-  const filterSelect = document.getElementById("filter-plantagrupo");
-  const codObraInput = document.getElementById("filter-codobra");
-  const headerCodObraInput = document.getElementById("header-filter-codobra");
-  const filterCheck = d3.select("#filter-green");
-  const headerFilterCheck = d3.select("#header-filter-green");
+  filterSelect = document.getElementById("filter-plantagrupo");
+  codObraInput = document.getElementById("filter-codobra");
+  headerCodObraInput = document.getElementById("header-filter-codobra");
+  codObraList = document.getElementById("codobras-list");
+  filterCheck = d3.select("#filter-green");
+  headerFilterCheck = d3.select("#header-filter-green");
 
   filterFechaPanel.addEventListener("change", handleDateChange);
   filterFechaHeader.addEventListener("change", handleDateChange);
