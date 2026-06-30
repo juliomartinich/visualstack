@@ -388,9 +388,54 @@ function initApp() {
   filterCheck.on("change", handleFilterCheck);
   if (!headerFilterCheck.empty()) headerFilterCheck.on("change", handleFilterCheck);
 
-  const savedFilter = updateFiltersForDate();
-  renderDateOptionsForFilter(savedFilter);
-  renderDashboard(savedFilter);
+  const initialSaved = updateFiltersForDate();
+
+  // View Mode Selects
+  let savedGraphView = getCookie("viewGraph") || "camiones";
+  if (savedGraphView === "camionesd" || savedGraphView === "camiones_cd" || savedGraphView === "camiones_mix") {
+    savedGraphView = "camiones";
+    setCookie("viewGraph", "camiones");
+  } else if (savedGraphView === "recursos2") {
+    savedGraphView = "recursos";
+    setCookie("viewGraph", "recursos");
+  }
+  let savedGanttView = getCookie("viewGantt") || "pedidos";
+  
+  const selectViewGraph = document.getElementById("filter-viewgraph");
+  const headerViewGraph = document.getElementById("header-viewgraph");
+  const selectViewGantt = document.getElementById("filter-viewgantt");
+  const headerViewGantt = document.getElementById("header-viewgantt");
+  
+  if (selectViewGraph) selectViewGraph.value = savedGraphView;
+  if (headerViewGraph) headerViewGraph.value = savedGraphView;
+  if (selectViewGantt) selectViewGantt.value = savedGanttView;
+  if (headerViewGantt) headerViewGantt.value = savedGanttView;
+
+  // Event delegation for header and panel controls
+  document.addEventListener("change", (e) => {
+    const ctrl = e.target;
+    const name = ctrl.name;
+    if (!["viewGraph", "headerViewGraph", "viewGantt", "headerViewGantt"].includes(name)) return;
+
+    const val = ctrl.value;
+    if (name === "viewGraph" || name === "headerViewGraph") {
+      setCookie("viewGraph", val);
+      const s1 = document.getElementById("filter-viewgraph");
+      const s2 = document.getElementById("header-viewgraph");
+      if (s1) s1.value = val;
+      if (s2) s2.value = val;
+    } else if (name === "viewGantt" || name === "headerViewGantt") {
+      setCookie("viewGantt", val);
+      const s1 = document.getElementById("filter-viewgantt");
+      const s2 = document.getElementById("header-viewgantt");
+      if (s1) s1.value = val;
+      if (s2) s2.value = val;
+    }
+    renderDashboard(localStorage.getItem("filterPlantaGrupo") || initialSaved);
+  });
+
+  renderDateOptionsForFilter(initialSaved);
+  renderDashboard(initialSaved);
 }
 
     function renderDashboard(filterKey) {
@@ -974,56 +1019,7 @@ function initApp() {
       });
       codObraInput.dispatchEvent(new Event('input'));
     }
-
-    const initialSaved = updateFiltersForDate(filterFechaPanel.value);
-
-    // View Mode Selects
-    let savedGraphView = getCookie("viewGraph") || "camiones";
-    if (savedGraphView === "camionesd" || savedGraphView === "camiones_cd" || savedGraphView === "camiones_mix") {
-      savedGraphView = "camiones";
-      setCookie("viewGraph", "camiones");
-    } else if (savedGraphView === "recursos2") {
-      savedGraphView = "recursos";
-      setCookie("viewGraph", "recursos");
-    }
-    let savedGanttView = getCookie("viewGantt") || "pedidos";
-    
-    const selectViewGraph = document.getElementById("filter-viewgraph");
-    const headerViewGraph = document.getElementById("header-viewgraph");
-    const selectViewGantt = document.getElementById("filter-viewgantt");
-    const headerViewGantt = document.getElementById("header-viewgantt");
-    
-    if (selectViewGraph) selectViewGraph.value = savedGraphView;
-    if (headerViewGraph) headerViewGraph.value = savedGraphView;
-    if (selectViewGantt) selectViewGantt.value = savedGanttView;
-    if (headerViewGantt) headerViewGantt.value = savedGanttView;
-
-    // Event delegation for header and panel controls
-    document.addEventListener("change", (e) => {
-      const ctrl = e.target;
-      const name = ctrl.name;
-      if (!["viewGraph", "headerViewGraph", "viewGantt", "headerViewGantt"].includes(name)) return;
-
-      const val = ctrl.value;
-      if (name === "viewGraph" || name === "headerViewGraph") {
-        setCookie("viewGraph", val);
-        const s1 = document.getElementById("filter-viewgraph");
-        const s2 = document.getElementById("header-viewgraph");
-        if (s1) s1.value = val;
-        if (s2) s2.value = val;
-      } else if (name === "viewGantt" || name === "headerViewGantt") {
-        setCookie("viewGantt", val);
-        const s1 = document.getElementById("filter-viewgantt");
-        const s2 = document.getElementById("header-viewgantt");
-        if (s1) s1.value = val;
-        if (s2) s2.value = val;
-      }
-      renderDashboard(localStorage.getItem("filterPlantaGrupo") || initialSaved);
-    });
-
-    renderDateOptionsForFilter(initialSaved);
-    renderDashboard(initialSaved);
-  }
+}
 
 function drawTopOverlay(svg, g, meta, scales, metrics, width, filterKey = "") {
   const TRI_Y = 2;   // Pegado al borde superior (adentro)
