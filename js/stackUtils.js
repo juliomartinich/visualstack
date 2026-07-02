@@ -18,50 +18,46 @@ function buildStack(pedidos) {
   });
   */
 
-  const isRealDespachoView = pedidos.some(p => p.isRealDespacho);
+  pedidos.sort((a, b) => {
+    const refA = a.parentPedido || a;
+    const refB = b.parentPedido || b;
 
-  if (isRealDespachoView) {
-    pedidos.sort((a, b) => (a.HoraAsignacionMin ?? 0) - (b.HoraAsignacionMin ?? 0));
-  } else {
-    pedidos.sort((a, b) => {
-      const refA = a.parentPedido || a;
-      const refB = b.parentPedido || b;
+    const getPriority = (p) => {
+      // 1. Masivos (> 100 m3)
+      if ((p.CantProgramada ?? 0) > 100) return 0;
+      // 2. Color 11 y 12
+      if (p.ColorPedido == 11 || p.ColorPedido == 12) return 1;
+      // 3. No confirmados (Al final)
+      if (p.Confirmado !== "SI") return 5;
 
-      const getPriority = (p) => {
-        // 1. Masivos (> 100 m3)
-        if ((p.CantProgramada ?? 0) > 100) return 0;
-        // 2. Color 11 y 12
-        if (p.ColorPedido == 11 || p.ColorPedido == 12) return 1;
-        // 3. No confirmados (Al final)
-        if (p.Confirmado !== "SI") return 5;
+      // 4. Confirmados (Azules > 1 camión)
+      const maxCam = p.MaxCamiones;
+      if (maxCam > 1) return 2;
 
-        // 4. Confirmados (Azules > 1 camión)
-        const maxCam = p.MaxCamiones;
-        if (maxCam > 1) return 2;
+      // 5. Verdes (1 camión)
+      if (p.CantPedidosObra === 1) return 4; // Verde Oscuro
+      return 3;                              // Verde Claro
+    };
 
-        // 5. Verdes (1 camión)
-        if (p.CantPedidosObra === 1) return 4; // Verde Oscuro
-        return 3;                              // Verde Claro
-      };
+    const prioA = getPriority(refA);
+    const prioB = getPriority(refB);
+    if (prioA !== prioB) return prioA - prioB;
 
-      const prioA = getPriority(refA);
-      const prioB = getPriority(refB);
-      if (prioA !== prioB) return prioA - prioB;
+    // A igual prioridad, por hora de inicio (offset) del pedido padre
+    const offsetA = refA.XG?.offset ?? 0;
+    const offsetB = refB.XG?.offset ?? 0;
+    if (offsetA !== offsetB) return offsetA - offsetB;
 
-      // A igual prioridad, por hora de inicio (offset) del pedido padre
-      const offsetA = refA.XG?.offset ?? 0;
-      const offsetB = refB.XG?.offset ?? 0;
-      if (offsetA !== offsetB) return offsetA - offsetB;
+    // Si pertenecen al mismo pedido, ordenar por su índice de despacho o hora de asignación
+    if (refA.id === refB.id) {
+      const valA = a.HoraAsignacionMin ?? (a.despachoIndex ?? 0);
+      const valB = b.HoraAsignacionMin ?? (b.despachoIndex ?? 0);
+      return valA - valB;
+    }
 
-      // Si pertenecen al mismo pedido, ordenar por su índice de despacho
-      if (refA.id === refB.id) {
-        return (a.despachoIndex ?? 0) - (b.despachoIndex ?? 0);
-      }
-
-      // Como último recurso, mantener consistencia usando el ID del pedido
-      return String(refA.id).localeCompare(String(refB.id));
-    });
-  }
+    // Como último recurso, mantener consistencia usando el ID del pedido
+    return String(refA.id).localeCompare(String(refB.id));
+  });
 
   const horaMax = Math.max(0, d3.max(pedidos, p => (p.XG?.offset ?? 0) + (p.XG?.finrel ?? 0)) || 0);
   const ocupacion = Array(horaMax + 1).fill(0);
@@ -303,7 +299,17 @@ function buildPlantLoadStack(pedidos, granularidadMin) {
 
   const ocupacionCargas = Array(horaMax + 1).fill(0);
 
-  pedidos.forEach(pedido => {
+  pedidos.forEach(p => {
+    p.STK_PLANTAS = { bloquesXY: [] };
+  });
+
+  const sorted = [...pedidos].sort((a, b) => {
+    const valA = a.HoraAsignacionMin ?? (a.despachoIndex ?? 0);
+    const valB = b.HoraAsignacionMin ?? (b.despachoIndex ?? 0);
+    return valA - valB;
+  });
+
+  sorted.forEach(pedido => {
     const cant = pedido.CantProgramada ?? 0;
     totalM3 += cant;
     if (pedido.Confirmado === "SI") {
