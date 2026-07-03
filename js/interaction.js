@@ -66,32 +66,40 @@ function findActiveLayer(capasReversa, t, my, scales) {
         if (found) return capa;
       }
       // 3. Zona Plantas (Colas): innerH * 0.12 to innerH * 0.35
-      if (my >= innerH * 0.12 && my < innerH * 0.35 && capa.STK_COLAS?.bloquesXY) {
-        const y = scales.yColas;
-        const found = capa.STK_COLAS.bloquesXY.some(seg => 
-          seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
-        );
-        if (found) return capa;
+      if (my >= innerH * 0.12 && my < innerH * 0.35) {
+        const isReal = getCurrentGanttView() === 'despachos_reales';
+        const blocks = isReal ? capa.STK_PLANTAS?.bloquesXY : capa.STK_COLAS?.bloquesXY;
+        if (blocks) {
+          const y = scales.yColas;
+          const found = blocks.some(seg => 
+            seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
+          );
+          if (found) return capa;
+        }
       }
       continue;
     }
 
     // 1. Zona de Colas (Si el ratón está en la parte superior del gráfico en vista colas)
-    if (currentGraphView === 'colas' && capa.STK_COLAS?.bloquesXY) {
-      if (scales.yColasPlants) {
-        const y = scales.yColasPlants[capa.Planta];
-        if (y) {
-          const found = capa.STK_COLAS.bloquesXY.some(seg => 
+    if (currentGraphView === 'colas') {
+      const isReal = getCurrentGanttView() === 'despachos_reales';
+      const blocks = isReal ? capa.STK_PLANTAS?.bloquesXY : capa.STK_COLAS?.bloquesXY;
+      if (blocks) {
+        if (scales.yColasPlants) {
+          const y = scales.yColasPlants[capa.Planta];
+          if (y) {
+            const found = blocks.some(seg => 
+              seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
+            );
+            if (found) return capa;
+          }
+        } else {
+          const y = scales.y;
+          const found = blocks.some(seg => 
             seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
           );
           if (found) return capa;
         }
-      } else {
-        const y = scales.y;
-        const found = capa.STK_COLAS.bloquesXY.some(seg => 
-          seg.x === t && seg.v > 0 && my >= Math.min(y(seg.y1), y(seg.y0)) - 2 && my <= Math.max(y(seg.y1), y(seg.y0)) + 2
-        );
-        if (found) return capa;
       }
     }
 

@@ -860,13 +860,28 @@ function initApp() {
             // 4. Delay curve de la planta
             const plantMetrics = stackResult.plantStacks[pCode].metrics;
             const isColasAndReal = currentGraphView === 'colas' && currentGanttView === 'despachos_reales';
+            const isColasAndMix = currentGraphView === 'colas' && currentGanttView === 'despachos_mix';
             if (plantMetrics.delay2ByTime && !isColasAndReal) {
               drawDelayCurve(gPlant, plantMetrics.delay2ByTime, scales, CFG.granularidadMin, yDelayScale);
-              drawRightAxis(gPlant, yDelayScale, innerW, "Delay Max [min]", "red");
+              const rightAxisG = drawRightAxis(gPlant, yDelayScale, innerW, "Delay Max [min]", "red");
+              if (isColasAndMix) {
+                rightAxisG.append("text")
+                  .attr("x", -10)
+                  .attr("y", yDelayScale.range()[1] + 27)
+                  .attr("fill", "blue")
+                  .attr("text-anchor", "end")
+                  .attr("font-size", "10px")
+                  .attr("font-weight", "bold")
+                  .text("Espera Carga [min]");
+              }
             }
             if (plantMetrics.waitCargaByTime && d3.max(plantMetrics.waitCargaByTime) > 0) {
               drawDelayCurve(gPlant, plantMetrics.waitCargaByTime, scales, CFG.granularidadMin, yDelayScale, "blue", "wait-carga-curve", true);
-              drawLeftAxis(gPlant, yDelayScale, "Espera Carga [min]", null, "blue", -30);
+              if (isColasAndReal) {
+                drawRightAxis(gPlant, yDelayScale, innerW, "Espera Carga [min]", "blue");
+              } else if (!isColasAndMix) {
+                drawLeftAxis(gPlant, yDelayScale, "Espera Carga [min]", null, "blue", -30);
+              }
             }
           });
           layers = g.selectAll(".pedido");
@@ -898,14 +913,29 @@ function initApp() {
               .range([innerH * 0.75, innerH * 0.05]); 
             
             const isColasAndReal = currentGraphView === 'colas' && currentGanttView === 'despachos_reales';
+            const isColasAndMix = currentGraphView === 'colas' && currentGanttView === 'despachos_mix';
             if (!isColasAndReal) {
               drawDelayCurve(g, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
-              drawRightAxis(g, scales.yDelay, innerW, "Delay Max [min]", "red");
+              const rightAxisG = drawRightAxis(g, scales.yDelay, innerW, "Delay Max [min]", "red");
+              if (isColasAndMix) {
+                rightAxisG.append("text")
+                  .attr("x", -10)
+                  .attr("y", scales.yDelay.range()[1] + 27)
+                  .attr("fill", "blue")
+                  .attr("text-anchor", "end")
+                  .attr("font-size", "10px")
+                  .attr("font-weight", "bold")
+                  .text("Espera Carga [min]");
+              }
             }
 
             if (currentMetrics.waitCargaByTime && d3.max(currentMetrics.waitCargaByTime) > 0) {
               drawDelayCurve(g, currentMetrics.waitCargaByTime, scales, CFG.granularidadMin, null, "blue", "wait-carga-curve", true);
-              drawLeftAxis(g, scales.yDelay, "Espera Carga [min]", null, "blue", -30);
+              if (isColasAndReal) {
+                drawRightAxis(g, scales.yDelay, innerW, "Espera Carga [min]", "blue");
+              } else if (!isColasAndMix) {
+                drawLeftAxis(g, scales.yDelay, "Espera Carga [min]", null, "blue", -30);
+              }
             }
           }
         }

@@ -230,6 +230,8 @@ function drawRightAxis(g, scale, innerW, label, color = "#666") {
     .attr("font-size", "10px")
     .attr("font-weight", "bold")
     .text(label);
+
+  return axisG;
 }
 
 /* ==== * Área stack * ===================== */
