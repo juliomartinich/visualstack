@@ -11,8 +11,8 @@ flowchart TD
     classDef lib fill:#e2e2e2,stroke:#999,stroke-width:1px;
 
     %% Flujo de Inicialización
-    Start([Carga Inicial de Página]) --> loader[main.js: loadAppData]
-    loader -->|Promise.all| files[(Pedidos.json<br>colores.json<br>plantas.json<br>Tick.json)]
+    Start([Carga Inicial de Página]) --> loader[main.js: Promise.all]
+    loader -->|Carga de archivos| files[(Pedidos.json<br>colores.json<br>plantas.json<br>Tick.json)]
     
     %% Mapeo inicial
     loader -.-> extNeg[dataUtils: extendPedidoNegocio]
@@ -20,15 +20,17 @@ flowchart TD
     loader -.-> calcTeo[dataUtils: calculateDespachosForPedido]
     loader -.-> calcReal[dataUtils: calculateRealDespachosForPedido]
     
-    loader -->|Resuelve Promesa| thenBlock{Callback .then}:::init
-    thenBlock -->|Almacena variables globales y llama| initApp[dashboard.js: initApp]:::init
+    loader -->|Almacena variables globales e inicia| inicializarControles[dashboard.js: inicializarControles]:::init
+    loader -->|Ejecuta dibujo inicial| dibujar[main.js: dibujar]:::init
     
-    %% initApp setup
-    initApp --> popDates[dashboard.js: populateDateSelect]:::helpers
-    initApp --> updStyles[dashboard.js: updateSelectStyle]:::helpers
-    initApp --> updFilters[dashboard.js: updateFiltersForDate]:::helpers
-    initApp --> dateOpts[dashboard.js: renderDateOptionsForFilter]:::helpers
-    initApp --> renderDb[dashboard.js: renderDashboard]:::db
+    %% inicializarControles setup
+    inicializarControles --> popDates[dashboard.js: populateDateSelect]:::helpers
+    inicializarControles --> updStyles[dashboard.js: updateSelectStyle]:::helpers
+    inicializarControles --> updFilters[dashboard.js: updateFiltersForDate]:::helpers
+    
+    %% dibujar setup
+    dibujar --> dateOpts[dashboard.js: renderDateOptionsForFilter]:::helpers
+    dibujar --> renderDb[dashboard.js: renderDashboard]:::db
     
     %% Manejadores de Eventos
     subgraph Eventos [Escuchadores de Eventos y Handlers]

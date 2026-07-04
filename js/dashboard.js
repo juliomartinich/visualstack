@@ -1,5 +1,139 @@
 /* ================== DASHBOARD ORCHESTRATION ================== */
 
+function inicializarControles() {
+  // 1. Obtener el panel lateral de filtros y construir dinámicamente la botonera del header
+  filterFechaPanel = document.getElementById("filter-fecha");
+  const headerContainer = document.getElementById("header-date-container");
+  headerContainer.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 10px; font-size: 11px; background: transparent; padding: 0; flex-wrap: nowrap; overflow: hidden;">
+      <!-- Grupo Día -->
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <label for="header-filter-fecha" style="font-weight: 600; color: #555;">Día:</label>
+        <select id="header-filter-fecha" title="Cambiar Fecha" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
+      </div>
+      
+      <!-- Grupo Planta -->
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <label for="header-filter-plantagrupo" style="font-weight: 600; color: #555;">Planta:</label>
+        <select id="header-filter-plantagrupo" title="Cambiar Planta" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
+      </div>      
+
+      <!-- Grupo Vista -->
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
+        <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
+          <option value="camiones">Camiones</option>
+          <option value="plantas">Asignaciones</option>
+          <option value="colas">Plantas</option>
+          <option value="recursos">Recursos</option>
+        </select>
+      </div>
+
+      <!-- Grupo Gantt -->
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <label for="header-viewgantt" style="font-weight: 600; color: #555;">Gantt:</label>
+        <select id="header-viewgantt" name="headerViewGantt" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
+          <option value="pedidos">Pedidos</option>
+          <option value="despachos">Despachos</option>
+          <option value="despachos_reales">Despachos reales</option>
+          <option value="despachos_mix">Despachos Mix</option>
+        </select>
+      </div>
+    </div>
+  `;
+
+  // 2. Guardar referencias a los selectores del encabezado recién inyectados
+  filterFechaHeader = document.getElementById("header-filter-fecha");
+  filterPlantaHeader = document.getElementById("header-filter-plantagrupo");
+
+  // 3. Poblar las opciones de fecha disponibles en los selectores del panel y del header
+  populateDateSelect(filterFechaPanel);
+  populateDateSelect(filterFechaHeader);
+
+  // 4. Seleccionar la fecha inicial (usando la del reporte o la primera disponible) y aplicar estilo
+  const initialDate = uniqueDates.includes(rawReportDate) ? rawReportDate : (uniqueDates[0] || "");
+  filterFechaPanel.value = initialDate;
+  filterFechaHeader.value = initialDate;
+  updateSelectStyle(filterFechaHeader, filterPlantaHeader);
+
+  // 5. Guardar referencias a otros inputs y filtros de la interfaz
+  filterSelect = document.getElementById("filter-plantagrupo");
+  codObraInput = document.getElementById("filter-codobra");
+  headerCodObraInput = document.getElementById("header-filter-codobra");
+  codObraList = document.getElementById("codobras-list");
+  filterCheck = d3.select("#filter-green");
+  headerFilterCheck = d3.select("#header-filter-green");
+
+  // 6. Registrar escuchadores de eventos para los cambios de fecha y planta
+  filterFechaPanel.addEventListener("change", handleDateChange);
+  filterFechaHeader.addEventListener("change", handleDateChange);
+
+  filterSelect.addEventListener("change", handlePlantaChange);
+  filterPlantaHeader.addEventListener("change", handlePlantaChange);
+
+  // 7. Registrar escuchador de eventos para el filtrado por código de obra
+  codObraInput.addEventListener("input", handleObraInput);
+  if (headerCodObraInput) headerCodObraInput.addEventListener("input", handleObraInput);
+
+  // 8. Registrar escuchadores de eventos para los filtros checkbox "verdes"
+  filterCheck.on("change", handleFilterCheck);
+  if (!headerFilterCheck.empty()) headerFilterCheck.on("change", handleFilterCheck);
+
+  // 9. Actualizar y obtener el valor inicial seleccionado para plantas y grupos
+  const initialSaved = updateFiltersForDate();
+
+  // 10. Recuperar cookies guardadas para la vista de gráfico (Graph View), saneando valores obsoletos
+  let savedGraphView = getCookie("viewGraph") || "camiones";
+  if (savedGraphView === "camionesd" || savedGraphView === "camiones_cd" || savedGraphView === "camiones_mix") {
+    savedGraphView = "camiones";
+    setCookie("viewGraph", "camiones");
+  } else if (savedGraphView === "recursos2") {
+    savedGraphView = "recursos";
+    setCookie("viewGraph", "recursos");
+  }
+
+  // 11. Recuperar cookie guardada para la vista Gantt (Gantt View)
+  let savedGanttView = getCookie("viewGantt") || "pedidos";
+
+  // 12. Sincronizar selectores del panel y del header con las vistas iniciales recuperadas
+  const selectViewGraph = document.getElementById("filter-viewgraph");
+  const headerViewGraph = document.getElementById("header-viewgraph");
+  const selectViewGantt = document.getElementById("filter-viewgantt");
+  const headerViewGantt = document.getElementById("header-viewgantt");
+
+  if (selectViewGraph) selectViewGraph.value = savedGraphView;
+  if (headerViewGraph) headerViewGraph.value = savedGraphView;
+  if (selectViewGantt) selectViewGantt.value = savedGanttView;
+  if (headerViewGantt) headerViewGantt.value = savedGanttView;
+
+  // 13. Manejador global de eventos 'change' para sincronizar vistas y persistir en cookies
+  document.addEventListener("change", (e) => {
+    const ctrl = e.target;
+    const name = ctrl.name;
+    // Filtrar únicamente los controles de cambio de vista (gráfico o gantt)
+    if (!["viewGraph", "headerViewGraph", "viewGantt", "headerViewGantt"].includes(name)) return;
+
+    const val = ctrl.value;
+    if (name === "viewGraph" || name === "headerViewGraph") {
+      setCookie("viewGraph", val);
+      // Sincronizar el valor entre el selector del panel lateral y del header
+      const s1 = document.getElementById("filter-viewgraph");
+      const s2 = document.getElementById("header-viewgraph");
+      if (s1) s1.value = val;
+      if (s2) s2.value = val;
+    } else if (name === "viewGantt" || name === "headerViewGantt") {
+      setCookie("viewGantt", val);
+      // Sincronizar el valor entre el selector del panel lateral y del header
+      const s1 = document.getElementById("filter-viewgantt");
+      const s2 = document.getElementById("header-viewgantt");
+      if (s1) s1.value = val;
+      if (s2) s2.value = val;
+    }
+    // Redibujar el tablero con el filtro activo de planta/grupo
+    dibujar();
+  });
+}
+
 function populateDateSelect(selectEl, customDates = null) {
   const datesToUse = customDates || uniqueDates;
   const currentVal = selectEl.value;
@@ -85,9 +219,8 @@ const handleDateChange = (e) => {
   filterFechaPanel.value = val;
   filterFechaHeader.value = val;
   updateSelectStyle(filterFechaHeader, filterPlantaHeader);
-  const activePlanta = updateFiltersForDate();
-  renderDateOptionsForFilter(activePlanta);
-  renderDashboard(activePlanta);
+  updateFiltersForDate();
+  dibujar();
 };
 
 const handlePlantaChange = (e) => {
@@ -98,7 +231,6 @@ const handlePlantaChange = (e) => {
   if (codObraInput) codObraInput.value = "";
   if (headerCodObraInput) headerCodObraInput.value = "";
   const activeDate = filterFechaPanel.value;
-  renderDateOptionsForFilter(val);
   
   const allowedPlants = val.startsWith("Grupo:")
     ? (grupos[val.split(":")[1]] || Object.keys(window.plantasData))
@@ -113,18 +245,17 @@ const handlePlantaChange = (e) => {
     updateSelectStyle(filterFechaHeader, filterPlantaHeader);
   }
 
-  renderDateOptionsForFilter(val);
-  renderDashboard(val);
+  dibujar();
 };
 
 const handleObraInput = (e) => {
   const val = e.target.value.split(" - ")[0].trim();
   codObraInput.value = val;
   if (headerCodObraInput) headerCodObraInput.value = val;
-  
+
   if (val === "") {
     layers.style("opacity", CFG.opacity || 0.7);
-    layers.each(function(d) {
+    layers.each(function (d) {
       const group = d3.select(this);
       group.selectAll("path.area, path.carga").style("fill", getAreaColor(d));
       group.selectAll("path.line-top, path.carga")
@@ -134,7 +265,7 @@ const handleObraInput = (e) => {
     d3.selectAll("path.line-parent-envelope")
       .style("opacity", 1.0)
       .attr("stroke-width", CFG.lineStrokeWidth);
-    
+
     if (window.currentBand) window.currentBand.clear();
     panel.html(`<div class="tooltip-card"></div>`);
     d3.selectAll(".gantt-row").style("opacity", 1);
@@ -146,16 +277,16 @@ const handleObraInput = (e) => {
   if (matches.length > 0) {
     const focus = matches[0];
     selectedPedido.current = focus;
-    
+
     const parentId = focus.parentPedidoId || focus.id;
     layers.style("opacity", d => ((d.parentPedidoId || d.id) === parentId || d.CodObra === focus.CodObra) ? 1 : 0.5);
-    
-    layers.each(function(d) {
+
+    layers.each(function (d) {
       const isSameParent = (d.parentPedidoId || d.id) === parentId;
       const isSameObra = d.CodObra === focus.CodObra;
       const isTarget = isSameParent || isSameObra;
       const group = d3.select(this);
-      
+
       group.selectAll("path.area, path.carga")
         .style("fill", isTarget ? (isSameParent ? getColorOrigen(d) : "red") : getAreaColor(d));
       group.selectAll("path.line-top, path.carga")
@@ -181,146 +312,26 @@ const handleObraInput = (e) => {
 const handleFilterCheck = () => {
   const val = filterCheck.property("checked");
   if (headerFilterCheck) headerFilterCheck.property("checked", val);
-  const activePlanta = localStorage.getItem("filterPlantaGrupo") || "Grupo:TODOS";
-  renderDashboard(activePlanta);
+  dibujar();
 };
 
 function renderDateOptionsForFilter(plantFilter) {
   const allowedPlants = plantFilter.startsWith("Grupo:")
     ? (grupos[plantFilter.split(":")[1]] || Object.keys(window.plantasData))
     : [plantFilter.split(":")[1]];
-  
+
   const datesWithOrders = uniqueDates.filter(date =>
     fullPedidos.some(p => p["Fecha Pedido"] === date && allowedPlants.includes(p.Planta))
   );
-  
+
   populateDateSelect(filterFechaPanel, datesWithOrders);
   populateDateSelect(filterFechaHeader, datesWithOrders);
-}
 
-function initApp() {
-  filterFechaPanel = document.getElementById("filter-fecha");
-  const headerContainer = document.getElementById("header-date-container");
-  headerContainer.innerHTML = `
-    <div style="display: flex; align-items: center; gap: 10px; font-size: 11px; background: transparent; padding: 0; flex-wrap: nowrap; overflow: hidden;">
-      <!-- Grupo Día -->
-      <div style="display: flex; align-items: center; gap: 4px;">
-        <label for="header-filter-fecha" style="font-weight: 600; color: #555;">Día:</label>
-        <select id="header-filter-fecha" title="Cambiar Fecha" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
-      </div>
-      
-      <!-- Grupo Planta -->
-      <div style="display: flex; align-items: center; gap: 4px;">
-        <label for="header-filter-plantagrupo" style="font-weight: 600; color: #555;">Planta:</label>
-        <select id="header-filter-plantagrupo" title="Cambiar Planta" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
-      </div>      
-
-      <!-- Grupo Vista -->
-      <div style="display: flex; align-items: center; gap: 4px;">
-        <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
-        <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
-          <option value="camiones">Camiones</option>
-          <option value="plantas">Asignaciones</option>
-          <option value="colas">Plantas</option>
-          <option value="recursos">Recursos</option>
-        </select>
-      </div>
-
-      <!-- Grupo Gantt -->
-      <div style="display: flex; align-items: center; gap: 4px;">
-        <label for="header-viewgantt" style="font-weight: 600; color: #555;">Gantt:</label>
-        <select id="header-viewgantt" name="headerViewGantt" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
-          <option value="pedidos">Pedidos</option>
-          <option value="despachos">Despachos</option>
-          <option value="despachos_reales">Despachos reales</option>
-          <option value="despachos_mix">Despachos Mix</option>
-        </select>
-      </div>
-    </div>
-  `;
-
-  filterFechaHeader = document.getElementById("header-filter-fecha");
-  filterPlantaHeader = document.getElementById("header-filter-plantagrupo");
-
-  populateDateSelect(filterFechaPanel);
-  populateDateSelect(filterFechaHeader);
-
-  const initialDate = uniqueDates.includes(rawReportDate) ? rawReportDate : (uniqueDates[0] || "");
-  filterFechaPanel.value = initialDate;
-  filterFechaHeader.value = initialDate;
-
-  updateSelectStyle(filterFechaHeader, filterPlantaHeader);
-
-  filterSelect = document.getElementById("filter-plantagrupo");
-  codObraInput = document.getElementById("filter-codobra");
-  headerCodObraInput = document.getElementById("header-filter-codobra");
-  codObraList = document.getElementById("codobras-list");
-  filterCheck = d3.select("#filter-green");
-  headerFilterCheck = d3.select("#header-filter-green");
-
-  filterFechaPanel.addEventListener("change", handleDateChange);
-  filterFechaHeader.addEventListener("change", handleDateChange);
-
-  filterSelect.addEventListener("change", handlePlantaChange);
-  filterPlantaHeader.addEventListener("change", handlePlantaChange);
-
-  codObraInput.addEventListener("input", handleObraInput);
-  if (headerCodObraInput) headerCodObraInput.addEventListener("input", handleObraInput);
-
-  filterCheck.on("change", handleFilterCheck);
-  if (!headerFilterCheck.empty()) headerFilterCheck.on("change", handleFilterCheck);
-
-  const initialSaved = updateFiltersForDate();
-
-  let savedGraphView = getCookie("viewGraph") || "camiones";
-  if (savedGraphView === "camionesd" || savedGraphView === "camiones_cd" || savedGraphView === "camiones_mix") {
-    savedGraphView = "camiones";
-    setCookie("viewGraph", "camiones");
-  } else if (savedGraphView === "recursos2") {
-    savedGraphView = "recursos";
-    setCookie("viewGraph", "recursos");
-  }
-  let savedGanttView = getCookie("viewGantt") || "pedidos";
-  
-  const selectViewGraph = document.getElementById("filter-viewgraph");
-  const headerViewGraph = document.getElementById("header-viewgraph");
-  const selectViewGantt = document.getElementById("filter-viewgantt");
-  const headerViewGantt = document.getElementById("header-viewgantt");
-  
-  if (selectViewGraph) selectViewGraph.value = savedGraphView;
-  if (headerViewGraph) headerViewGraph.value = savedGraphView;
-  if (selectViewGantt) selectViewGantt.value = savedGanttView;
-  if (headerViewGantt) headerViewGantt.value = savedGanttView;
-
-  document.addEventListener("change", (e) => {
-    const ctrl = e.target;
-    const name = ctrl.name;
-    if (!["viewGraph", "headerViewGraph", "viewGantt", "headerViewGantt"].includes(name)) return;
-
-    const val = ctrl.value;
-    if (name === "viewGraph" || name === "headerViewGraph") {
-      setCookie("viewGraph", val);
-      const s1 = document.getElementById("filter-viewgraph");
-      const s2 = document.getElementById("header-viewgraph");
-      if (s1) s1.value = val;
-      if (s2) s2.value = val;
-    } else if (name === "viewGantt" || name === "headerViewGantt") {
-      setCookie("viewGantt", val);
-      const s1 = document.getElementById("filter-viewgantt");
-      const s2 = document.getElementById("header-viewgantt");
-      if (s1) s1.value = val;
-      if (s2) s2.value = val;
-    }
-    renderDashboard(localStorage.getItem("filterPlantaGrupo") || initialSaved);
-  });
-
-  renderDateOptionsForFilter(initialSaved);
-  renderDashboard(initialSaved);
 }
 
 function getDashboardData(selectedDate, filterKey, currentGraphView, currentGanttView) {
   const cacheKey = `${selectedDate}_${filterKey}_${currentGraphView}_${currentGanttView}`;
-  
+
   if (window.appCache[cacheKey]) {
     const cached = window.appCache[cacheKey];
     return {
@@ -373,7 +384,7 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
   const stackReal = buildStack(realDesp);
   const mixDesp = baseOrders.flatMap(p => calculateMixedDespachosForPedido(p, p.realDespachos || [], CFG.granularidadMin));
   const stackMix = buildStack(mixDesp);
-  
+
   const globalMaxOcupacionCamiones = Math.max(
     stackPed.ocupacionMax || 0,
     stackTeo.ocupacionMax || 0,
@@ -400,14 +411,14 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
       const activePlants = permitidasGrupo.filter(pCode =>
         tempPedidos.some(p => p.Planta === pCode)
       ).sort();
-      
+
       if (activePlants.length > 1) {
         const plantStacks = {};
         activePlants.forEach(pCode => {
           const plantPedidos = tempPedidos.filter(p => p.Planta === pCode);
           plantStacks[pCode] = buildPlantLoadStack(plantPedidos, CFG.granularidadMin);
         });
-        
+
         stackResult = {
           isSplit: true,
           plants: activePlants,
@@ -436,7 +447,7 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
       const activePlants = permitidasGrupo.filter(pCode =>
         tempPedidos.some(p => p.Planta === pCode)
       ).sort();
-      
+
       if (activePlants.length > 1) {
         const plantStacks = {};
         activePlants.forEach(pCode => {
@@ -444,7 +455,7 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
           const pCap = window.plantasData[pCode]?.cant_bocas || 1;
           plantStacks[pCode] = buildColasStack(plantPedidos, pCap, CFG.granularidadMin);
         });
-        
+
         stackResult = {
           isSplit: true,
           plants: activePlants,
@@ -470,7 +481,7 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
     const stackRec = buildStack(tempPedidos);
     const stackAsig = buildPlantLoadStack(tempPedidos, CFG.granularidadMin);
     const stackCol = buildColasStack(tempPedidos, totalBocas, CFG.granularidadMin);
-    
+
     stackResult = {
       isSplit: false,
       horaMax: Math.max(stackRec.horaMax || 0, stackAsig.horaMax || 0, stackCol.horaMax || 0),
@@ -480,7 +491,7 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
     stackResult.metrics.envolventeCamiones = stackRec.metrics.envolvente;
     stackResult.metrics.envolventeAsignaciones = stackAsig.metrics.envolvente;
     stackResult.metrics.envolventeColas = stackCol.metrics.envolvente;
-    
+
     stackResult.ocupacionMaxCamiones = stackRec.ocupacionMax || 0;
     stackResult.ocupacionMaxColas = stackCol.ocupacionMax || 0;
     stackResult.ocupacionMaxAsignaciones = stackAsig.ocupacionMax || 0;
@@ -585,9 +596,9 @@ function renderDashboard(filterKey) {
   scales = scalesSetup.scales;
   const yMax = scalesSetup.yMax;
 
-  const isSplitGraph = currentGraphView === 'recursos' || 
-                       (currentGraphView === 'plantas' && stackResult.isSplit) || 
-                       (currentGraphView === 'colas' && stackResult.isSplit);
+  const isSplitGraph = currentGraphView === 'recursos' ||
+    (currentGraphView === 'plantas' && stackResult.isSplit) ||
+    (currentGraphView === 'colas' && stackResult.isSplit);
   drawGrids(g, scales, curHoraMax, CFG.granularidadMin, innerW, innerH, yMax);
   drawAxes(g, scales, curHoraMax, CFG.granularidadMin, innerH, isSplitGraph);
   drawTopOverlay(svg, g, meta, scales, currentMetrics, width, filterKey);
@@ -603,10 +614,10 @@ function renderDashboard(filterKey) {
 
   let filteredForGantt = (filterCheck.property("checked") || (!headerFilterCheck.empty() && headerFilterCheck.property("checked")))
     ? pedidos.filter(p => {
-        const ref = p.parentPedido || p;
-        const maxCam = ref.MaxCamiones;
-        return ref.Confirmado === "SI" && maxCam === 1;
-      })
+      const ref = p.parentPedido || p;
+      const maxCam = ref.MaxCamiones;
+      return ref.Confirmado === "SI" && maxCam === 1;
+    })
     : pedidos.slice();
 
   if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales' || currentGanttView === 'despachos_mix') {
@@ -643,7 +654,7 @@ function renderDashboard(filterKey) {
 
     return String(refA.id).localeCompare(String(refB.id));
   });
-  
+
   ganttPanel.show(filteredForGantt);
 
   setupInteraction(
@@ -815,7 +826,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // Exposición explícita al objeto global window
-window.initApp = initApp;
+window.inicializarControles = inicializarControles;
 window.renderDashboard = renderDashboard;
 window.getDashboardData = getDashboardData;
 window.populateDateSelect = populateDateSelect;
