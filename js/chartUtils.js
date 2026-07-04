@@ -815,4 +815,350 @@ function drawColasLoads(g, pedidos, scales, granularidadMin, yScale) {
   });
 
   return layers;
+}
+
+function getDateStyles(dateStr) {
+  if (dateStr === rawReportDate) return { bg: "#ff8c00", text: "#fff", label: " (Hoy)" };
+  if (dateStr === tomorrowStr) return { bg: "#28a745", text: "#fff", label: " (Mañana)" };
+  if (dateStr > tomorrowStr) return { bg: "#add8e6", text: "#000", label: "" };
+  return { bg: "#eee", text: "#555", label: "" };
+}
+
+function setupDashboardScales(currentGraphView, currentMetrics, totalBocas, globalMaxOcupacionCamiones, curOcupacionMax, curOcupacionMaxAsignaciones, curOcupacionMaxColas, stackResult, xMin, xMax) {
+  let scales;
+  let yMax;
+
+  if (currentGraphView === 'recursos') {
+    scales = createScales({ xMin, xMax, yMax: 1, innerW, innerH });
+    
+    scales.yCamiones = d3.scaleLinear()
+      .domain([0, Math.max(CFG.yStep, Math.ceil(globalMaxOcupacionCamiones / CFG.yStep) * CFG.yStep)])
+      .range([innerH, innerH * 0.55]);
+      
+    scales.yAsignaciones = d3.scaleLinear()
+      .domain([0, Math.max(totalBocas + 2, Math.ceil(curOcupacionMaxAsignaciones / 2) * 2 + 2)])
+      .range([innerH * 0.55, innerH * 0.35]);
+
+    scales.yColas = d3.scaleLinear()
+      .domain([0, Math.max(totalBocas + 2, Math.ceil(curOcupacionMaxColas / 2) * 2 + 2)])
+      .range([innerH * 0.35, innerH * 0.12]);
+      
+    const maxDelayMin = Math.max(
+      (d3.max(currentMetrics.delay2ByTime) || 0) * CFG.granularidadMin,
+      d3.max(currentMetrics.waitCargaByTime || []) || 0,
+      10
+    );
+    scales.yDelay = d3.scaleLinear()
+      .domain([0, maxDelayMin])
+      .range([innerH * 0.12 - 5, innerH * 0.02]);
+
+    yMax = 0;
+  } else if (currentGraphView === "plantas" && stackResult.isSplit) {
+    scales = createScales({ xMin, xMax, yMax: 1, innerW, innerH });
+    scales.yPlants = {};
+
+    const N = stackResult.plants.length;
+    const gap = 15;
+    const availableHeightForPlots = innerH - (N - 1) * gap;
+    const plotH = availableHeightForPlots / N;
+
+    let maxScaleVal = 0;
+    stackResult.plants.forEach(pCode => {
+      const capacity = window.plantasData[pCode]?.cant_bocas || 0;
+      const curOcupacionMax_pCode = stackResult.plantStacks[pCode].ocupacionMax;
+      let yMax_p = Math.max(capacity + 2, Math.ceil(curOcupacionMax_pCode / 2) * 2 + 2);
+      if (yMax_p < 5) yMax_p = 5;
+      if (yMax_p > maxScaleVal) maxScaleVal = yMax_p;
+    });
+
+    stackResult.plants.forEach((pCode, i) => {
+      const yTop = i * (plotH + gap);
+      const yBottom = yTop + plotH;
+
+      scales.yPlants[pCode] = d3.scaleLinear()
+        .domain([0, maxScaleVal])
+        .range([yBottom, yTop]);
+    });
+    
+    yMax = 0;
+  } else if (currentGraphView === "colas" && stackResult.isSplit) {
+    scales = createScales({ xMin, xMax, yMax: 1, innerW, innerH });
+    scales.yColasPlants = {};
+    scales.yDelayPlants = {};
+
+    const N = stackResult.plants.length;
+    const gap = 20;
+    const availableHeightForPlots = innerH - (N - 1) * gap;
+    const plotH = availableHeightForPlots / N;
+
+    let maxColasVal = 0;
+    stackResult.plants.forEach(pCode => {
+      const cap = window.plantasData[pCode]?.cant_bocas || 1;
+      const occ = stackResult.plantStacks[pCode].ocupacionMax || 0;
+      const val = Math.max(cap + 2, Math.ceil(occ / 2) * 2 + 2);
+      if (val > maxColasVal) maxColasVal = val;
+    });
+    if (maxColasVal < 10) maxColasVal = 10;
+
+    let maxDelayVal = 0;
+    stackResult.plants.forEach(pCode => {
+      const delay2ByTime = stackResult.plantStacks[pCode].metrics.delay2ByTime || [];
+      const waitCargaByTime = stackResult.plantStacks[pCode].metrics.waitCargaByTime || [];
+      const maxDelayMin = Math.max(
+        (d3.max(delay2ByTime) || 0) * CFG.granularidadMin,
+        d3.max(waitCargaByTime) || 0,
+        10
+      );
+      if (maxDelayMin > maxDelayVal) maxDelayVal = maxDelayMin;
+    });
+
+    stackResult.plants.forEach((pCode, i) => {
+      const yTop = i * (plotH + gap);
+      const yBottom = yTop + plotH;
+
+      scales.yColasPlants[pCode] = d3.scaleLinear()
+        .domain([0, maxColasVal])
+        .range([yBottom, yTop]);
+
+      scales.yDelayPlants[pCode] = d3.scaleLinear()
+        .domain([0, maxDelayVal])
+        .range([yTop + plotH * 0.75, yTop + plotH * 0.05]);
+    });
+
+    yMax = 0;
+  } else if (currentGraphView === "plantas" || currentGraphView === "colas") {
+    const uniquePlantas = new Set(pedidos.map(p => p.Planta));
+    let capacity = 0;
+    uniquePlantas.forEach(pCode => {
+      if (window.plantasData && window.plantasData[pCode]) {
+        capacity += window.plantasData[pCode].cant_bocas || 0;
+      }
+    });
+    yMax = Math.max(capacity + 2, Math.ceil(curOcupacionMax / 2) * 2 + 2);
+    if (yMax < 10) yMax = 10;
+    scales = createScales({ xMin, xMax, yMax, innerW, innerH });
+  } else {
+    if (currentGraphView === 'camiones' || currentGraphView === 'camionesd' || currentGraphView === 'camiones_cd' || currentGraphView === 'camiones_mix') {
+      yMax = Math.ceil(globalMaxOcupacionCamiones / CFG.yStep) * CFG.yStep;
+    } else {
+      yMax = Math.ceil(curOcupacionMax / CFG.yStep) * CFG.yStep;
+    }
+    if (yMax < CFG.yStep) yMax = CFG.yStep;
+    scales = createScales({ xMin, xMax, yMax, innerW, innerH });
+  }
+
+  return { scales, yMax };
+}
+
+function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scales, currentMetrics, stackResult, yMax) {
+  let layers;
+
+  if (currentGraphView === 'plantas') {
+    if (stackResult.isSplit) {
+      stackResult.plants.forEach(pCode => {
+        const plantPedidos = subsetPedidos.filter(p => p.Planta === pCode);
+        const gPlant = g.append("g").attr("class", `zona-planta-${pCode}`);
+        drawPlantLoads(gPlant, plantPedidos, scales, CFG.granularidadMin, scales.yPlants[pCode]);
+        
+        const capacity = window.plantasData[pCode]?.cant_bocas || 0;
+        drawCapacityLine(gPlant, 0, scales, innerW, scales.yPlants[pCode]);
+        drawCapacityLine(gPlant, capacity, scales, innerW, scales.yPlants[pCode]);
+        drawLeftAxis(gPlant, scales.yPlants[pCode], pCode);
+      });
+      layers = g.selectAll(".pedido");
+    } else {
+      layers = drawPlantLoads(g, subsetPedidos, scales, CFG.granularidadMin);
+      
+      const uniquePlantas = new Set(subsetPedidos.map(p => p.Planta));
+      let capacity = 0;
+      uniquePlantas.forEach(pCode => {
+        if (window.plantasData && window.plantasData[pCode]) {
+          capacity += window.plantasData[pCode].cant_bocas || 0;
+        }
+      });
+      drawCapacityLine(g, capacity, scales, innerW);
+    }
+  } else if (currentGraphView === 'colas') {
+    if (stackResult.isSplit) {
+      stackResult.plants.forEach(pCode => {
+        const plantPedidos = subsetPedidos.filter(p => p.Planta === pCode);
+        const gPlant = g.append("g").attr("class", `zona-planta-colas-${pCode}`);
+        const yScale = scales.yColasPlants[pCode];
+        const yDelayScale = scales.yDelayPlants[pCode];
+
+        if (currentGanttView === 'despachos_reales') {
+          drawPlantLoads(gPlant, plantPedidos, scales, CFG.granularidadMin, yScale);
+        } else {
+          drawColasLoads(gPlant, plantPedidos, scales, CFG.granularidadMin, yScale);
+        }
+        
+        const capacity = window.plantasData[pCode]?.cant_bocas || 0;
+        drawCapacityLine(gPlant, 0, scales, innerW, yScale);
+        drawCapacityLine(gPlant, capacity, scales, innerW, yScale);
+
+        drawLeftAxis(gPlant, yScale, pCode);
+
+        const plantMetrics = stackResult.plantStacks[pCode].metrics;
+        const isColasAndReal = currentGraphView === 'colas' && currentGanttView === 'despachos_reales';
+        const isColasAndMix = currentGraphView === 'colas' && currentGanttView === 'despachos_mix';
+        if (plantMetrics.delay2ByTime && !isColasAndReal) {
+          drawDelayCurve(gPlant, plantMetrics.delay2ByTime, scales, CFG.granularidadMin, yDelayScale);
+          const rightAxisG = drawRightAxis(gPlant, yDelayScale, innerW, "Delay Max [min]", "red");
+          if (isColasAndMix) {
+            rightAxisG.append("text")
+              .attr("x", -10)
+              .attr("y", yDelayScale.range()[1] + 27)
+              .attr("fill", "blue")
+              .attr("text-anchor", "end")
+              .attr("font-size", "10px")
+              .attr("font-weight", "bold")
+              .text("Espera Carga [min]");
+          }
+        }
+        if (plantMetrics.waitCargaByTime && d3.max(plantMetrics.waitCargaByTime) > 0) {
+          drawDelayCurve(gPlant, plantMetrics.waitCargaByTime, scales, CFG.granularidadMin, yDelayScale, "blue", "wait-carga-curve", true);
+          if (isColasAndReal) {
+            drawRightAxis(gPlant, yDelayScale, innerW, "Espera Carga [min]", "blue");
+          } else if (!isColasAndMix) {
+            drawLeftAxis(gPlant, yDelayScale, "Espera Carga [min]", null, "blue", -30);
+          }
+        }
+      });
+      layers = g.selectAll(".pedido");
+    } else {
+      if (currentGanttView === 'despachos_reales') {
+        layers = drawPlantLoads(g, subsetPedidos, scales, CFG.granularidadMin);
+      } else {
+        layers = drawColasLoads(g, subsetPedidos, scales, CFG.granularidadMin);
+      }
+      
+      const uniquePlantas = new Set(subsetPedidos.map(p => p.Planta));
+      let capacity = 0;
+      uniquePlantas.forEach(pCode => {
+        if (window.plantasData && window.plantasData[pCode]) {
+          capacity += window.plantasData[pCode].cant_bocas || 0;
+        }
+      });
+      drawCapacityLine(g, capacity, scales, innerW);
+
+      if (currentMetrics.delay2ByTime) {
+        const maxDelayMin = Math.max(
+          (d3.max(currentMetrics.delay2ByTime) || 0) * CFG.granularidadMin,
+          d3.max(currentMetrics.waitCargaByTime || []) || 0,
+          10
+        );
+        scales.yDelay = d3.scaleLinear()
+          .domain([0, maxDelayMin])
+          .range([innerH * 0.75, innerH * 0.05]); 
+        
+        const isColasAndReal = currentGraphView === 'colas' && currentGanttView === 'despachos_reales';
+        const isColasAndMix = currentGraphView === 'colas' && currentGanttView === 'despachos_mix';
+        if (!isColasAndReal) {
+          drawDelayCurve(g, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
+          const rightAxisG = drawRightAxis(g, scales.yDelay, innerW, "Delay Max [min]", "red");
+          if (isColasAndMix) {
+            rightAxisG.append("text")
+              .attr("x", -10)
+              .attr("y", scales.yDelay.range()[1] + 27)
+              .attr("fill", "blue")
+              .attr("text-anchor", "end")
+              .attr("font-size", "10px")
+              .attr("font-weight", "bold")
+              .text("Espera Carga [min]");
+          }
+        }
+
+        if (currentMetrics.waitCargaByTime && d3.max(currentMetrics.waitCargaByTime) > 0) {
+          drawDelayCurve(g, currentMetrics.waitCargaByTime, scales, CFG.granularidadMin, null, "blue", "wait-carga-curve", true);
+          if (isColasAndReal) {
+            drawRightAxis(g, scales.yDelay, innerW, "Espera Carga [min]", "blue");
+          } else if (!isColasAndMix) {
+            drawLeftAxis(g, scales.yDelay, "Espera Carga [min]", null, "blue", -30);
+          }
+        }
+      }
+    }
+  } else if (currentGraphView === 'recursos') {
+    const gCamiones = g.append("g").attr("class", "zona-camiones");
+    const areaCamiones = createArea(scales, scales.yCamiones);
+    drawLayers(gCamiones, subsetPedidos, areaCamiones, scales, scales.yCamiones);
+    drawLeftAxis(gCamiones, scales.yCamiones, "Camiones");
+
+    const uniquePlantas = new Set(subsetPedidos.map(p => p.Planta));
+    let capacity = 0;
+    uniquePlantas.forEach(pCode => {
+      if (window.plantasData && window.plantasData[pCode]) {
+        capacity += window.plantasData[pCode].cant_bocas || 0;
+      }
+    });
+
+    const gAsignaciones = g.append("g").attr("class", "zona-asignaciones");
+    drawPlantLoads(gAsignaciones, subsetPedidos, scales, CFG.granularidadMin, scales.yAsignaciones);
+    drawCapacityLine(gAsignaciones, 0, scales, innerW, scales.yAsignaciones);
+    drawCapacityLine(gAsignaciones, capacity, scales, innerW, scales.yAsignaciones);
+    drawLeftAxis(gAsignaciones, scales.yAsignaciones, "Asignaciones");
+
+    const gColas = g.append("g").attr("class", "zona-colas");
+    if (currentGanttView === 'despachos_reales') {
+      drawPlantLoads(gColas, subsetPedidos, scales, CFG.granularidadMin, scales.yColas);
+    } else {
+      drawColasLoads(gColas, subsetPedidos, scales, CFG.granularidadMin, scales.yColas);
+    }
+    drawCapacityLine(gColas, 0, scales, innerW, scales.yColas);
+    drawCapacityLine(gColas, capacity, scales, innerW, scales.yColas);
+
+    const gDelay = g.append("g").attr("class", "zona-delay");
+    drawDelayCurve(gDelay, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
+    drawRightAxis(gDelay, scales.yDelay, innerW, "Delay Max [min]", "red");
+    if (currentMetrics.waitCargaByTime && d3.max(currentMetrics.waitCargaByTime) > 0) {
+      drawDelayCurve(gDelay, currentMetrics.waitCargaByTime, scales, CFG.granularidadMin, null, "blue", "wait-carga-curve", true);
+      drawLeftAxis(gDelay, scales.yDelay, "Espera Carga [min]", null, "blue", -30);
+    }
+
+    drawLeftAxis(gColas, scales.yColas, "Plantas", [scales.yColas.range()[0], scales.yDelay.range()[1]]);
+
+    layers = g.selectAll(".pedido"); 
+  } else {
+    const area = createArea(scales);
+    layers = drawLayers(g, subsetPedidos, area, scales);
+  }
+
+  return layers;
+}
+
+function drawTopOverlay(svg, g, meta, scales, metrics, width, filterKey = "") {
+  const TRI_Y = 2;   // Pegado al borde superior (adentro)
+  const TEXT_Y = 11; // Alineación vertical para el texto
+  const HORA_X = 8;  // Offset a la derecha
+  const VAL_X = -8;  // Offset a la izquierda
+
+  const headerG = svg.append("g").attr("class", "chart-header").attr("transform", "translate(10,14)");
+  headerG.append("text").attr("x", margin.left - 50).attr("y", 0).attr("font-size", 10).attr("fill", "#000")
+    .text(`@ ${meta.DiaReporte} ${meta.HoraReporte}`);
+
+  const txt = headerG.append("text").attr("x", width - margin.right).attr("y", 0).attr("text-anchor", "end");
+
+  txt.append("tspan").attr("font-size", 12).attr("fill", "#333").attr("font-weight", 600).text(`Volumen: ${formatM3(metrics.volumenT)} m3`);
+  txt.append("tspan").attr("font-size", 10).attr("fill", "#000").text(`, Confirmado: ${formatM3(metrics.volConfirmado)}`);
+
+  if (typeof getCurrentGraphView === "function" && getCurrentGraphView() === "recursos") {
+    return;
+  }
+
+  const markerG = g.append("g").attr("class", "markers-top").style("pointer-events", "none");
+  const items = [{ key: "maxGlobal", color: "#d62728" }, { key: "maxAM", color: "#1f77b4" }, { key: "min12_14", color: "#2ca02c" }, { key: "maxPM14", color: "#1f77b4" }];
+  const data = items.map(d => ({ ...d, ...metrics[d.key] })).filter(d => d.slot != null);
+
+  markerG.selectAll("path.top-marker").data(data).enter().append("path").attr("class", "top-marker")
+    .attr("d", d3.symbol().type(d3.symbolTriangle).size(45))
+    .attr("transform", d => `translate(${scales.x(d.slot)}, ${TRI_Y}) rotate(180)`)
+    .attr("fill", d => d.color);
+
+  markerG.selectAll("text.top-marker-hour").data(data).enter().append("text").attr("class", "top-marker-hour")
+    .attr("x", d => scales.x(d.slot) + HORA_X).attr("y", TEXT_Y).attr("text-anchor", "start").attr("font-size", 10)
+    .attr("font-weight", 600).attr("fill", d => d.color).text(d => d.hora);
+
+  markerG.selectAll("text.top-marker-value").data(data).enter().append("text").attr("class", "top-marker-value")
+    .attr("x", d => scales.x(d.slot) + VAL_X).attr("y", TEXT_Y).attr("text-anchor", "end").attr("font-size", 11)
+    .attr("font-weight", 700).attr("fill", d => d.color).text(d => d.value);
 } 

@@ -452,6 +452,32 @@ function buildColasStack(pedidos, totalBocas, granularidadMin) {
     }
   });
 
+  // --- Si es vista de despachos reales, sobreescribir STK_PLANTAS para graficar en slot_impreso ---
+  const isReal = pedidos.some(p => p.isRealDespacho);
+  if (isReal) {
+    const ocupacionCargas = Array(horaMax + 1).fill(0);
+    const sorted = [...pedidos].sort((a, b) => {
+      const valA = a.HoraAsignacionMin ?? (a.despachoIndex ?? 0);
+      const valB = b.HoraAsignacionMin ?? (b.despachoIndex ?? 0);
+      return valA - valB;
+    });
+
+    sorted.forEach(pedido => {
+      const numViajes = pedido.CantCargas || 1;
+      const freqSlots = Math.floor((pedido.Frecuencia || 0) / granularidadMin);
+      const bloquesXY = [];
+      for (let i = 0; i < numViajes; i++) {
+        const x = pedido.XG.offset + i * freqSlots;
+        if (x < 0 || x > horaMax) continue;
+        const y0 = ocupacionCargas[x] || 0;
+        const y1 = y0 + 1;
+        bloquesXY.push({ x, y0, y1, v: 1 });
+        ocupacionCargas[x] = y1;
+      }
+      pedido.STK_PLANTAS = { bloquesXY };
+    });
+  }
+
   const metrics = {
     volumenT: totalM3,
     volConfirmado: totalM3Confirmados,

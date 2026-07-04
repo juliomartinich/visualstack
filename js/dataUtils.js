@@ -1,5 +1,17 @@
 /* ================== DATA UTILITIES ================== */
 
+// Cookie helpers
+function setCookie(name, value, days = 400) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/';
+}
+function getCookie(name) {
+  return document.cookie.split('; ').reduce((r, v) => {
+    const parts = v.split('=');
+    return parts[0] === name ? decodeURIComponent(parts[1]) : r;
+  }, '');
+}
+
 function hhmmssToMin(hhmmss) {
     if (!hhmmss) return null;
     const [hh, mm, ss] = hhmmss.split(":").map(Number);
@@ -596,4 +608,37 @@ function calculateMixedDespachosForPedido(p, tickets, granularidad) {
     });
 
     return mixed;
+}
+
+function getTomorrow(yyyymmdd) {
+  if (!yyyymmdd || yyyymmdd.length !== 8) return null;
+  const y = Number(yyyymmdd.slice(0, 4));
+  const m = Number(yyyymmdd.slice(4, 6)) - 1;
+  const d = Number(yyyymmdd.slice(6, 8));
+  const dt = new Date(y, m, d);
+  dt.setDate(dt.getDate() + 1);
+  return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, "0")}${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+function enrichPedidosForDate(pedidosForDay) {
+  const plantToScope = {};
+  Object.entries(window.plantasData).forEach(([code, p]) => {
+    plantToScope[code] = p.grupo_despacho || code;
+  });
+  const obraScopeCounts = {};
+  pedidosForDay.forEach(p => {
+    const scope = plantToScope[p.Planta] || p.Planta;
+    const key = `${p.CodObra}_${scope}`;
+    obraScopeCounts[key] = (obraScopeCounts[key] || 0) + 1;
+  });
+  pedidosForDay.forEach(p => {
+    const scope = plantToScope[p.Planta] || p.Planta;
+    const key = `${p.CodObra}_${scope}`;
+    p.CantPedidosObra = obraScopeCounts[key];
+
+    p.descargasBandXY = (p.XG?.descargarel ?? []).map(idx => ({
+      key: idx,
+      x: (p.XG?.offset ?? 0) + idx
+    }));
+  });
 }

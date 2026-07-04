@@ -11,7 +11,7 @@ flowchart TD
     classDef lib fill:#e2e2e2,stroke:#999,stroke-width:1px;
 
     %% Flujo de Inicialización
-    Start([Carga Inicial de Página]) --> loader[dataLoader.js: loadAppData]
+    Start([Carga Inicial de Página]) --> loader[main.js: loadAppData]
     loader -->|Promise.all| files[(Pedidos.json<br>colores.json<br>plantas.json<br>Tick.json)]
     
     %% Mapeo inicial
@@ -21,28 +21,28 @@ flowchart TD
     loader -.-> calcReal[dataUtils: calculateRealDespachosForPedido]
     
     loader -->|Resuelve Promesa| thenBlock{Callback .then}:::init
-    thenBlock -->|Almacena variables globales y llama| initApp[main.js: initApp]:::init
+    thenBlock -->|Almacena variables globales y llama| initApp[dashboard.js: initApp]:::init
     
     %% initApp setup
-    initApp --> popDates[main.js: populateDateSelect]:::helpers
-    initApp --> updStyles[main.js: updateSelectStyle]:::helpers
-    initApp --> updFilters[main.js: updateFiltersForDate]:::helpers
-    initApp --> dateOpts[main.js: renderDateOptionsForFilter]:::helpers
-    initApp --> renderDb[main.js: renderDashboard]:::db
+    initApp --> popDates[dashboard.js: populateDateSelect]:::helpers
+    initApp --> updStyles[dashboard.js: updateSelectStyle]:::helpers
+    initApp --> updFilters[dashboard.js: updateFiltersForDate]:::helpers
+    initApp --> dateOpts[dashboard.js: renderDateOptionsForFilter]:::helpers
+    initApp --> renderDb[dashboard.js: renderDashboard]:::db
     
     %% Manejadores de Eventos
     subgraph Eventos [Escuchadores de Eventos y Handlers]
-        evtDate[Cambio de Fecha] --> handleDate[main.js: handleDateChange]:::helpers
+        evtDate[Cambio de Fecha] --> handleDate[dashboard.js: handleDateChange]:::helpers
         evtPlant[Cambio de Planta] --> handlePlanta[Manejador Planta Change]:::helpers
-        evtObra[Input Código Obra] --> handleObra[main.js: handleObraInput]:::helpers
-        evtFilter[Checkbox Filtro Verde] --> handleFltGreen[main.js: handleFilterCheck]:::helpers
+        evtObra[Input Código Obra] --> handleObra[dashboard.js: handleObraInput]:::helpers
+        evtFilter[Checkbox Filtro Verde] --> handleFltGreen[dashboard.js: handleFilterCheck]:::helpers
     end
 
     handleDate --> updFilters
     handleDate --> dateOpts
     handleDate --> renderDb
 
-    handlePlanta --> dateOpts
+    handlePlanta --> dateOpts?
     handlePlanta --> renderDb
     
     handleObra -.-> highlight[d3.selectAll.style area]
@@ -58,7 +58,7 @@ flowchart TD
         checkCache -->|No| runSims[Ejecutar Simulaciones de Stack]
         
         %% Stacking
-        runSims --> enrich[main.js: enrichPedidosForDate]:::helpers
+        runSims --> enrich[dataUtils: enrichPedidosForDate]:::helpers
         runSims --> bStack[stackUtils: buildStack]:::lib
         runSims --> bPlant[stackUtils: buildPlantLoadStack]:::lib
         runSims --> bColas[stackUtils: buildColasStack]:::lib
@@ -70,7 +70,7 @@ flowchart TD
         %% Dibujo D3
         draw --> cScales[chartUtils: createScales]:::lib
         draw --> cAxes[chartUtils: drawAxes]:::lib
-        draw --> cOverlay[main.js: drawTopOverlay]:::helpers
+        draw --> cOverlay[chartUtils: drawTopOverlay]:::helpers
         
         %% Vistas condicionales
         draw --> viewCheck{Tipo de Gráfico}
