@@ -687,8 +687,9 @@ function enrichPedidosForDate(pedidosForDay) {
   });
 }
 
-function calculateDisponiblesDespachos(baseOrders, granularidad) {
-  const datePedidoIds = new Set(baseOrders.map(p => p.id));
+function calculateDisponiblesDespachos(allPedidos, selectedDate, permitidas, granularidad) {
+  const datePedidos = allPedidos.filter(p => p["Fecha Pedido"] === selectedDate);
+  const datePedidoIds = new Set(datePedidos.map(p => p.id));
   const dateTickets = Object.entries(window.ticketsData || {})
     .map(([tId, t]) => ({ ...t, ticketId: tId }))
     .filter(t => datePedidoIds.has(String(t.Pedido)));
@@ -703,7 +704,7 @@ function calculateDisponiblesDespachos(baseOrders, granularidad) {
     if (!camion) return;
     
     // Buscar pedido correspondiente
-    const ped = baseOrders.find(o => String(o.id) === String(t.Pedido)) || baseOrders[0] || {};
+    const ped = datePedidos.find(o => String(o.id) === String(t.Pedido)) || datePedidos[0] || {};
     
     const pImpreso = (t.Impreso && t.Impreso !== "0" && t.Impreso !== "") 
         ? safeHhmmssToMin(t.Impreso) 
@@ -760,15 +761,16 @@ function calculateDisponiblesDespachos(baseOrders, granularidad) {
   
   // Ordenar cronológicamente los tickets de cada camión
   Object.values(trucksMap).forEach(info => {
-    info.tickets.sort((a, b) => {
-      const aMin = safeHhmmssToMin(a.Impreso) || safeHhmmssToMin(a.InicioCarga) || 0;
-      const bMin = safeHhmmssToMin(b.Impreso) || safeHhmmssToMin(b.InicioCarga) || 0;
-      return aMin - bMin;
-    });
+    info.tickets.sort((a, b) => a.startMin - b.startMin);
   });
   
   const disponibles = [];
   Object.entries(trucksMap).forEach(([camion, info]) => {
+    // Si la planta del primer ticket del camión no está en el filtro actual, la ignoramos para esta planta
+    if (!permitidas.includes(info.Planta)) {
+      return;
+    }
+    
     const startMin = info.impresoMin;
     
     // El fin de jornada es el máximo entre startMin + 8 horas y el fin del último ticket del día
@@ -782,7 +784,7 @@ function calculateDisponiblesDespachos(baseOrders, granularidad) {
     const endMin = maxTicketEndMin;
     const duration = endMin - startMin;
     
-    const baseP = baseOrders.find(o => o.Planta === info.Planta) || baseOrders[0] || {};
+    const baseP = datePedidos.find(o => o.Planta === info.Planta) || datePedidos[0] || {};
     
     const offset = Math.floor(startMin / granularidad);
     const finrel = Math.ceil(duration / granularidad);

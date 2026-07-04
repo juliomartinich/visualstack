@@ -399,7 +399,7 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
   const stackReal = buildStack(realDesp);
   const mixDesp = baseOrders.flatMap(p => calculateMixedDespachosForPedido(p, p.realDespachos || [], CFG.granularidadMin));
   const stackMix = buildStack(mixDesp);
-  const disponiblesDesp = calculateDisponiblesDespachos(baseOrders, CFG.granularidadMin);
+  const disponiblesDesp = calculateDisponiblesDespachos(fullPedidos, selectedDate, permitidas, CFG.granularidadMin);
   const stackDisponibles = buildStack(disponiblesDesp);
 
   const globalMaxOcupacionCamiones = Math.max(
