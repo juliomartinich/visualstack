@@ -438,56 +438,153 @@ function calculateMixedDespachosForPedido(p, tickets, granularidad) {
     const activeReal = sortedTickets.filter(t => !t.isAnulado);
     const canceledReal = sortedTickets.filter(t => t.isAnulado);
 
-    // 2. We want to generate the mixed dispatches.
-    const N = p.despachos ? p.despachos.length : 0;
-    const M = activeReal.length;
-    const maxCount = Math.max(N, M);
-
     const mixed = [];
     let lastArrivalMin = null;
 
-    for (let idx = 0; idx < maxCount; idx++) {
+    // 2. Add all active real dispatches
+    activeReal.forEach((t, idx) => {
         const despachoIndex = idx + 1;
-        const t = activeReal[idx]; // active real ticket, might be undefined
-        const teo = p.despachos ? p.despachos.find(d => d.despachoIndex === despachoIndex) : null;
+        const hasEnded = (t.ticketTimes.Enplanta && t.ticketTimes.Enplanta !== "0");
+        const isEnCurso = !hasEnded;
 
-        if (t) {
-            // Real ticket exists for this sequence index!
-            // It is either fully completed or in progress ("en curso").
-            const hasEnded = (t.ticketTimes.Enplanta && t.ticketTimes.Enplanta !== "0");
-            const isEnCurso = !hasEnded;
+        // Calculate/project times
+        const pImpreso = (t.ticketTimes.Impreso && t.ticketTimes.Impreso !== "0") 
+            ? safeHhmmssToMin(t.ticketTimes.Impreso) 
+            : p.HoraAsignacionMin;
+        const pInicioCarga = (t.ticketTimes.InicioCarga && t.ticketTimes.InicioCarga !== "0") 
+            ? safeHhmmssToMin(t.ticketTimes.InicioCarga) 
+            : pImpreso;
+        const pFinCarga = (t.ticketTimes.FinCarga && t.ticketTimes.FinCarga !== "0") 
+            ? safeHhmmssToMin(t.ticketTimes.FinCarga) 
+            : (pInicioCarga + p.TiempoCarga);
+        const pAObra = (t.ticketTimes.AObra && t.ticketTimes.AObra !== "0") 
+            ? safeHhmmssToMin(t.ticketTimes.AObra) 
+            : pFinCarga;
+        const pEnObra = (t.ticketTimes.EnObra && t.ticketTimes.EnObra !== "0") 
+            ? safeHhmmssToMin(t.ticketTimes.EnObra) 
+            : (pAObra + p.TiempoViaje);
+        const pInicioDescarga = (t.ticketTimes.InicioDescarga && t.ticketTimes.InicioDescarga !== "0") 
+            ? safeHhmmssToMin(t.ticketTimes.InicioDescarga) 
+            : pEnObra;
+        const pAplanta = (t.ticketTimes.Aplanta && t.ticketTimes.Aplanta !== "0") 
+            ? safeHhmmssToMin(t.ticketTimes.Aplanta) 
+            : (pEnObra + p.Frecuencia);
+        const pEnplanta = (t.ticketTimes.Enplanta && t.ticketTimes.Enplanta !== "0") 
+            ? safeHhmmssToMin(t.ticketTimes.Enplanta) 
+            : (pAplanta + p.TiempoViaje);
 
-            // Let's project/calculate the times
-            const pImpreso = (t.ticketTimes.Impreso && t.ticketTimes.Impreso !== "0") ? safeHhmmssToMin(t.ticketTimes.Impreso) : (teo ? teo.HoraAsignacionMin : p.HoraAsignacionMin);
-            const pInicioCarga = (t.ticketTimes.InicioCarga && t.ticketTimes.InicioCarga !== "0") ? safeHhmmssToMin(t.ticketTimes.InicioCarga) : pImpreso;
-            const pFinCarga = (t.ticketTimes.FinCarga && t.ticketTimes.FinCarga !== "0") ? safeHhmmssToMin(t.ticketTimes.FinCarga) : (pInicioCarga + (teo ? teo.TiempoCarga : p.TiempoCarga));
-            const pAObra = (t.ticketTimes.AObra && t.ticketTimes.AObra !== "0") ? safeHhmmssToMin(t.ticketTimes.AObra) : pFinCarga;
-            const pEnObra = (t.ticketTimes.EnObra && t.ticketTimes.EnObra !== "0") ? safeHhmmssToMin(t.ticketTimes.EnObra) : (pAObra + (teo ? teo.TiempoViaje : p.TiempoViaje));
-            const pInicioDescarga = (t.ticketTimes.InicioDescarga && t.ticketTimes.InicioDescarga !== "0") ? safeHhmmssToMin(t.ticketTimes.InicioDescarga) : pEnObra;
-            const pAplanta = (t.ticketTimes.Aplanta && t.ticketTimes.Aplanta !== "0") ? safeHhmmssToMin(t.ticketTimes.Aplanta) : (pEnObra + (teo ? teo.Frecuencia : p.Frecuencia));
-            const pEnplanta = (t.ticketTimes.Enplanta && t.ticketTimes.Enplanta !== "0") ? safeHhmmssToMin(t.ticketTimes.Enplanta) : (pAplanta + (teo ? teo.TiempoViaje : p.TiempoViaje));
+        const HoraAsignacionMin = pImpreso;
+        const HoraInicioMin = pInicioDescarga;
+        const HoraFinalMin = pEnplanta;
 
-            const HoraAsignacionMin = pImpreso;
-            const HoraInicioMin = pInicioDescarga;
-            const HoraFinalMin = pEnplanta;
+        lastArrivalMin = HoraInicioMin;
 
+        const offset = Math.floor(HoraAsignacionMin / granularidad);
+        const cicloSlots = Math.max(1, Math.ceil((HoraFinalMin - HoraAsignacionMin) / granularidad));
+        const descargaRel = Math.max(0, Math.min(cicloSlots - 1, Math.floor(HoraInicioMin / granularidad) - offset));
+
+        mixed.push({
+            ...p,
+            id: `${p.id}_m${despachoIndex}`,
+            parentPedidoId: p.id,
+            parentPedido: p,
+            despachoIndex,
+            isDespacho: true,
+            isMixedDespacho: true,
+            mixedType: isEnCurso ? "en_curso" : "real",
+            isAnulado: false,
+            CantProgramada: Number(t.CantProgramada) || 8,
+            CantCargas: 1,
+            MaxCamiones: 1,
+            HoraAsignacionMin,
+            HoraInicioMin,
+            HoraFinalMin,
+            HoraAsignacionHhmm: minToHHMM(HoraAsignacionMin),
+            HoraInicio: minToHHMM(HoraInicioMin),
+            HoraFinalHhmm: minToHHMM(HoraFinalMin),
+            Descargas: [{ idx: 0, Min: HoraInicioMin, Hhmm: minToHHMM(HoraInicioMin) }],
+            descargasBandXY: [{ key: 0, x: offset + descargaRel }],
+            XG: {
+                offset,
+                descargarel: [descargaRel],
+                finrel: cicloSlots,
+                ciclo: cicloSlots,
+                freq: 0,
+                demanda: new Array(cicloSlots).fill(1)
+            },
+            ticketId: t.ticketId,
+            Camion: t.Camion,
+            Planta: p.Planta,
+            rawTicket: t.rawTicket || t,
+            isStepReal: {
+                Impreso: (t.ticketTimes.Impreso && t.ticketTimes.Impreso !== "0"),
+                InicioCarga: (t.ticketTimes.InicioCarga && t.ticketTimes.InicioCarga !== "0"),
+                FinCarga: (t.ticketTimes.FinCarga && t.ticketTimes.FinCarga !== "0"),
+                AObra: (t.ticketTimes.AObra && t.ticketTimes.AObra !== "0"),
+                EnObra: (t.ticketTimes.EnObra && t.ticketTimes.EnObra !== "0"),
+                InicioDescarga: (t.ticketTimes.InicioDescarga && t.ticketTimes.InicioDescarga !== "0"),
+                Aplanta: (t.ticketTimes.Aplanta && t.ticketTimes.Aplanta !== "0"),
+                Enplanta: (t.ticketTimes.Enplanta && t.ticketTimes.Enplanta !== "0")
+            },
+            ticketTimes: {
+                Impreso: minToHHMM(pImpreso),
+                InicioCarga: minToHHMM(pInicioCarga),
+                FinCarga: minToHHMM(pFinCarga),
+                AObra: minToHHMM(pAObra),
+                EnObra: minToHHMM(pEnObra),
+                InicioDescarga: minToHHMM(pInicioDescarga),
+                Aplanta: minToHHMM(pAplanta),
+                Enplanta: minToHHMM(pEnplanta)
+            }
+        });
+    });
+
+    // 3. Recalculate remaining volume (saldo) and generate remaining theoretical dispatches
+    const totalDespachado = d3.sum(activeReal, t => Number(t.CantProgramada) || 0);
+    const totalPedido = Number(p.CantProgramada) || 0;
+    const saldo = Math.max(0, totalPedido - totalDespachado);
+
+    if (saldo > 0) {
+        const tamanoCarga = Number(p.TamanoCarga) || 8;
+        const teoRestantesCount = Math.ceil(saldo / tamanoCarga);
+        const Frecuencia = Number(p.Frecuencia) || 0;
+        const TiempoCarga = Number(p.TiempoCarga) || 0;
+        const TiempoViaje = Number(p.TiempoViaje) || 0;
+        const TiempoCiclo = Number(p.TiempoCiclo) || 0;
+
+        for (let i = 0; i < teoRestantesCount; i++) {
+            const teoIndex = activeReal.length + i + 1;
+            const vol = (i === teoRestantesCount - 1) ? (saldo - i * tamanoCarga) : tamanoCarga;
+
+            let HoraAsignacionMin, HoraInicioMin, HoraFinalMin;
+            if (lastArrivalMin !== null) {
+                // Future theoretical calculated from last Arrival + Frecuencia
+                HoraInicioMin = lastArrivalMin + Frecuencia;
+                HoraAsignacionMin = HoraInicioMin - TiempoCarga - TiempoViaje;
+                HoraFinalMin = HoraAsignacionMin + TiempoCiclo;
+            } else {
+                // Default theoretical values if there is no real history yet.
+                HoraInicioMin = p.HoraInicioMin + i * Frecuencia;
+                HoraAsignacionMin = HoraInicioMin - TiempoCarga - TiempoViaje;
+                HoraFinalMin = HoraAsignacionMin + TiempoCiclo;
+            }
             lastArrivalMin = HoraInicioMin;
 
             const offset = Math.floor(HoraAsignacionMin / granularidad);
-            const cicloSlots = Math.max(1, Math.ceil((HoraFinalMin - HoraAsignacionMin) / granularidad));
-            const descargaRel = Math.max(0, Math.min(cicloSlots - 1, Math.floor(HoraInicioMin / granularidad) - offset));
+            const dSlots = Math.max(1, Math.ceil((HoraFinalMin - HoraAsignacionMin) / granularidad));
+            const descargaRel = Math.max(0, Math.min(dSlots - 1, Math.floor(HoraInicioMin / granularidad) - offset));
 
             mixed.push({
                 ...p,
-                id: `${p.id}_m${despachoIndex}`,
+                id: `${p.id}_m${teoIndex}`,
                 parentPedidoId: p.id,
                 parentPedido: p,
-                despachoIndex,
+                despachoIndex: teoIndex,
                 isDespacho: true,
                 isMixedDespacho: true,
-                mixedType: isEnCurso ? "en_curso" : "real",
+                mixedType: "teorico",
                 isAnulado: false,
-                CantProgramada: Number(t.CantProgramada) || (teo ? teo.CantProgramada : 8),
+                CantProgramada: vol,
                 CantCargas: 1,
                 MaxCamiones: 1,
                 HoraAsignacionMin,
@@ -501,78 +598,15 @@ function calculateMixedDespachosForPedido(p, tickets, granularidad) {
                 XG: {
                     offset,
                     descargarel: [descargaRel],
-                    finrel: cicloSlots,
-                    ciclo: cicloSlots,
+                    finrel: dSlots,
+                    ciclo: dSlots,
                     freq: 0,
-                    demanda: new Array(cicloSlots).fill(1)
+                    demanda: new Array(dSlots).fill(1)
                 },
-                ticketId: t.ticketId,
-                Camion: t.Camion,
+                ticketId: "",
+                Camion: "",
                 Planta: p.Planta,
-                rawTicket: t.rawTicket || t,
-                isStepReal: {
-                    Impreso: (t.ticketTimes.Impreso && t.ticketTimes.Impreso !== "0"),
-                    InicioCarga: (t.ticketTimes.InicioCarga && t.ticketTimes.InicioCarga !== "0"),
-                    FinCarga: (t.ticketTimes.FinCarga && t.ticketTimes.FinCarga !== "0"),
-                    AObra: (t.ticketTimes.AObra && t.ticketTimes.AObra !== "0"),
-                    EnObra: (t.ticketTimes.EnObra && t.ticketTimes.EnObra !== "0"),
-                    InicioDescarga: (t.ticketTimes.InicioDescarga && t.ticketTimes.InicioDescarga !== "0"),
-                    Aplanta: (t.ticketTimes.Aplanta && t.ticketTimes.Aplanta !== "0"),
-                    Enplanta: (t.ticketTimes.Enplanta && t.ticketTimes.Enplanta !== "0")
-                },
-                ticketTimes: {
-                    Impreso: minToHHMM(pImpreso),
-                    InicioCarga: minToHHMM(pInicioCarga),
-                    FinCarga: minToHHMM(pFinCarga),
-                    AObra: minToHHMM(pAObra),
-                    EnObra: minToHHMM(pEnObra),
-                    InicioDescarga: minToHHMM(pInicioDescarga),
-                    Aplanta: minToHHMM(pAplanta),
-                    Enplanta: minToHHMM(pEnplanta)
-                }
-            });
-        } else if (teo) {
-            // No real ticket exists for this sequence index, but theoretical does!
-            let HoraAsignacionMin, HoraInicioMin, HoraFinalMin;
-            if (lastArrivalMin !== null) {
-                // Future theoretical calculated from last Arrival + Frecuencia
-                HoraInicioMin = lastArrivalMin + (teo.Frecuencia || p.Frecuencia || 0);
-                HoraAsignacionMin = HoraInicioMin - (teo.TiempoCarga || p.TiempoCarga || 0) - (teo.TiempoViaje || p.TiempoViaje || 0);
-                HoraFinalMin = HoraAsignacionMin + (teo.TiempoCiclo || p.TiempoCiclo || 0);
-            } else {
-                // Default theoretical values if there is no real history yet
-                HoraAsignacionMin = teo.HoraAsignacionMin;
-                HoraInicioMin = teo.HoraInicioMin;
-                HoraFinalMin = teo.HoraFinalMin;
-            }
-            lastArrivalMin = HoraInicioMin;
-
-            const offset = Math.floor(HoraAsignacionMin / granularidad);
-            const cicloSlots = Math.max(1, Math.ceil((HoraFinalMin - HoraAsignacionMin) / granularidad));
-            const descargaRel = Math.max(0, Math.min(cicloSlots - 1, Math.floor(HoraInicioMin / granularidad) - offset));
-
-            mixed.push({
-                ...teo,
-                id: `${p.id}_m${despachoIndex}`,
-                isMixedDespacho: true,
-                mixedType: "teorico",
-                isAnulado: false,
-                HoraAsignacionMin,
-                HoraInicioMin,
-                HoraFinalMin,
-                HoraAsignacionHhmm: minToHHMM(HoraAsignacionMin),
-                HoraInicio: minToHHMM(HoraInicioMin),
-                HoraFinalHhmm: minToHHMM(HoraFinalMin),
-                Descargas: [{ idx: 0, Min: HoraInicioMin, Hhmm: minToHHMM(HoraInicioMin) }],
-                descargasBandXY: [{ key: 0, x: offset + descargaRel }],
-                XG: {
-                    offset,
-                    descargarel: [descargaRel],
-                    finrel: cicloSlots,
-                    ciclo: cicloSlots,
-                    freq: 0,
-                    demanda: new Array(cicloSlots).fill(1)
-                },
+                rawTicket: null,
                 isStepReal: {
                     Impreso: false,
                     InicioCarga: false,
@@ -585,19 +619,19 @@ function calculateMixedDespachosForPedido(p, tickets, granularidad) {
                 },
                 ticketTimes: {
                     Impreso: minToHHMM(HoraAsignacionMin),
-                    InicioCarga: minToHHMM(HoraAsignacionMin),
-                    FinCarga: minToHHMM(HoraAsignacionMin + (teo.TiempoCarga || p.TiempoCarga || 0)),
-                    AObra: minToHHMM(HoraAsignacionMin + (teo.TiempoCarga || p.TiempoCarga || 0)),
+                    InicioCarga: minToHHMM(HoraAsignacionMin + TiempoCarga),
+                    FinCarga: minToHHMM(HoraAsignacionMin + TiempoCarga + TiempoCarga),
+                    AObra: minToHHMM(HoraAsignacionMin + TiempoCarga + TiempoViaje),
                     EnObra: minToHHMM(HoraInicioMin),
                     InicioDescarga: minToHHMM(HoraInicioMin),
-                    Aplanta: minToHHMM(HoraInicioMin + (teo.Frecuencia || p.Frecuencia || 0)),
+                    Aplanta: minToHHMM(HoraFinalMin - TiempoViaje),
                     Enplanta: minToHHMM(HoraFinalMin)
                 }
             });
         }
     }
 
-    // 3. Append canceled real tickets directly to mixed
+    // 4. Append canceled real tickets directly to mixed
     canceledReal.forEach(cr => {
         mixed.push({
             ...cr,
