@@ -37,6 +37,7 @@ function inicializarControles() {
           <option value="despachos">Despachos</option>
           <option value="despachos_reales">Despachos reales</option>
           <option value="despachos_mix">Despachos Mix</option>
+          <option value="disponibles">Disponibles</option>
         </select>
       </div>
     </div>
@@ -192,22 +193,36 @@ function updateFiltersForDate() {
 
   [filterSelect, headerFilterSelect].forEach(select => {
     if (!select) return;
-    addOption(select, `Grupo:TODOS`, `TODAS LAS PLANTAS (${formatM3(totalVolumen)} m3)`);
+    
+    const groupPlantsSet = new Set();
+
     sortedGroups.forEach(g => {
-      const gPlants = grupos[g] || [];
-      const gVol = d3.sum(gPlants, p => plantVolumes[p] || 0);
+      const gPlants = window.grupos[g] || [];
+      const activeGPlants = gPlants.filter(p => plantsWithVolume.includes(p)).sort();
+      const gVol = d3.sum(activeGPlants, p => plantVolumes[p] || 0);
+      
       addOption(select, `Grupo:${g}`, `Grupo ${g} (${formatM3(gVol)} m3)`);
+      
+      activeGPlants.forEach(pCode => {
+        groupPlantsSet.add(pCode);
+        const pVol = plantVolumes[pCode] || 0;
+        const pName = window.plantasData[pCode]?.nombre || pCode;
+        addOption(select, `Planta:${pCode}`, `\u00A0\u00A0\u00A0\u00A0${pName} (${formatM3(pVol)} m3)`);
+      });
     });
+    
     plantsWithVolume.forEach(pCode => {
-      const pVol = plantVolumes[pCode] || 0;
-      const pName = window.plantasData[pCode]?.desc_planta || pCode;
-      addOption(select, `Planta:${pCode}`, `${pName} (${formatM3(pVol)} m3)`);
+      if (!groupPlantsSet.has(pCode)) {
+        const pVol = plantVolumes[pCode] || 0;
+        const pName = window.plantasData[pCode]?.nombre || pCode;
+        addOption(select, `Planta:${pCode}`, `${pName} (${formatM3(pVol)} m3)`);
+      }
     });
   });
 
-  const saved = localStorage.getItem("filterPlantaGrupo") || "Grupo:TODOS";
+  const saved = localStorage.getItem("filterPlantaGrupo");
   const optionExists = Array.from(filterSelect.options).some(o => o.value === saved);
-  const finalVal = optionExists ? saved : "Grupo:TODOS";
+  const finalVal = optionExists ? saved : (filterSelect.options[0]?.value || "Grupo:RM");
   filterSelect.value = finalVal;
   if (headerFilterSelect) headerFilterSelect.value = finalVal;
   localStorage.setItem("filterPlantaGrupo", finalVal);
@@ -233,7 +248,7 @@ const handlePlantaChange = (e) => {
   const activeDate = filterFechaPanel.value;
   
   const allowedPlants = val.startsWith("Grupo:")
-    ? (grupos[val.split(":")[1]] || Object.keys(window.plantasData))
+    ? (window.grupos[val.split(":")[1]] || Object.keys(window.plantasData))
     : [val.split(":")[1]];
   const hasOrdersCurrentDate = fullPedidos.some(p =>
     p["Fecha Pedido"] === activeDate && allowedPlants.includes(p.Planta)
@@ -317,7 +332,7 @@ const handleFilterCheck = () => {
 
 function renderDateOptionsForFilter(plantFilter) {
   const allowedPlants = plantFilter.startsWith("Grupo:")
-    ? (grupos[plantFilter.split(":")[1]] || Object.keys(window.plantasData))
+    ? (window.grupos[plantFilter.split(":")[1]] || Object.keys(window.plantasData))
     : [plantFilter.split(":")[1]];
 
   const datesWithOrders = uniqueDates.filter(date =>
@@ -357,7 +372,7 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
 
   let permitidas = [];
   if (filterKey.startsWith("Grupo:")) {
-    permitidas = grupos[filterKey.split(":")[1]] || [];
+    permitidas = window.grupos[filterKey.split(":")[1]] || [];
   } else {
     permitidas = [filterKey.split(":")[1]];
   }
@@ -384,20 +399,25 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
   const stackReal = buildStack(realDesp);
   const mixDesp = baseOrders.flatMap(p => calculateMixedDespachosForPedido(p, p.realDespachos || [], CFG.granularidadMin));
   const stackMix = buildStack(mixDesp);
+  const disponiblesDesp = calculateDisponiblesDespachos(baseOrders, CFG.granularidadMin);
+  const stackDisponibles = buildStack(disponiblesDesp);
 
   const globalMaxOcupacionCamiones = Math.max(
     stackPed.ocupacionMax || 0,
     stackTeo.ocupacionMax || 0,
     stackReal.ocupacionMax || 0,
-    stackMix.ocupacionMax || 0
+    stackMix.ocupacionMax || 0,
+    stackDisponibles.ocupacionMax || 0
   );
 
   let tempPedidos = [...subsetPedidos];
-  if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales' || currentGanttView === 'despachos_mix') {
+  if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales' || currentGanttView === 'despachos_mix' || currentGanttView === 'disponibles') {
     if (currentGanttView === 'despachos_reales') {
       tempPedidos = tempPedidos.flatMap(p => (p.realDespachos || []).map(d => ({ ...d, parentPedido: p })));
     } else if (currentGanttView === 'despachos_mix') {
       tempPedidos = tempPedidos.flatMap(p => calculateMixedDespachosForPedido(p, p.realDespachos || [], CFG.granularidadMin));
+    } else if (currentGanttView === 'disponibles') {
+      tempPedidos = disponiblesDesp;
     } else {
       tempPedidos = tempPedidos.flatMap(p => (p.despachos || []).map(d => ({ ...d, parentPedido: p })));
     }
@@ -407,7 +427,7 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
   if (currentGraphView === 'plantas') {
     if (filterKey.startsWith("Grupo:")) {
       const groupName = filterKey.split(":")[1];
-      const permitidasGrupo = grupos[groupName] || [];
+      const permitidasGrupo = window.grupos[groupName] || [];
       const activePlants = permitidasGrupo.filter(pCode =>
         tempPedidos.some(p => p.Planta === pCode)
       ).sort();
@@ -443,7 +463,7 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
   } else if (currentGraphView === 'colas') {
     if (filterKey.startsWith("Grupo:")) {
       const groupName = filterKey.split(":")[1];
-      const permitidasGrupo = grupos[groupName] || [];
+      const permitidasGrupo = window.grupos[groupName] || [];
       const activePlants = permitidasGrupo.filter(pCode =>
         tempPedidos.some(p => p.Planta === pCode)
       ).sort();
@@ -572,7 +592,7 @@ function renderDashboard(filterKey) {
   if (actualTotalBocas === 0) {
     let permitidas = [];
     if (filterKey.startsWith("Grupo:")) {
-      permitidas = grupos[filterKey.split(":")[1]] || [];
+      permitidas = window.grupos[filterKey.split(":")[1]] || [];
     } else {
       permitidas = [filterKey.split(":")[1]];
     }

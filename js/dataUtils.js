@@ -274,7 +274,12 @@ function calculateRealDespachosForPedido(p, tickets, granularidad) {
             if (maxVal === pImpreso) {
                 maxVal = pImpreso + 15;
             }
-            HoraFinalMin = maxVal;
+            const horaReporteMin = safeHhmmssToMin(window.horaReporte);
+            if (horaReporteMin !== null && horaReporteMin > HoraAsignacionMin) {
+                HoraFinalMin = Math.max(maxVal, horaReporteMin);
+            } else {
+                HoraFinalMin = maxVal;
+            }
             HoraInicioMin = (t.InicioDescarga && t.InicioDescarga !== "0") ? safeHhmmssToMin(t.InicioDescarga) : ((t.EnObra && t.EnObra !== "0") ? safeHhmmssToMin(t.EnObra) : maxVal);
 
             fields.forEach(f => {
@@ -475,7 +480,12 @@ function calculateMixedDespachosForPedido(p, tickets, granularidad) {
 
         const HoraAsignacionMin = pImpreso;
         const HoraInicioMin = pInicioDescarga;
-        const HoraFinalMin = pEnplanta;
+        
+        let HoraFinalMin = pEnplanta;
+        const horaReporteMin = safeHhmmssToMin(window.horaReporte);
+        if (isEnCurso && horaReporteMin !== null && horaReporteMin > HoraAsignacionMin) {
+            HoraFinalMin = Math.max(HoraFinalMin, horaReporteMin);
+        }
 
         lastArrivalMin = HoraInicioMin;
 
@@ -675,4 +685,150 @@ function enrichPedidosForDate(pedidosForDay) {
       x: (p.XG?.offset ?? 0) + idx
     }));
   });
+}
+
+function calculateDisponiblesDespachos(baseOrders, granularidad) {
+  const datePedidoIds = new Set(baseOrders.map(p => p.id));
+  const dateTickets = Object.entries(window.ticketsData || {})
+    .map(([tId, t]) => ({ ...t, ticketId: tId }))
+    .filter(t => datePedidoIds.has(String(t.Pedido)));
+  
+  const activeTickets = dateTickets.filter(t => 
+    !t.CodAnulacion || t.CodAnulacion === "0" || t.CodAnulacion === ""
+  );
+  
+  const trucksMap = {};
+  activeTickets.forEach(t => {
+    const camion = t.Camion;
+    if (!camion) return;
+    
+    // Buscar pedido correspondiente
+    const ped = baseOrders.find(o => String(o.id) === String(t.Pedido)) || baseOrders[0] || {};
+    
+    const pImpreso = (t.Impreso && t.Impreso !== "0" && t.Impreso !== "") 
+        ? safeHhmmssToMin(t.Impreso) 
+        : (ped.HoraAsignacionMin || 0);
+    const pInicioCarga = (t.InicioCarga && t.InicioCarga !== "0" && t.InicioCarga !== "") 
+        ? safeHhmmssToMin(t.InicioCarga) 
+        : pImpreso;
+    const pFinCarga = (t.FinCarga && t.FinCarga !== "0" && t.FinCarga !== "") 
+        ? safeHhmmssToMin(t.FinCarga) 
+        : (pInicioCarga + (ped.TiempoCarga || 0));
+    const pAObra = (t.AObra && t.AObra !== "0" && t.AObra !== "") 
+        ? safeHhmmssToMin(t.AObra) 
+        : pFinCarga;
+    const pEnObra = (t.EnObra && t.EnObra !== "0" && t.EnObra !== "") 
+        ? safeHhmmssToMin(t.EnObra) 
+        : (pAObra + (ped.TiempoViaje || 0));
+    const pInicioDescarga = (t.InicioDescarga && t.InicioDescarga !== "0" && t.InicioDescarga !== "") 
+        ? safeHhmmssToMin(t.InicioDescarga) 
+        : pEnObra;
+    const pAplanta = (t.Aplanta && t.Aplanta !== "0" && t.Aplanta !== "") 
+        ? safeHhmmssToMin(t.Aplanta) 
+        : (pEnObra + (ped.Frecuencia || 0));
+    const pEnplanta = (t.Enplanta && t.Enplanta !== "0" && t.Enplanta !== "") 
+        ? safeHhmmssToMin(t.Enplanta) 
+        : (pAplanta + (ped.TiempoViaje || 0));
+        
+    const tkStartMin = pImpreso;
+    const tkEndMin = pEnplanta;
+    
+    // Buscar obra del pedido correspondiente
+    const obra = ped.Obra || "";
+    const ticketWithObra = { 
+      ...t, 
+      Obra: obra,
+      startMin: tkStartMin,
+      endMin: tkEndMin
+    };
+    
+    if (!trucksMap[camion]) {
+      trucksMap[camion] = {
+        impresoMin: tkStartMin,
+        ticketId: t.ticketId || "",
+        Planta: t.Planta || "",
+        tickets: []
+      };
+    } else if (tkStartMin < trucksMap[camion].impresoMin) {
+      trucksMap[camion].impresoMin = tkStartMin;
+      trucksMap[camion].ticketId = t.ticketId || "";
+      trucksMap[camion].Planta = t.Planta || "";
+    }
+    
+    trucksMap[camion].tickets.push(ticketWithObra);
+  });
+  
+  // Ordenar cronológicamente los tickets de cada camión
+  Object.values(trucksMap).forEach(info => {
+    info.tickets.sort((a, b) => {
+      const aMin = safeHhmmssToMin(a.Impreso) || safeHhmmssToMin(a.InicioCarga) || 0;
+      const bMin = safeHhmmssToMin(b.Impreso) || safeHhmmssToMin(b.InicioCarga) || 0;
+      return aMin - bMin;
+    });
+  });
+  
+  const disponibles = [];
+  Object.entries(trucksMap).forEach(([camion, info]) => {
+    const startMin = info.impresoMin;
+    
+    // El fin de jornada es el máximo entre startMin + 8 horas y el fin del último ticket del día
+    let maxTicketEndMin = startMin + 480;
+    info.tickets.forEach(tk => {
+      if (tk.endMin > maxTicketEndMin) {
+        maxTicketEndMin = tk.endMin;
+      }
+    });
+    
+    const endMin = maxTicketEndMin;
+    const duration = endMin - startMin;
+    
+    const baseP = baseOrders.find(o => o.Planta === info.Planta) || baseOrders[0] || {};
+    
+    const offset = Math.floor(startMin / granularidad);
+    const finrel = Math.ceil(duration / granularidad);
+    
+    disponibles.push({
+      ...baseP,
+      id: `disponibles_${camion}`,
+      parentPedidoId: `disponibles_${camion}`,
+      parentPedido: {
+        id: `disponibles_${camion}`,
+        CantCargas: 1,
+        MaxCamiones: 1,
+        CantPedidosObra: 1
+      },
+      Camion: camion,
+      ticketId: info.ticketId,
+      isDespacho: true,
+      isDisponibles: true,
+      isRealDespacho: false,
+      isMixedDespacho: false,
+      isAnulado: false,
+      Confirmado: "SI",
+      CantProgramada: 1, // height 1
+      HoraAsignacionMin: startMin,
+      HoraInicioMin: startMin,
+      HoraFinalMin: endMin,
+      HoraAsignacionHhmm: minToHHMM(startMin),
+      HoraInicio: minToHHMM(startMin),
+      HoraFinalHhmm: minToHHMM(endMin),
+      Descargas: [{ idx: 0, Min: startMin, Hhmm: minToHHMM(startMin) }],
+      descargasBandXY: [],
+      XG: {
+        offset,
+        descargarel: [],
+        finrel,
+        ciclo: finrel,
+        freq: 0,
+        demanda: new Array(finrel).fill(1)
+      },
+      ColorPedido: 11,
+      Cliente: `Camión ${camion}`,
+      Obra: `Disponible (Primer Ticket #${info.ticketId})`,
+      Producto: "Disponibilidad Camión",
+      allTickets: info.tickets
+    });
+  });
+  
+  return disponibles;
 }

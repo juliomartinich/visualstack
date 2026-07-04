@@ -10,7 +10,8 @@ const { svg, g, innerW, innerH } = createSVG("#chart", width, height, margin);
 
 // Variables globales
 let pedidos, layers, area, scales, band, ganttPanel;
-let fullPedidos, meta, rawReportDate, grupos = {}, tomorrowStr, uniqueDates;
+let fullPedidos, meta, rawReportDate, tomorrowStr, uniqueDates;
+window.grupos = {};
 let filterFechaPanel, filterFechaHeader, filterPlantaHeader, filterSelect;
 let codObraInput, headerCodObraInput, codObraList, filterCheck, headerFilterCheck;
 window.appCache = {};
@@ -63,12 +64,23 @@ function enriquecerDatos(data, coloresData, plantasData, ticketsData) {
       if (result.realDespachos.length === 0) {
         result.MaxRealCamiones = 0;
       } else {
-        const tMin = Math.min(...result.realDespachos.map(d => d.HoraAsignacionMin));
-        const tMax = Math.max(...result.realDespachos.map(d => d.HoraFinalMin));
-        const timeline = new Array(Math.max(1, tMax - tMin + 1)).fill(0);
+        let tMin = Math.min(...result.realDespachos.map(d => d.HoraAsignacionMin));
+        let tMax = Math.max(...result.realDespachos.map(d => d.HoraFinalMin));
+        
+        if (isNaN(tMin) || isNaN(tMax) || !isFinite(tMin) || !isFinite(tMax)) {
+          tMin = 0;
+          tMax = 0;
+        }
+        
+        tMin = Math.floor(tMin);
+        tMax = Math.ceil(tMax);
+        
+        const timelineLen = Math.max(1, tMax - tMin + 1);
+        const timeline = new Array(timelineLen).fill(0);
+        
         result.realDespachos.forEach(d => {
-          const start = d.HoraAsignacionMin - tMin;
-          const end = d.HoraFinalMin - tMin;
+          const start = Math.floor((d.HoraAsignacionMin || 0) - tMin);
+          const end = Math.ceil((d.HoraFinalMin || 0) - tMin);
           for (let t = start; t < end; t++) {
             if (t >= 0 && t < timeline.length) {
               timeline[t]++;
@@ -82,21 +94,23 @@ function enriquecerDatos(data, coloresData, plantasData, ticketsData) {
     });
 
   // Agrupa plantas por grupo de despacho
+  window.grupos = {};
   Object.entries(window.plantasData).forEach(([code, p]) => {
     const g = p.grupo_despacho;
     if (g) {
-      if (!grupos[g]) grupos[g] = [];
-      grupos[g].push(code);
+      if (!window.grupos[g]) window.grupos[g] = [];
+      window.grupos[g].push(code);
     }
   });
 
   tomorrowStr = getTomorrow(rawReportDate);
   uniqueDates = [...new Set(fullPedidos.map(p => p["Fecha Pedido"]))].sort();
+  window.fullPedidos = fullPedidos;
 }
 
 /* ================== 3. DIBUJAR ================== */
 function dibujar() {
-  const activePlanta = localStorage.getItem("filterPlantaGrupo") || "Grupo:TODOS";
+  const activePlanta = localStorage.getItem("filterPlantaGrupo") || (document.getElementById("filter-plantagrupo")?.options[0]?.value || "Grupo:RM");
   renderDateOptionsForFilter(activePlanta);
   renderDashboard(activePlanta);
 }

@@ -250,6 +250,43 @@ function renderTooltip(panel, activa, t, granularidad) {
   const hh = Math.floor(totalMin / 60);
   const mm = totalMin % 60;
 
+  if (p.isDisponibles) {
+    const ticketsListHtml = (p.allTickets || [])
+      .map(tk => {
+        const timeStr = tk.Impreso || tk.InicioCarga || "-";
+        const vol = tk.Volumen ? `${tk.Volumen} m³` : "";
+        const obraName = tk.Obra || "";
+        return `<div style="display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; border-bottom: 1px dashed #f0f0f0;">
+          <span><b>Ticket #${tk.ticketId}</b> (${timeStr})</span>
+          <span style="color: #666; font-size: 10.5px;">${vol} &middot; Obra: ${obraName}</span>
+        </div>`;
+      })
+      .join("");
+
+    panel.html(`
+      <div class="tooltip-card">
+        <div class="tooltip-header" style="border-bottom: 1px solid #eee; padding-bottom: 6px;">
+          <div style="font-weight: 700; font-size: 14px;">Camión #${p.Camion}</div>
+          <div style="font-size: 11px; color: #666; margin-top: 2px;">Vista Camiones Disponibles</div>
+        </div>
+        <div style="margin-top: 10px; font-size: 12.5px; display: flex; flex-direction: column; gap: 6px;">
+          <div><b>Hora Inicio:</b> ${p.HoraInicio} (Primer Ticket: #${p.ticketId})</div>
+          <div><b>Hora Fin:</b> ${p.HoraFinalHhmm}</div>
+        </div>
+        <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 6px;">
+          <span style="font-size: 11px; font-weight: bold; color: #333;">Tickets del Día (${(p.allTickets || []).length}):</span>
+          <div style="margin-top: 6px; max-height: 150px; overflow-y: auto; padding-right: 4px;">
+            ${ticketsListHtml || '<div style="font-size: 11px; color: #999;">Sin tickets registrados</div>'}
+          </div>
+        </div>
+        <div style="margin-top: 10px; font-size: 10px; color: #888; border-top: 1px solid #eee; padding-top: 6px;">
+          <span>Cursor: ${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}</span>
+        </div>
+      </div>
+    `);
+    return;
+  }
+
   const ref = p.isDespacho ? p.parentPedido : p;
   const isReal = p.isRealDespacho;
   const isMixed = p.isMixedDespacho;

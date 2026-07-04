@@ -245,6 +245,9 @@ function createArea(scales, yScale) {
 }
 
 function getColorSort(pedido) {
+  if (pedido.isDisponibles) {
+    return "orange";
+  }
   if (pedido.isAnulado) {
     return "#e63946";
   }
@@ -273,6 +276,9 @@ function getColorSort(pedido) {
 
 /* ==== * Color de Área * ===================== */
 function getColorOrigen(pedido) {
+  if (pedido.isDisponibles) {
+    return "orange";
+  }
   if (pedido.isAnulado) {
     return "#e63946";
   }
@@ -284,6 +290,9 @@ function getColorOrigen(pedido) {
 }
 
 function getAreaColor(pedido) {
+  if (pedido.isDisponibles) {
+    return "orange";
+  }
   if (pedido.isAnulado) {
     return "#e63946";
   }
@@ -371,6 +380,26 @@ function drawLayers(g, pedidos, area, scales, yScale) {
     .attr("d", d => area(d.STK?.segmentosXY || []))
     .style("fill", d => getAreaColor(d))
     .style("stroke", "none");
+
+  // Dibuja sub-áreas de los tickets para camiones disponibles
+  layers.each(function(d) {
+    if (d.isDisponibles && d.STK?.segmentosXY && d.allTickets) {
+      const gSelf = d3.select(this);
+      d.allTickets.forEach(tk => {
+        const startSlot = Math.floor(tk.startMin / CFG.granularidadMin);
+        const endSlot = Math.ceil(tk.endMin / CFG.granularidadMin);
+        const ticketSegmentos = d.STK.segmentosXY.filter(s => s.x >= startSlot && s.x < endSlot);
+        if (ticketSegmentos.length > 0) {
+          gSelf.append("path")
+            .attr("class", "ticket-subarea")
+            .attr("d", area(ticketSegmentos))
+            .style("fill", "#b45309") // Naranjo oscuro (amber-700)
+            .style("stroke", "none")
+            .style("pointer-events", "none");
+        }
+      });
+    }
+  });
 
   layers.append("path")
     .attr("class", "line-top")
@@ -573,6 +602,9 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
         .attr("fill", d => d.isAnulado ? "#ffffff" : "#444")
         .attr("font-size", 11)
         .text(d => {
+          if (d.isDisponibles) {
+            return `Camión #${d.Camion} - Disponible - Desde ${d.HoraInicio} hasta ${d.HoraFinalHhmm} (Ticket #${d.ticketId})`;
+          }
           const parentId = d.parentPedido ? d.parentPedido.id : d.id;
           const isFirst = pedidos.find(x => (x.parentPedido ? x.parentPedido.id : x.id) === parentId) === d;
 
@@ -1083,6 +1115,10 @@ function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scal
     const areaCamiones = createArea(scales, scales.yCamiones);
     drawLayers(gCamiones, subsetPedidos, areaCamiones, scales, scales.yCamiones);
     drawLeftAxis(gCamiones, scales.yCamiones, "Camiones");
+    
+    if (currentGanttView === 'despachos_mix') {
+      drawOrangeCurve(gCamiones, subsetPedidos, scales, scales.yCamiones);
+    }
 
     const uniquePlantas = new Set(subsetPedidos.map(p => p.Planta));
     let capacity = 0;
@@ -1121,6 +1157,9 @@ function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scal
   } else {
     const area = createArea(scales);
     layers = drawLayers(g, subsetPedidos, area, scales);
+    if (currentGanttView === 'despachos_mix') {
+      drawOrangeCurve(g, subsetPedidos, scales, scales.y);
+    }
   }
 
   return layers;
@@ -1161,4 +1200,117 @@ function drawTopOverlay(svg, g, meta, scales, metrics, width, filterKey = "") {
   markerG.selectAll("text.top-marker-value").data(data).enter().append("text").attr("class", "top-marker-value")
     .attr("x", d => scales.x(d.slot) + VAL_X).attr("y", TEXT_Y).attr("text-anchor", "end").attr("font-size", 11)
     .attr("font-weight", 700).attr("fill", d => d.color).text(d => d.value);
+} 
+
+function drawOrangeCurve(gElement, subsetPedidos, scales, yScale) {
+  const y = yScale || scales.y;
+  const selectedDate = window.selectedDate;
+  if (!selectedDate) return;
+  
+  const viewPedidoIds = new Set(subsetPedidos.map(p => {
+    const ref = p.parentPedido || p;
+    return String(ref.id);
+  }));
+  
+  // Obtener todos los tickets de los pedidos en la vista actual (filtrada por Planta/Grupo)
+  const dateTickets = Object.entries(window.ticketsData || {})
+    .map(([tId, t]) => ({ ...t, ticketId: tId }))
+    .filter(t => viewPedidoIds.has(String(t.Pedido)));
+  
+  // Quedarse solo con los activos (no anulados)
+  const activeTickets = dateTickets.filter(t => 
+    !t.CodAnulacion || t.CodAnulacion === "0" || t.CodAnulacion === ""
+  );
+  
+  // Agrupar por camión, encontrar su primer ticket (startMin) y recopilar todos sus tickets para calcular el fin de jornada extendido
+  const truckInfo = {};
+  activeTickets.forEach(t => {
+    const camion = t.Camion;
+    if (!camion) return;
+    
+    // Buscar pedido correspondiente en subsetPedidos
+    const ped = subsetPedidos.find(o => {
+      const ref = o.parentPedido || o;
+      return String(ref.id) === String(t.Pedido);
+    }) || subsetPedidos[0] || {};
+    
+    // Proyectar el fin de ticket en curso (pEnplanta)
+    const pImpreso = (t.Impreso && t.Impreso !== "0" && t.Impreso !== "") 
+        ? safeHhmmssToMin(t.Impreso) 
+        : (ped.HoraAsignacionMin || 0);
+    const pInicioCarga = (t.InicioCarga && t.InicioCarga !== "0" && t.InicioCarga !== "") 
+        ? safeHhmmssToMin(t.InicioCarga) 
+        : pImpreso;
+    const pFinCarga = (t.FinCarga && t.FinCarga !== "0" && t.FinCarga !== "") 
+        ? safeHhmmssToMin(t.FinCarga) 
+        : (pInicioCarga + (ped.TiempoCarga || 0));
+    const pAObra = (t.AObra && t.AObra !== "0" && t.AObra !== "") 
+        ? safeHhmmssToMin(t.AObra) 
+        : pFinCarga;
+    const pEnObra = (t.EnObra && t.EnObra !== "0" && t.EnObra !== "") 
+        ? safeHhmmssToMin(t.EnObra) 
+        : (pAObra + (ped.TiempoViaje || 0));
+    const pInicioDescarga = (t.InicioDescarga && t.InicioDescarga !== "0" && t.InicioDescarga !== "") 
+        ? safeHhmmssToMin(t.InicioDescarga) 
+        : pEnObra;
+    const pAplanta = (t.Aplanta && t.Aplanta !== "0" && t.Aplanta !== "") 
+        ? safeHhmmssToMin(t.Aplanta) 
+        : (pEnObra + (ped.Frecuencia || 0));
+    const pEnplanta = (t.Enplanta && t.Enplanta !== "0" && t.Enplanta !== "") 
+        ? safeHhmmssToMin(t.Enplanta) 
+        : (pAplanta + (ped.TiempoViaje || 0));
+        
+    const tkStartMin = pImpreso;
+    const tkEndMin = pEnplanta;
+    
+    if (!truckInfo[camion]) {
+      truckInfo[camion] = {
+        startMin: tkStartMin,
+        maxEndMin: tkStartMin + 480
+      };
+    } else {
+      if (tkStartMin < truckInfo[camion].startMin) {
+        truckInfo[camion].startMin = tkStartMin;
+      }
+    }
+    if (tkEndMin > truckInfo[camion].maxEndMin) {
+      truckInfo[camion].maxEndMin = tkEndMin;
+    }
+  });
+  
+  // Calcular la curva basándose EXACTAMENTE en los mismos slots que la envolvente de Disponibles
+  const xMin = CFG.horaInicio * (60 / CFG.granularidadMin);
+  const xMax = CFG.horaFin * (60 / CFG.granularidadMin);
+  const curveData = [];
+  
+  const shifts = Object.values(truckInfo).map(info => {
+    const offset = Math.floor(info.startMin / CFG.granularidadMin);
+    const finrel = Math.ceil((info.maxEndMin - info.startMin) / CFG.granularidadMin);
+    return { startSlot: offset, endSlot: offset + finrel };
+  });
+
+  for (let s = xMin; s <= xMax; s++) {
+    let activeCount = 0;
+    shifts.forEach(shift => {
+      if (s >= shift.startSlot && s < shift.endSlot) {
+        activeCount++;
+      }
+    });
+    curveData.push({ slot: s, value: activeCount });
+  }
+  
+  // Dibujar la curva naranja gruesa
+  const lineGen = d3.line()
+    .x(d => scales.x(d.slot))
+    .y(d => y(d.value))
+    .curve(d3.curveMonotoneX);
+    
+  gElement.append("path")
+    .datum(curveData)
+    .attr("class", "orange-trucks-curve")
+    .attr("d", lineGen)
+    .attr("fill", "none")
+    .attr("stroke", "orange")
+    .attr("stroke-width", 3.5)
+    .style("pointer-events", "none");
 } 
