@@ -302,7 +302,7 @@ function renderTooltip(panel, activa, t, granularidad) {
           <div style="font-size: 11px; color: #666; margin-top: 2px;">Vista Camiones Disponibles</div>
         </div>
         <div style="margin-top: 10px; font-size: 12.5px; display: flex; flex-direction: column; gap: 6px;">
-          <div><b>Hora Inicio:</b> ${p.HoraInicio} (Primer Ticket: ${p.ticketId})</div>
+          <div><b>Hora Inicio:</b> ${p.HoraInicio}</div>
           <div><b>Fin 8 Hrs:</b> ${p.HoraFinJornadaNormalHhmm || "-"}</div>
           <div><b>Hora Fin:</b> ${p.HoraFinalHhmm}</div>
           <div><b>Sobretiempo:</b> ${overtimeStr}</div>
