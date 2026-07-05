@@ -288,6 +288,13 @@ function renderTooltip(panel, activa, t, granularidad) {
          </table>`
       : `<div style="font-size: 11px; color: #999; padding: 4px 0;">Sin tickets registrados</div>`;
 
+    const overtimeMin = (typeof p.HoraFinJornadaNormalMin === "number")
+      ? Math.max(0, p.HoraFinalMin - p.HoraFinJornadaNormalMin)
+      : 0;
+    const otH = Math.floor(overtimeMin / 60);
+    const otM = overtimeMin % 60;
+    const overtimeStr = `${String(otH).padStart(2, "0")}:${String(otM).padStart(2, "0")}`;
+
     panel.html(`
       <div class="tooltip-card">
         <div class="tooltip-header" style="border-bottom: 1px solid #eee; padding-bottom: 6px;">
@@ -295,9 +302,10 @@ function renderTooltip(panel, activa, t, granularidad) {
           <div style="font-size: 11px; color: #666; margin-top: 2px;">Vista Camiones Disponibles</div>
         </div>
         <div style="margin-top: 10px; font-size: 12.5px; display: flex; flex-direction: column; gap: 6px;">
-          <div><b>Hora Inicio:</b> ${p.HoraInicio} (Primer Ticket: #${p.ticketId})</div>
+          <div><b>Hora Inicio:</b> ${p.HoraInicio} (Primer Ticket: ${p.ticketId})</div>
           <div><b>Fin 8 Hrs:</b> ${p.HoraFinJornadaNormalHhmm || "-"}</div>
           <div><b>Hora Fin:</b> ${p.HoraFinalHhmm}</div>
+          <div><b>Sobretiempo:</b> ${overtimeStr}</div>
         </div>
         <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 6px;">
           <span style="font-size: 11px; font-weight: bold; color: #333;">Tickets del Día (${(p.allTickets || []).length}):</span>
