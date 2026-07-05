@@ -1,5 +1,43 @@
 /* ================== DASHBOARD ORCHESTRATION ================== */
 
+function actualizarOpcionesGantt() {
+  const selectViewGraph = document.getElementById("filter-viewgraph");
+  const selectViewGantt = document.getElementById("filter-viewgantt");
+  const headerViewGantt = document.getElementById("header-viewgantt");
+
+  if (!selectViewGantt) return;
+
+  const currentGraphVal = selectViewGraph ? selectViewGraph.value : "camiones";
+
+  const updateDropdown = (selectEl) => {
+    if (!selectEl) return;
+    const optDisponibles = selectEl.querySelector('option[value="disponibles"]');
+    
+    if (currentGraphVal === "camiones") {
+      // Si no existe la opción "disponibles", la agregamos al final
+      if (!optDisponibles) {
+        const newOpt = document.createElement("option");
+        newOpt.value = "disponibles";
+        newOpt.textContent = "Disponibles";
+        selectEl.appendChild(newOpt);
+      }
+    } else {
+      // Si existe la opción "disponibles", la eliminamos
+      if (optDisponibles) {
+        // Si estaba seleccionada la opción "disponibles", cambiamos la selección a "pedidos"
+        if (selectEl.value === "disponibles") {
+          selectEl.value = "pedidos";
+          setCookie("viewGantt", "pedidos");
+        }
+        optDisponibles.remove();
+      }
+    }
+  };
+
+  updateDropdown(selectViewGantt);
+  updateDropdown(headerViewGantt);
+}
+
 function inicializarControles() {
   // 1. Obtener el panel lateral de filtros y construir dinámicamente la botonera del header
   filterFechaPanel = document.getElementById("filter-fecha");
@@ -18,8 +56,8 @@ function inicializarControles() {
         <select id="header-filter-plantagrupo" title="Cambiar Planta" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
       </div>      
 
-      <!-- Grupo Vista -->
-      <div style="display: flex; align-items: center; gap: 4px;">
+      <!-- Grupo Vistas -->
+      <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
         <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
         <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
           <option value="camiones">Camiones</option>
@@ -27,17 +65,13 @@ function inicializarControles() {
           <option value="colas">Plantas</option>
           <option value="recursos">Recursos</option>
         </select>
-      </div>
-
-      <!-- Grupo Gantt -->
-      <div style="display: flex; align-items: center; gap: 4px;">
-        <label for="header-viewgantt" style="font-weight: 600; color: #555;">Gantt:</label>
+        
+        <label for="header-viewgantt" style="font-weight: 600; color: #555; margin-left: 6px;">Gantt:</label>
         <select id="header-viewgantt" name="headerViewGantt" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
           <option value="pedidos">Pedidos</option>
           <option value="despachos">Despachos</option>
           <option value="despachos_reales">Despachos reales</option>
           <option value="despachos_mix">Despachos Mix</option>
-          <option value="disponibles">Disponibles</option>
         </select>
       </div>
     </div>
@@ -107,6 +141,9 @@ function inicializarControles() {
   if (selectViewGantt) selectViewGantt.value = savedGanttView;
   if (headerViewGantt) headerViewGantt.value = savedGanttView;
 
+  // Actualizar visibilidad inicial de la opción "Disponibles"
+  actualizarOpcionesGantt();
+
   // 13. Manejador global de eventos 'change' para sincronizar vistas y persistir en cookies
   document.addEventListener("change", (e) => {
     const ctrl = e.target;
@@ -122,6 +159,9 @@ function inicializarControles() {
       const s2 = document.getElementById("header-viewgraph");
       if (s1) s1.value = val;
       if (s2) s2.value = val;
+      
+      // Actualizar visibilidad de la opción "Disponibles" en base al nuevo gráfico
+      actualizarOpcionesGantt();
     } else if (name === "viewGantt" || name === "headerViewGantt") {
       setCookie("viewGantt", val);
       // Sincronizar el valor entre el selector del panel lateral y del header
@@ -645,6 +685,13 @@ function renderDashboard(filterKey) {
   }
 
   filteredForGantt.sort((a, b) => {
+    if (currentGanttView === 'disponibles') {
+      const timeA = a.HoraInicioMin ?? 0;
+      const timeB = b.HoraInicioMin ?? 0;
+      if (timeA !== timeB) return timeA - timeB;
+      return String(a.Camion).localeCompare(String(b.Camion));
+    }
+
     const refA = a.parentPedido || a;
     const refB = b.parentPedido || b;
 
