@@ -734,11 +734,13 @@ function calculateDisponiblesDespachos(allPedidos, selectedDate, permitidas, gra
     const tkStartMin = pImpreso;
     const tkEndMin = pEnplanta;
     
-    // Buscar obra del pedido correspondiente
+    // Buscar obra y cliente del pedido correspondiente
     const obra = ped.Obra || "";
+    const cliente = ped.Cliente || "";
     const ticketWithObra = { 
       ...t, 
       Obra: obra,
+      Cliente: cliente,
       startMin: tkStartMin,
       endMin: tkEndMin
     };

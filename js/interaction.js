@@ -251,17 +251,42 @@ function renderTooltip(panel, activa, t, granularidad) {
   const mm = totalMin % 60;
 
   if (p.isDisponibles) {
-    const ticketsListHtml = (p.allTickets || [])
+    const ticketsRowsHtml = (p.allTickets || [])
       .map(tk => {
-        const timeStr = tk.Impreso || tk.InicioCarga || "-";
-        const vol = tk.Volumen ? `${tk.Volumen} m³` : "";
-        const obraName = tk.Obra || "";
-        return `<div style="display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; border-bottom: 1px dashed #f0f0f0;">
-          <span><b>Ticket #${tk.ticketId}</b> (${timeStr})</span>
-          <span style="color: #666; font-size: 10.5px;">${vol} &middot; Obra: ${obraName}</span>
-        </div>`;
+        const ticketId = tk.ticketId || "-";
+        const startStr = minToHHMM(tk.startMin);
+        const endStr = minToHHMM(tk.endMin);
+        const vol = tk.Volumen !== undefined ? `${tk.Volumen}` : "-";
+        const obraCliente = (tk.Obra || tk.Cliente)
+          ? `${tk.Obra || "-"}${tk.Cliente ? ` - ${tk.Cliente}` : ""}`
+          : "-";
+          
+        return `<tr style="border-bottom: 1px solid #f3f4f6;">
+          <td style="padding: 4px 2px; font-weight: 500;">#${ticketId}</td>
+          <td style="padding: 4px 2px; color: #4b5563;">${startStr}</td>
+          <td style="padding: 4px 2px; color: #4b5563;">${endStr}</td>
+          <td style="padding: 4px 2px; text-align: right; font-weight: 600; color: #111827;">${vol}</td>
+          <td style="padding: 4px 2px; padding-left: 8px; color: #4b5563; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;" title="${obraCliente}">${obraCliente}</td>
+        </tr>`;
       })
       .join("");
+
+    const tableHtml = ticketsRowsHtml 
+      ? `<table style="width: 100%; border-collapse: collapse; font-size: 10px; text-align: left; table-layout: fixed;">
+          <thead>
+            <tr style="border-bottom: 1.5px solid #d1d5db; font-weight: 700; color: #374151; position: sticky; top: 0; background: #fff;">
+              <th style="padding: 4px 2px; width: 50px;">ticket</th>
+              <th style="padding: 4px 2px; width: 35px;">inicio</th>
+              <th style="padding: 4px 2px; width: 35px;">fin</th>
+              <th style="padding: 4px 2px; width: 25px; text-align: right;">m3</th>
+              <th style="padding: 4px 2px; padding-left: 8px;">Obra - Cliente</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${ticketsRowsHtml}
+          </tbody>
+         </table>`
+      : `<div style="font-size: 11px; color: #999; padding: 4px 0;">Sin tickets registrados</div>`;
 
     panel.html(`
       <div class="tooltip-card">
@@ -276,8 +301,8 @@ function renderTooltip(panel, activa, t, granularidad) {
         </div>
         <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 6px;">
           <span style="font-size: 11px; font-weight: bold; color: #333;">Tickets del Día (${(p.allTickets || []).length}):</span>
-          <div style="margin-top: 6px; max-height: 150px; overflow-y: auto; padding-right: 4px;">
-            ${ticketsListHtml || '<div style="font-size: 11px; color: #999;">Sin tickets registrados</div>'}
+          <div style="margin-top: 6px; max-height: 150px; overflow-y: auto; padding-right: 4px; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff;">
+            ${tableHtml}
           </div>
         </div>
         <div style="margin-top: 10px; font-size: 10px; color: #888; border-top: 1px solid #eee; padding-top: 6px;">
