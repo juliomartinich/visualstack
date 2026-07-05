@@ -14,6 +14,7 @@ let fullPedidos, meta, rawReportDate, tomorrowStr, uniqueDates;
 window.grupos = {};
 let filterFechaPanel, filterFechaHeader, filterPlantaHeader, filterSelect;
 let codObraInput, headerCodObraInput, codObraList, filterCheck, headerFilterCheck;
+let camionInput, camionesList;
 window.appCache = {};
 
 /* ================== 1. LEER DATOS ================== */

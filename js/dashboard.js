@@ -96,6 +96,8 @@ function inicializarControles() {
   codObraInput = document.getElementById("filter-codobra");
   headerCodObraInput = document.getElementById("header-filter-codobra");
   codObraList = document.getElementById("codobras-list");
+  camionInput = document.getElementById("filter-camion");
+  camionesList = document.getElementById("camiones-list");
   filterCheck = d3.select("#filter-green");
   headerFilterCheck = d3.select("#header-filter-green");
 
@@ -106,9 +108,10 @@ function inicializarControles() {
   filterSelect.addEventListener("change", handlePlantaChange);
   filterPlantaHeader.addEventListener("change", handlePlantaChange);
 
-  // 7. Registrar escuchador de eventos para el filtrado por código de obra
+  // 7. Registrar escuchador de eventos para el filtrado por código de obra e input de camión
   codObraInput.addEventListener("input", handleObraInput);
   if (headerCodObraInput) headerCodObraInput.addEventListener("input", handleObraInput);
+  if (camionInput) camionInput.addEventListener("input", handleCamionInput);
 
   // 8. Registrar escuchadores de eventos para los filtros checkbox "verdes"
   filterCheck.on("change", handleFilterCheck);
@@ -308,6 +311,15 @@ const handleObraInput = (e) => {
   codObraInput.value = val;
   if (headerCodObraInput) headerCodObraInput.value = val;
 
+  if (val !== "") {
+    // Limpiar filtro de camión para evitar conflictos
+    const camionInput = document.getElementById("filter-camion");
+    if (camionInput) {
+      camionInput.value = "";
+      if (window.selectedCamion) window.selectedCamion.current = null;
+    }
+  }
+
   if (val === "") {
     layers.style("opacity", CFG.opacity || 0.7);
     layers.each(function (d) {
@@ -361,6 +373,22 @@ const handleObraInput = (e) => {
 
     renderTooltip(panel, focus, focus.XG?.offset ?? 0, CFG.granularidadMin);
     scrollToGanttRow(focus.id);
+  }
+};
+
+const handleCamionInput = (e) => {
+  const val = e.target.value.trim();
+  window.selectedCamion.current = val === "" ? null : val;
+
+  if (val !== "") {
+    // Limpiar filtro de obra
+    if (codObraInput) codObraInput.value = "";
+    if (headerCodObraInput) headerCodObraInput.value = "";
+    selectedPedido.current = null;
+  }
+
+  if (window.highlightPedido) {
+    window.highlightPedido(null);
   }
 };
 
@@ -738,6 +766,27 @@ function renderDashboard(filterKey) {
     codObraList.appendChild(opt);
   });
   codObraInput.dispatchEvent(new Event('input'));
+
+  if (camionesList) {
+    camionesList.innerHTML = "";
+    const camionesSet = new Set();
+    subsetPedidos.forEach(p => {
+      if (p.Camion) camionesSet.add(p.Camion);
+      if (p.despachos) {
+        p.despachos.forEach(d => {
+          if (d.Camion) camionesSet.add(d.Camion);
+        });
+      }
+    });
+    Array.from(camionesSet).sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true})).forEach(cam => {
+      const opt = document.createElement("option");
+      opt.value = cam;
+      camionesList.appendChild(opt);
+    });
+  }
+  if (camionInput) {
+    camionInput.dispatchEvent(new Event('input'));
+  }
 }
 
 /* ================== DOM INTERACTION / KEYBINDINGS / SLIDERS ================== */
@@ -747,6 +796,11 @@ function resetFilters() {
   if (codObraInput && codObraInput.value !== "") {
     codObraInput.value = "";
     codObraInput.dispatchEvent(new Event("input"));
+  }
+  const camionInput = document.getElementById("filter-camion");
+  if (camionInput && camionInput.value !== "") {
+    camionInput.value = "";
+    camionInput.dispatchEvent(new Event("input"));
   }
 }
 
