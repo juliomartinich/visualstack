@@ -956,6 +956,10 @@ function setupInteraction(
   function highlightPedido(activa, mx, my, t) {
     const focus = activa || selectedPedido.current || (selectedCamion.current ? { isCamionFilter: true, Camion: selectedCamion.current } : null);
 
+    const isCamionFilter = focus && focus.isCamionFilter;
+    const targetCamion = focus && focus.Camion;
+    const isDisponiblesMode = (focus && focus.isDisponibles) || (document.getElementById("filter-viewgantt")?.value === "disponibles");
+
     // 1. Identify state changes
     const isFocusChange = focus !== lastActivePedido.current;
     const isHoverTransition = (!!activa) !== lastWasHovering.current;
@@ -1001,9 +1005,6 @@ function setupInteraction(
       const codObra = focus.CodObra;
       const colorOrigen = getColorOrigen(focus);
       const colorObra = "red";
-      const isDisponiblesMode = (focus && focus.isDisponibles) || (document.getElementById("filter-viewgantt")?.value === "disponibles");
-      const isCamionFilter = focus && focus.isCamionFilter;
-      const targetCamion = focus && focus.Camion;
 
       layers.style("opacity", d => {
         if (isDisponiblesMode) {
