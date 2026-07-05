@@ -325,6 +325,22 @@ function renderTooltip(panel, activa, t, granularidad) {
   const isReal = p.isRealDespacho;
   const isMixed = p.isMixedDespacho;
 
+  let volumeHtml = `<b>${p.CantProgramada} m³</b>`;
+  if (p.isDespacho && (isReal || isMixed)) {
+    const teo = ref.despachos ? ref.despachos.find(d => d.despachoIndex === p.despachoIndex) : null;
+    const volTeorico = teo ? teo.CantProgramada : Math.round(ref.CantProgramada / (ref.CantCargas || 1));
+    
+    let volReal = "-";
+    if (isReal) {
+      volReal = p.CantProgramada;
+    } else if (isMixed) {
+      if (p.mixedType === "real" || p.mixedType === "en_curso" || p.mixedType === "anulado") {
+        volReal = p.CantProgramada;
+      }
+    }
+    volumeHtml = `<span style="color: #888;">${volTeorico}</span> / <b>${volReal} m³</b>`;
+  }
+
   let rawTicketHtml = "";
   if (p.rawTicket) {
     const raw = p.rawTicket;
@@ -512,7 +528,7 @@ function renderTooltip(panel, activa, t, granularidad) {
       <div class="tooltip-header" style="display: flex; flex-direction: column; gap: 4px; align-items: stretch; width: 100%; border-bottom: 1px solid #eee; padding-bottom: 6px;">
         <div style="display: flex; justify-content: space-between; align-items: baseline;">
           <div class="pedido" style="font-weight: 700; font-size: 14px;">Pedido #${ref.id}</div>
-          <div style="font-size: 12.5px;"><b>${p.CantProgramada} m³</b></div>
+          <div style="font-size: 12.5px;">${volumeHtml}</div>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div style="font-weight: 600; font-size: 12px; color: #444;">
