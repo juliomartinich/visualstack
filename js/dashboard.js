@@ -319,7 +319,7 @@ const handleObraInput = (e) => {
       window.currentBand.draw(startT, endT, "red");
     }
 
-    panel.html(createTooltipContent(focus));
+    renderTooltip(panel, focus, focus.XG?.offset ?? 0, CFG.granularidadMin);
     scrollToGanttRow(focus.id);
   }
 };

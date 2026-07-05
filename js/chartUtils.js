@@ -381,23 +381,47 @@ function drawLayers(g, pedidos, area, scales, yScale) {
     .style("fill", d => getAreaColor(d))
     .style("stroke", "none");
 
-  // Dibuja sub-áreas de los tickets para camiones disponibles
+  // Dibuja sub-áreas de sobretiempo y tickets para camiones disponibles
   layers.each(function(d) {
-    if (d.isDisponibles && d.STK?.segmentosXY && d.allTickets) {
+    if (d.isDisponibles && d.STK?.segmentosXY) {
       const gSelf = d3.select(this);
-      d.allTickets.forEach(tk => {
-        const startSlot = Math.floor(tk.startMin / CFG.granularidadMin);
-        const endSlot = Math.ceil(tk.endMin / CFG.granularidadMin);
-        const ticketSegmentos = d.STK.segmentosXY.filter(s => s.x >= startSlot && s.x < endSlot);
-        if (ticketSegmentos.length > 0) {
+      
+      const limitSlot = typeof d.HoraFinJornadaNormalMin === "number"
+        ? Math.floor(d.HoraFinJornadaNormalMin / CFG.granularidadMin)
+        : Infinity;
+
+      // 1. Dibujar sobretiempo en celeste
+      if (limitSlot !== Infinity) {
+        const overtimeSegmentos = d.STK.segmentosXY.filter(s => s.x >= limitSlot);
+        if (overtimeSegmentos.length > 0) {
           gSelf.append("path")
-            .attr("class", "ticket-subarea")
-            .attr("d", area(ticketSegmentos))
-            .style("fill", "#b45309") // Naranjo oscuro (amber-700)
+            .attr("class", "overtime-subarea")
+            .attr("d", area(overtimeSegmentos))
+            .style("fill", "#38bdf8") // Celeste (sky-400)
             .style("stroke", "none")
             .style("pointer-events", "none");
         }
-      });
+      }
+
+      // 2. Dibujar tickets en naranjo oscuro (sólo hasta el límite de la jornada normal)
+      if (d.allTickets) {
+        d.allTickets.forEach(tk => {
+          const startSlot = Math.floor(tk.startMin / CFG.granularidadMin);
+          const endSlot = Math.min(limitSlot, Math.ceil(tk.endMin / CFG.granularidadMin));
+          
+          if (startSlot < endSlot) {
+            const ticketSegmentos = d.STK.segmentosXY.filter(s => s.x >= startSlot && s.x < endSlot);
+            if (ticketSegmentos.length > 0) {
+              gSelf.append("path")
+                .attr("class", "ticket-subarea")
+                .attr("d", area(ticketSegmentos))
+                .style("fill", "#b45309") // Naranjo oscuro (amber-700)
+                .style("stroke", "none")
+                .style("pointer-events", "none");
+            }
+          }
+        });
+      }
     }
   });
 
@@ -559,19 +583,60 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
 
       // Barras
       rowsG.selectAll("rect.gantt-bar")
-        .data(d => [d])
+        .data(d => {
+          const { offset, finrel } = d.XG ?? {};
+          if (typeof offset !== "number" || typeof finrel !== "number" || finrel <= 0) return [];
+          
+          const rects = [];
+          const baseColor = getColorSort(d);
+          
+          if (d.isDisponibles && typeof d.HoraFinJornadaNormalMin === "number") {
+            const limitSlot = Math.floor(d.HoraFinJornadaNormalMin / CFG.granularidadMin);
+            if (limitSlot > offset && limitSlot < offset + finrel) {
+              // Parte normal (naranja)
+              rects.push({
+                x: scales.x(offset),
+                width: Math.max(0, scales.x(limitSlot) - scales.x(offset)),
+                fill: baseColor
+              });
+              // Parte extra (celeste)
+              rects.push({
+                x: scales.x(limitSlot),
+                width: Math.max(0, scales.x(offset + finrel) - scales.x(limitSlot)),
+                fill: "#38bdf8"
+              });
+            } else if (limitSlot <= offset) {
+              // Todo extra (celeste)
+              rects.push({
+                x: scales.x(offset),
+                width: Math.max(0, scales.x(offset + finrel) - scales.x(offset)),
+                fill: "#38bdf8"
+              });
+            } else {
+              // Todo normal (naranja)
+              rects.push({
+                x: scales.x(offset),
+                width: Math.max(0, scales.x(offset + finrel) - scales.x(offset)),
+                fill: baseColor
+              });
+            }
+          } else {
+            rects.push({
+              x: scales.x(offset),
+              width: Math.max(0, scales.x(offset + finrel) - scales.x(offset)),
+              fill: baseColor
+            });
+          }
+          return rects;
+        })
         .join("rect")
         .attr("class", "gantt-bar")
-        .attr("x", d => scales.x(d.XG.offset))
+        .attr("x", r => r.x)
         .attr("y", 1)
-        .attr("width", d => {
-          const { offset, finrel } = d.XG ?? {};
-          if (typeof offset !== "number" || typeof finrel !== "number" || finrel <= 0) return 0;
-          return Math.max(0, scales.x(offset + finrel) - scales.x(offset));
-        })
+        .attr("width", r => r.width)
         .attr("height", rowHeight - 3)
         .attr("rx", 3)
-        .attr("fill", d => getColorSort(d))
+        .attr("fill", r => r.fill)
         .attr("opacity", 0.8);
 
       // Descargas

@@ -6,7 +6,8 @@ const CFG = {
     yStep: 20,          // grilla eje Y cuadricula en 20 camiones
     lineStrokeWidth: parseFloat(localStorage.getItem("lineStrokeWidth")) || 0.5,
     lineOpacity: parseFloat(localStorage.getItem("lineOpacity")) || 0.8,
-    triangleOpacity: parseFloat(localStorage.getItem("triangleOpacity")) || 1.0
+    triangleOpacity: parseFloat(localStorage.getItem("triangleOpacity")) || 1.0,
+    jornadaLaboralHrs: 8 // jornada laboral estándar en horas
 };
 
 const COLORS = {

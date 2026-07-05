@@ -772,9 +772,10 @@ function calculateDisponiblesDespachos(allPedidos, selectedDate, permitidas, gra
     }
     
     const startMin = info.impresoMin;
+    const finJornadaNormalMin = startMin + (CFG.jornadaLaboralHrs || 8) * 60;
     
     // El fin de jornada es el máximo entre startMin + 8 horas y el fin del último ticket del día
-    let maxTicketEndMin = startMin + 480;
+    let maxTicketEndMin = finJornadaNormalMin;
     info.tickets.forEach(tk => {
       if (tk.endMin > maxTicketEndMin) {
         maxTicketEndMin = tk.endMin;
@@ -811,6 +812,8 @@ function calculateDisponiblesDespachos(allPedidos, selectedDate, permitidas, gra
       HoraAsignacionMin: startMin,
       HoraInicioMin: startMin,
       HoraFinalMin: endMin,
+      HoraFinJornadaNormalMin: finJornadaNormalMin,
+      HoraFinJornadaNormalHhmm: minToHHMM(finJornadaNormalMin),
       HoraAsignacionHhmm: minToHHMM(startMin),
       HoraInicio: minToHHMM(startMin),
       HoraFinalHhmm: minToHHMM(endMin),

@@ -271,6 +271,7 @@ function renderTooltip(panel, activa, t, granularidad) {
         </div>
         <div style="margin-top: 10px; font-size: 12.5px; display: flex; flex-direction: column; gap: 6px;">
           <div><b>Hora Inicio:</b> ${p.HoraInicio} (Primer Ticket: #${p.ticketId})</div>
+          <div><b>Fin 8 Hrs:</b> ${p.HoraFinJornadaNormalHhmm || "-"}</div>
           <div><b>Hora Fin:</b> ${p.HoraFinalHhmm}</div>
         </div>
         <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 6px;">
@@ -950,7 +951,12 @@ function setupInteraction(
       const colorOrigen = getColorOrigen(focus);
       const colorObra = "red";
 
+      const isDisponiblesMode = focus.isDisponibles;
+
       layers.style("opacity", d => {
+        if (isDisponiblesMode) {
+          return 0.7; // Mantener la opacidad original de todas las capas
+        }
         const isSameParent = (d.parentPedidoId || d.id) === parentId;
         const isSameObra = !isHover && codObra && d.CodObra === codObra;
         return (isSameParent || isSameObra) ? 1 : 0.5;
@@ -958,13 +964,28 @@ function setupInteraction(
       
       // Highlight con COLOR DE ORIGEN (o COLOR DE OBRA si es selección y aplica)
       layers.each(function(d) {
-        const isSameParent = (d.parentPedidoId || d.id) === parentId;
-        const isSameObra = !isHover && codObra && d.CodObra === codObra;
-        const isTarget = isSameParent || isSameObra;
         const group = d3.select(this);
         
+        if (isDisponiblesMode) {
+          // Mantener los colores originales de relleno intactos
+          group.selectAll("path.area, path.carga")
+            .style("fill", getAreaColor(d));
+          
+          // Sólo destacar el borde (line-top) del camión elegido haciéndolo más grueso
+          const isTarget = d.id === focus.id;
+          group.selectAll("path.line-top, path.carga")
+            .attr("stroke", isTarget ? "#1e293b" : getColorSort(d))
+            .attr("stroke-width", isTarget ? 3 : CFG.lineStrokeWidth)
+            .attr("stroke-opacity", isTarget ? 1.0 : CFG.lineOpacity);
+          
+          return;
+        }
+
+        const isTarget = (d.parentPedidoId || d.id) === parentId || (!isHover && codObra && d.CodObra === codObra);
+        const isObraHighlight = !isHover && codObra && d.CodObra === codObra && (d.parentPedidoId || d.id) !== parentId;
+        
         group.selectAll("path.area, path.carga")
-          .style("fill", isTarget ? (isSameObra ? colorObra : colorOrigen) : getAreaColor(d));
+          .style("fill", isTarget ? (isObraHighlight ? colorObra : colorOrigen) : getAreaColor(d));
         
         group.selectAll("path.line-top, path.carga")
           .attr("stroke", getColorSort(d)) // Siempre el Color del Sort (dinámico)
@@ -974,11 +995,13 @@ function setupInteraction(
       // Highlight de las envolventes de pedidos padre
       d3.selectAll("path.line-parent-envelope")
         .style("opacity", d => {
+          if (isDisponiblesMode) return 0.3;
           const isSameParent = d.id === parentId;
           const isSameObra = !isHover && codObra && d.parentPedido.CodObra === codObra;
           return (isSameParent || isSameObra) ? 1.0 : 0.3;
         })
         .attr("stroke-width", d => {
+          if (isDisponiblesMode) return CFG.lineStrokeWidth;
           const isSameParent = d.id === parentId;
           const isSameObra = !isHover && codObra && d.parentPedido.CodObra === codObra;
           return (isSameParent || isSameObra) ? CFG.lineStrokeWidth * 1.5 : CFG.lineStrokeWidth;
@@ -990,11 +1013,13 @@ function setupInteraction(
       // Highlight en Gantt (highlight all voyages of the same parent, or same obra if not hovering)
       d3.selectAll(".gantt-row")
         .classed("inactive", d => {
+          if (isDisponiblesMode) return d.id !== focus.id;
           const isSameParent = (d.parentPedidoId || d.id) === parentId;
           const isSameObra = !isHover && codObra && d.CodObra === codObra;
           return !(isSameParent || isSameObra);
         })
         .classed("active", d => {
+          if (isDisponiblesMode) return d.id === focus.id;
           const isSameParent = (d.parentPedidoId || d.id) === parentId;
           const isSameObra = !isHover && codObra && d.CodObra === codObra;
           return (isSameParent || isSameObra);
@@ -1080,13 +1105,17 @@ function setupInteraction(
       // Synchronize with CodObra filter panel
       const codObraInput = document.getElementById("filter-codobra");
       if (codObraInput) {
-        if (p && p.CodObra) {
+        if (p && p.isDisponibles) {
+          codObraInput.value = "";
+          // No despachamos evento "input" para evitar sobreescribir el destacado exclusivo del camión disponible
+        } else if (p && p.CodObra) {
           codObraInput.value = p.Obra ? `${p.CodObra} - ${p.Obra}` : String(p.CodObra);
+          codObraInput.dispatchEvent(new Event("input"));
         } else {
           // Clear if clicked background or order with no CodObra
           codObraInput.value = "";
+          codObraInput.dispatchEvent(new Event("input"));
         }
-        codObraInput.dispatchEvent(new Event("input"));
       }
     })
     .on("mouseleave", () => {
@@ -1150,15 +1179,56 @@ function drawBand(g, scales, innerH, granularidad) {
 
       const { offset, finrel } = ext;
 
+      // Generar rectángulos del fondo de la banda
+      const bandRects = [];
+      if (pedido.isDisponibles && typeof pedido.HoraFinJornadaNormalMin === "number") {
+        const limitSlot = Math.floor(pedido.HoraFinJornadaNormalMin / granularidad);
+        if (limitSlot > offset && limitSlot < offset + finrel) {
+          // Parte normal (naranja)
+          bandRects.push({
+            x: scales.x(offset),
+            width: scales.x(limitSlot) - scales.x(offset),
+            fill: color
+          });
+          // Parte extra (celeste)
+          bandRects.push({
+            x: scales.x(limitSlot),
+            width: scales.x(offset + finrel) - scales.x(limitSlot),
+            fill: "#38bdf8"
+          });
+        } else if (limitSlot <= offset) {
+          // Todo extra (celeste)
+          bandRects.push({
+            x: scales.x(offset),
+            width: scales.x(offset + finrel) - scales.x(offset),
+            fill: "#38bdf8"
+          });
+        } else {
+          // Todo normal (naranja)
+          bandRects.push({
+            x: scales.x(offset),
+            width: scales.x(offset + finrel) - scales.x(offset),
+            fill: color
+          });
+        }
+      } else {
+        // Por defecto
+        bandRects.push({
+          x: scales.x(offset),
+          width: scales.x(offset + finrel) - scales.x(offset),
+          fill: color
+        });
+      }
+
       bgG.selectAll("rect")
-        .data([pedido])
+        .data(bandRects)
         .join("rect")
-        .attr("x", scales.x(offset))
-        .attr("width", scales.x(offset + finrel) - scales.x(offset))
+        .attr("x", d => d.x)
+        .attr("width", d => d.width)
         .attr("y", 0)
         .attr("height", bandHeight)
         .attr("rx", 2)
-        .attr("fill", color)
+        .attr("fill", d => d.fill)
         .attr("opacity", 0.8);
 
       const descargasXY = pedido.descargasBandXY || [];
