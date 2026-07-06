@@ -244,6 +244,31 @@ function createArea(scales, yScale) {
     .y1(d => y(d.y1));
 }
 
+function getSlotState(slotMin, startMin, ticketsTimes, granularidad) {
+  let isReal = false;
+  let isProjected = false;
+  let maxTicketEnd = startMin;
+  
+  ticketsTimes.forEach(tk => {
+    if (slotMin >= tk.startMin && slotMin < tk.endMin) {
+      isReal = true;
+    }
+    if (slotMin >= tk.endMin && slotMin < tk.projectedEndMin) {
+      isProjected = true;
+    }
+    if (tk.projectedEndMin > maxTicketEnd) {
+      maxTicketEnd = tk.projectedEndMin;
+    }
+  });
+  
+  if (isReal) return "real";
+  if (isProjected) return "projected";
+  if (slotMin >= maxTicketEnd && slotMin < startMin + 480) {
+    return "jornada";
+  }
+  return "normal";
+}
+
 function getColorSort(pedido) {
   if (pedido.isDisponibles) {
     return "orange";
@@ -386,42 +411,59 @@ function drawLayers(g, pedidos, area, scales, yScale) {
     if (d.isDisponibles && d.STK?.segmentosXY) {
       const gSelf = d3.select(this);
       
-      const limitSlot = typeof d.HoraFinJornadaNormalMin === "number"
-        ? Math.floor(d.HoraFinJornadaNormalMin / CFG.granularidadMin)
-        : Infinity;
-
-      // 1. Dibujar sobretiempo en celeste
-      if (limitSlot !== Infinity) {
-        const overtimeSegmentos = d.STK.segmentosXY.filter(s => s.x >= limitSlot);
-        if (overtimeSegmentos.length > 0) {
+      const offset = d.XG?.offset ?? 0;
+      const finrel = d.XG?.finrel ?? 0;
+      const startMin = d.HoraAsignacionMin;
+      
+      const ticketsTimes = (d.allTickets || []).map(tk => {
+        const ped = window.fullPedidos.find(o => String(o.id) === String(tk.Pedido) && o["Fecha Pedido"] === window.selectedDate) || {};
+        return getTicketTimesAndProjection(tk, ped);
+      });
+      
+      const segments = [];
+      let currentSegment = null;
+      
+      for (let i = 0; i < finrel; i++) {
+        const slot = offset + i;
+        const slotMin = slot * CFG.granularidadMin;
+        const state = getSlotState(slotMin, startMin, ticketsTimes, CFG.granularidadMin);
+        
+        if (!currentSegment || currentSegment.state !== state) {
+          if (currentSegment) {
+            segments.push(currentSegment);
+          }
+          currentSegment = {
+            state,
+            startSlot: slot,
+            endSlot: slot + 1
+          };
+        } else {
+          currentSegment.endSlot = slot + 1;
+        }
+      }
+      if (currentSegment) {
+        segments.push(currentSegment);
+      }
+      
+      const colorMap = {
+        real: "#c2410c",
+        projected: "#7c2d12",
+        jornada: "#fed7aa"
+      };
+      
+      segments.forEach(seg => {
+        if (seg.state === "normal") return;
+        
+        const subSegmentos = d.STK.segmentosXY.filter(s => s.x >= seg.startSlot && s.x < seg.endSlot);
+        if (subSegmentos.length > 0) {
           gSelf.append("path")
-            .attr("class", "overtime-subarea")
-            .attr("d", area(overtimeSegmentos))
-            .style("fill", "#38bdf8") // Celeste (sky-400)
+            .attr("class", `disponibles-subarea-${seg.state}`)
+            .attr("d", area(subSegmentos))
+            .style("fill", colorMap[seg.state])
             .style("stroke", "none")
             .style("pointer-events", "none");
         }
-      }
-
-      // 2. Dibujar tickets en naranjo oscuro (sólo hasta el límite de la jornada normal)
-      if (d.allTickets) {
-        d.allTickets.forEach(tk => {
-          const startSlot = Math.floor(tk.startMin / CFG.granularidadMin);
-          const endSlot = Math.min(limitSlot, Math.ceil(tk.endMin / CFG.granularidadMin));
-          
-          if (startSlot < endSlot) {
-            const ticketSegmentos = d.STK.segmentosXY.filter(s => s.x >= startSlot && s.x < endSlot);
-            if (ticketSegmentos.length > 0) {
-              gSelf.append("path")
-                .attr("class", "ticket-subarea")
-                .attr("d", area(ticketSegmentos))
-                .style("fill", "#b45309") // Naranjo oscuro (amber-700)
-                .style("stroke", "none")
-                .style("pointer-events", "none");
-            }
-          }
-        });
-      }
+      });
     }
   });
 
@@ -590,36 +632,52 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
           const rects = [];
           const baseColor = getColorSort(d);
           
-          if (d.isDisponibles && typeof d.HoraFinJornadaNormalMin === "number") {
-            const limitSlot = Math.floor(d.HoraFinJornadaNormalMin / CFG.granularidadMin);
-            if (limitSlot > offset && limitSlot < offset + finrel) {
-              // Parte normal (naranja)
-              rects.push({
-                x: scales.x(offset),
-                width: Math.max(0, scales.x(limitSlot) - scales.x(offset)),
-                fill: baseColor
-              });
-              // Parte extra (celeste)
-              rects.push({
-                x: scales.x(limitSlot),
-                width: Math.max(0, scales.x(offset + finrel) - scales.x(limitSlot)),
-                fill: "#38bdf8"
-              });
-            } else if (limitSlot <= offset) {
-              // Todo extra (celeste)
-              rects.push({
-                x: scales.x(offset),
-                width: Math.max(0, scales.x(offset + finrel) - scales.x(offset)),
-                fill: "#38bdf8"
-              });
-            } else {
-              // Todo normal (naranja)
-              rects.push({
-                x: scales.x(offset),
-                width: Math.max(0, scales.x(offset + finrel) - scales.x(offset)),
-                fill: baseColor
-              });
+          if (d.isDisponibles) {
+            const startMin = d.HoraAsignacionMin;
+            const ticketsTimes = (d.allTickets || []).map(tk => {
+              const ped = window.fullPedidos.find(o => String(o.id) === String(tk.Pedido) && o["Fecha Pedido"] === window.selectedDate) || {};
+              return getTicketTimesAndProjection(tk, ped);
+            });
+            
+            const segments = [];
+            let currentSegment = null;
+            
+            for (let i = 0; i < finrel; i++) {
+              const slot = offset + i;
+              const slotMin = slot * CFG.granularidadMin;
+              const state = getSlotState(slotMin, startMin, ticketsTimes, CFG.granularidadMin);
+              
+              if (!currentSegment || currentSegment.state !== state) {
+                if (currentSegment) {
+                  segments.push(currentSegment);
+                }
+                currentSegment = {
+                  state,
+                  startSlot: slot,
+                  endSlot: slot + 1
+                };
+              } else {
+                currentSegment.endSlot = slot + 1;
+              }
             }
+            if (currentSegment) {
+              segments.push(currentSegment);
+            }
+            
+            const colorMap = {
+              normal: "orange",
+              real: "#c2410c",
+              projected: "#7c2d12",
+              jornada: "#fed7aa"
+            };
+            
+            segments.forEach(seg => {
+              rects.push({
+                x: scales.x(seg.startSlot),
+                width: Math.max(0, scales.x(seg.endSlot) - scales.x(seg.startSlot)),
+                fill: colorMap[seg.state]
+              });
+            });
           } else {
             rects.push({
               x: scales.x(offset),
@@ -1301,30 +1359,24 @@ function drawOrangeCurve(gElement, subsetPedidos, scales, yScale) {
     }
   });
   
-  const truckInfo = {};
+  const trucksMap = {};
   activeTickets.forEach(t => {
     const camion = t.Camion;
     if (!camion) return;
     
     const ped = t.ped || {};
+    const times = getTicketTimesAndProjection(t, ped);
     
-    const times = getTicketRealTimes(t, ped);
-    const tkStartMin = times.startMin;
-    const tkEndMin = times.endMin;
-    
-    if (!truckInfo[camion]) {
-      truckInfo[camion] = {
-        startMin: tkStartMin,
-        maxEndMin: tkEndMin
+    if (!trucksMap[camion]) {
+      trucksMap[camion] = {
+        impresoMin: times.startMin,
+        tickets: []
       };
-    } else {
-      if (tkStartMin < truckInfo[camion].startMin) {
-        truckInfo[camion].startMin = tkStartMin;
-      }
+    } else if (times.startMin < trucksMap[camion].impresoMin) {
+      trucksMap[camion].impresoMin = times.startMin;
     }
-    if (tkEndMin > truckInfo[camion].maxEndMin) {
-      truckInfo[camion].maxEndMin = tkEndMin;
-    }
+    
+    trucksMap[camion].tickets.push(times);
   });
   
   // Calcular la curva basándose EXACTAMENTE en los mismos slots que la envolvente de Disponibles
@@ -1332,9 +1384,24 @@ function drawOrangeCurve(gElement, subsetPedidos, scales, yScale) {
   const xMax = CFG.horaFin * (60 / CFG.granularidadMin);
   const curveData = [];
   
-  const shifts = Object.values(truckInfo).map(info => {
-    const offset = Math.floor(info.startMin / CFG.granularidadMin);
-    const finrel = Math.ceil((info.maxEndMin - info.startMin) / CFG.granularidadMin);
+  const shifts = Object.entries(trucksMap).map(([camion, info]) => {
+    const startMin = info.impresoMin;
+    
+    let maxTicketEndMin = startMin;
+    let maxProjectedEndMin = startMin;
+    info.tickets.forEach(tk => {
+      if (tk.endMin > maxTicketEndMin) {
+        maxTicketEndMin = tk.endMin;
+      }
+      if (tk.projectedEndMin > maxProjectedEndMin) {
+        maxProjectedEndMin = tk.projectedEndMin;
+      }
+    });
+    
+    const overallEndMin = Math.max(maxTicketEndMin, maxProjectedEndMin, startMin + 480);
+    
+    const offset = Math.floor(startMin / CFG.granularidadMin);
+    const finrel = Math.ceil((overallEndMin - startMin) / CFG.granularidadMin);
     return { startSlot: offset, endSlot: offset + finrel };
   });
 

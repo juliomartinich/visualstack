@@ -229,10 +229,17 @@ function repairTicketTimes(t) {
     return repaired;
 }
 
-function getTicketRealTimes(t, ped) {
+function getTicketTimesAndProjection(t, ped) {
   const hasEnded = (t.Enplanta && t.Enplanta !== "0" && t.Enplanta !== "");
   const isEnCurso = !hasEnded;
   const pImpreso = (t.Impreso && t.Impreso !== "0") ? safeHhmmssToMin(t.Impreso) : (ped.HoraAsignacionMin || 0);
+  const pInicioCarga = (t.InicioCarga && t.InicioCarga !== "0") ? safeHhmmssToMin(t.InicioCarga) : pImpreso;
+  const pFinCarga = (t.FinCarga && t.FinCarga !== "0") ? safeHhmmssToMin(t.FinCarga) : (pInicioCarga + (ped.TiempoCarga || 0));
+  const pAObra = (t.AObra && t.AObra !== "0") ? safeHhmmssToMin(t.AObra) : pFinCarga;
+  const pEnObra = (t.EnObra && t.EnObra !== "0") ? safeHhmmssToMin(t.EnObra) : (pAObra + (ped.TiempoViaje || 0));
+  const pInicioDescarga = (t.InicioDescarga && t.InicioDescarga !== "0") ? safeHhmmssToMin(t.InicioDescarga) : pEnObra;
+  const pAplanta = (t.Aplanta && t.Aplanta !== "0") ? safeHhmmssToMin(t.Aplanta) : (pEnObra + (ped.Frecuencia || 0));
+  const pEnplanta = (t.Enplanta && t.Enplanta !== "0") ? safeHhmmssToMin(t.Enplanta) : (pAplanta + (ped.TiempoViaje || 0));
 
   let HoraAsignacionMin = pImpreso;
   let HoraFinalMin;
@@ -265,10 +272,18 @@ function getTicketRealTimes(t, ped) {
     HoraFinalMin = repaired.Enplanta;
   }
 
+  const projectedEndMin = isEnCurso ? Math.max(pEnplanta, HoraFinalMin) : HoraFinalMin;
+
   return {
     startMin: HoraAsignacionMin,
-    endMin: HoraFinalMin
+    endMin: HoraFinalMin,
+    projectedEndMin: projectedEndMin
   };
+}
+
+function getTicketRealTimes(t, ped) {
+  const res = getTicketTimesAndProjection(t, ped);
+  return { startMin: res.startMin, endMin: res.endMin };
 }
 
 function calculateRealDespachosForPedido(p, tickets, granularidad) {
@@ -805,15 +820,26 @@ function calculateDisponiblesDespachos(allPedidos, selectedDate, permitidas, gra
     
     const startMin = info.impresoMin;
     
-    // El fin de jornada es el fin del último ticket del día
+    // Resolver tiempos y proyecciones
+    const ticketsTimes = info.tickets.map(tk => {
+      const ped = datePedidos.find(o => String(o.id) === String(tk.Pedido)) || {};
+      return getTicketTimesAndProjection(tk, ped);
+    });
+    
     let maxTicketEndMin = startMin;
-    info.tickets.forEach(tk => {
+    let maxProjectedEndMin = startMin;
+    ticketsTimes.forEach(tk => {
       if (tk.endMin > maxTicketEndMin) {
         maxTicketEndMin = tk.endMin;
       }
+      if (tk.projectedEndMin > maxProjectedEndMin) {
+        maxProjectedEndMin = tk.projectedEndMin;
+      }
     });
     
-    const duration = maxTicketEndMin - startMin;
+    const overallEndMin = Math.max(maxTicketEndMin, maxProjectedEndMin, startMin + 480);
+    
+    const duration = overallEndMin - startMin;
     const offset = Math.floor(startMin / granularidad);
     const finrel = Math.ceil(duration / granularidad);
     
@@ -839,13 +865,16 @@ function calculateDisponiblesDespachos(allPedidos, selectedDate, permitidas, gra
       isMixedDespacho: false,
       isAnulado: false,
       Confirmado: "SI",
-      CantProgramada: 1, // height 1
+      CantProgramada: 1,
       HoraAsignacionMin: startMin,
       HoraInicioMin: startMin,
-      HoraFinalMin: maxTicketEndMin,
+      HoraFinalMin: overallEndMin,
+      realEndMin: maxTicketEndMin,
+      projectedEndMin: Math.max(maxTicketEndMin, maxProjectedEndMin),
+      jornadaEndMin: startMin + 480,
       HoraAsignacionHhmm: minToHHMM(startMin),
       HoraInicio: minToHHMM(startMin),
-      HoraFinalHhmm: minToHHMM(maxTicketEndMin),
+      HoraFinalHhmm: minToHHMM(overallEndMin),
       Descargas: [{ idx: 0, Min: startMin, Hhmm: minToHHMM(startMin) }],
       descargasBandXY: [],
       XG: {
