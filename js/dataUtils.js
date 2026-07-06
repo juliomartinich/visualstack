@@ -784,56 +784,134 @@ function calculateDisponiblesDespachos(allPedidos, selectedDate, permitidas, gra
       }
     });
     
-    const endMin = maxTicketEndMin;
-    const duration = endMin - startMin;
+    const totalOvertimeMin = maxTicketEndMin - finJornadaNormalMin;
+    const limitOvertimeMin = (CFG.limiteSobretiempoHrs !== undefined ? CFG.limiteSobretiempoHrs : 3) * 60;
     
-    const baseP = datePedidos.find(o => o.Planta === info.Planta) || datePedidos[0] || {};
+    function splitShifts(ticketsList) {
+      if (ticketsList.length === 0) return [];
+      
+      const shiftStartMin = ticketsList[0].startMin;
+      const shiftFinJornadaNormalMin = shiftStartMin + (CFG.jornadaLaboralHrs || 8) * 60;
+      
+      let shiftMaxTicketEndMin = shiftFinJornadaNormalMin;
+      ticketsList.forEach(tk => {
+        if (tk.endMin > shiftMaxTicketEndMin) {
+          shiftMaxTicketEndMin = tk.endMin;
+        }
+      });
+      
+      const shiftOvertimeMin = shiftMaxTicketEndMin - shiftFinJornadaNormalMin;
+      
+      if (shiftOvertimeMin <= limitOvertimeMin) {
+        return [ticketsList];
+      }
+      
+      const thresholdHrs = (CFG.jornadaLaboralHrs || 8) + (CFG.limiteSobretiempoHrs || 3) - (CFG.margenToleranciaHrs || 1);
+      const thresholdMin = shiftStartMin + thresholdHrs * 60;
+      
+      let ticketsT1 = ticketsList.filter(tk => tk.startMin <= thresholdMin);
+      let ticketsT2 = ticketsList.filter(tk => tk.startMin > thresholdMin);
+      
+      if (ticketsT2.length === 0 && ticketsT1.length > 1) {
+        const lastTk = ticketsT1[ticketsT1.length - 1];
+        ticketsT1 = ticketsT1.slice(0, -1);
+        ticketsT2 = [lastTk];
+      }
+      
+      if (ticketsT1.length > 0 && ticketsT2.length > 0) {
+        return [...splitShifts(ticketsT1), ...splitShifts(ticketsT2)];
+      }
+      
+      return [ticketsList];
+    }
+
+    const shifts = splitShifts(info.tickets);
+    const infosToProcess = [];
+    if (shifts.length > 1) {
+      shifts.forEach((sh, idx) => {
+        infosToProcess.push({
+          camionSuffix: ` T${idx + 1}`,
+          impresoMin: sh[0].startMin,
+          ticketId: sh[0].ticketId,
+          Planta: sh[0].Planta,
+          tickets: sh
+        });
+      });
+    } else {
+      infosToProcess.push({
+        camionSuffix: "",
+        impresoMin: startMin,
+        ticketId: info.ticketId,
+        Planta: info.Planta,
+        tickets: info.tickets
+      });
+    }
     
-    const offset = Math.floor(startMin / granularidad);
-    const finrel = Math.ceil(duration / granularidad);
-    
-    disponibles.push({
-      ...baseP,
-      id: `disponibles_${camion}`,
-      parentPedidoId: `disponibles_${camion}`,
-      parentPedido: {
-        id: `disponibles_${camion}`,
-        CantCargas: 1,
-        MaxCamiones: 1,
-        CantPedidosObra: 1
-      },
-      Camion: camion,
-      ticketId: info.ticketId,
-      isDespacho: true,
-      isDisponibles: true,
-      isRealDespacho: false,
-      isMixedDespacho: false,
-      isAnulado: false,
-      Confirmado: "SI",
-      CantProgramada: 1, // height 1
-      HoraAsignacionMin: startMin,
-      HoraInicioMin: startMin,
-      HoraFinalMin: endMin,
-      HoraFinJornadaNormalMin: finJornadaNormalMin,
-      HoraFinJornadaNormalHhmm: minToHHMM(finJornadaNormalMin),
-      HoraAsignacionHhmm: minToHHMM(startMin),
-      HoraInicio: minToHHMM(startMin),
-      HoraFinalHhmm: minToHHMM(endMin),
-      Descargas: [{ idx: 0, Min: startMin, Hhmm: minToHHMM(startMin) }],
-      descargasBandXY: [],
-      XG: {
-        offset,
-        descargarel: [],
-        finrel,
-        ciclo: finrel,
-        freq: 0,
-        demanda: new Array(finrel).fill(1)
-      },
-      ColorPedido: 11,
-      Cliente: `Camión ${camion}`,
-      Obra: `Disponible (Primer Ticket #${info.ticketId})`,
-      Producto: "Disponibilidad Camión",
-      allTickets: info.tickets
+    infosToProcess.forEach(item => {
+      const tStartMin = item.impresoMin;
+      const tFinJornadaNormalMin = tStartMin + (CFG.jornadaLaboralHrs || 8) * 60;
+      
+      let tMaxTicketEndMin = tFinJornadaNormalMin;
+      item.tickets.forEach(tk => {
+        if (tk.endMin > tMaxTicketEndMin) {
+          tMaxTicketEndMin = tk.endMin;
+        }
+      });
+      
+      const tEndMin = tMaxTicketEndMin;
+      const duration = tEndMin - tStartMin;
+      
+      const baseP = datePedidos.find(o => o.Planta === item.Planta) || datePedidos[0] || {};
+      
+      const offset = Math.floor(tStartMin / granularidad);
+      const finrel = Math.ceil(duration / granularidad);
+      
+      const fullCamionName = `${camion}${item.camionSuffix}`;
+      
+      const sanitizedId = `disponibles_${fullCamionName.replace(/\s+/g, "_")}`;
+      disponibles.push({
+        ...baseP,
+        id: sanitizedId,
+        parentPedidoId: sanitizedId,
+        parentPedido: {
+          id: sanitizedId,
+          CantCargas: 1,
+          MaxCamiones: 1,
+          CantPedidosObra: 1
+        },
+        Camion: fullCamionName,
+        ticketId: item.ticketId,
+        isDespacho: true,
+        isDisponibles: true,
+        isRealDespacho: false,
+        isMixedDespacho: false,
+        isAnulado: false,
+        Confirmado: "SI",
+        CantProgramada: 1, // height 1
+        HoraAsignacionMin: tStartMin,
+        HoraInicioMin: tStartMin,
+        HoraFinalMin: tEndMin,
+        HoraFinJornadaNormalMin: tFinJornadaNormalMin,
+        HoraFinJornadaNormalHhmm: minToHHMM(tFinJornadaNormalMin),
+        HoraAsignacionHhmm: minToHHMM(tStartMin),
+        HoraInicio: minToHHMM(tStartMin),
+        HoraFinalHhmm: minToHHMM(tEndMin),
+        Descargas: [{ idx: 0, Min: tStartMin, Hhmm: minToHHMM(tStartMin) }],
+        descargasBandXY: [],
+        XG: {
+          offset,
+          descargarel: [],
+          finrel,
+          ciclo: finrel,
+          freq: 0,
+          demanda: new Array(finrel).fill(1)
+        },
+        ColorPedido: 11,
+        Cliente: `Camión ${fullCamionName}`,
+        Obra: `Disponible (Primer Ticket #${item.ticketId})`,
+        Producto: "Disponibilidad Camión",
+        allTickets: item.tickets
+      });
     });
   });
   
