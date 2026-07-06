@@ -7,7 +7,9 @@ const CFG = {
     lineStrokeWidth: parseFloat(localStorage.getItem("lineStrokeWidth")) || 0.5,
     lineOpacity: parseFloat(localStorage.getItem("lineOpacity")) || 0.8,
     triangleOpacity: parseFloat(localStorage.getItem("triangleOpacity")) || 1.0,
-    jornadaLaboralHrs: 8 // jornada laboral estándar en horas
+    jornadaLaboralHrs: 8, // jornada laboral estándar en horas
+    limiteSobretiempoHrs: 3, // límite de sobretiempo en horas
+    margenToleranciaHrs: 1  // margen de tolerancia en horas
 };
 
 const COLORS = {

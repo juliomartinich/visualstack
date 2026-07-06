@@ -771,10 +771,16 @@ function renderDashboard(filterKey) {
     camionesList.innerHTML = "";
     const camionesSet = new Set();
     subsetPedidos.forEach(p => {
-      if (p.Camion) camionesSet.add(p.Camion);
+      if (p.Camion) {
+        const base = String(p.Camion).replace(/\s+T\d+$/, "").trim();
+        camionesSet.add(base);
+      }
       if (p.despachos) {
         p.despachos.forEach(d => {
-          if (d.Camion) camionesSet.add(d.Camion);
+          if (d.Camion) {
+            const base = String(d.Camion).replace(/\s+T\d+$/, "").trim();
+            camionesSet.add(base);
+          }
         });
       }
     });

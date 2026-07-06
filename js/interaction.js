@@ -956,6 +956,11 @@ function setupInteraction(
   function highlightPedido(activa, mx, my, t) {
     const focus = activa || selectedPedido.current || (selectedCamion.current ? { isCamionFilter: true, Camion: selectedCamion.current } : null);
 
+    const getBaseCamion = (name) => {
+      if (!name) return "";
+      return String(name).replace(/\s+T\d+$/, "").trim();
+    };
+
     const isCamionFilter = focus && focus.isCamionFilter;
     const targetCamion = focus && focus.Camion;
     const isDisponiblesMode = (focus && focus.isDisponibles) || (document.getElementById("filter-viewgantt")?.value === "disponibles");
@@ -1011,7 +1016,7 @@ function setupInteraction(
           return 0.7; // Mantener la opacidad original de todas las capas
         }
         if (isCamionFilter) {
-          const matches = String(d.Camion) === String(targetCamion);
+          const matches = getBaseCamion(d.Camion) === getBaseCamion(targetCamion);
           return matches ? 1.0 : 0.4;
         }
         const isSameParent = (d.parentPedidoId || d.id) === parentId;
@@ -1030,7 +1035,7 @@ function setupInteraction(
           
           // Sólo destacar el borde (line-top) del camión elegido haciéndolo más grueso
           const isTarget = isCamionFilter
-            ? (String(d.Camion) === String(targetCamion))
+            ? (getBaseCamion(d.Camion) === getBaseCamion(targetCamion))
             : (d.id === focus.id);
           group.selectAll("path.line-top, path.carga")
             .attr("stroke", isTarget ? "#1e293b" : getColorSort(d))
@@ -1041,7 +1046,7 @@ function setupInteraction(
         }
 
         if (isCamionFilter) {
-          const isTarget = String(d.Camion) === String(targetCamion);
+          const isTarget = getBaseCamion(d.Camion) === getBaseCamion(targetCamion);
           group.selectAll("path.area, path.carga")
             .style("fill", getAreaColor(d));
           group.selectAll("path.line-top, path.carga")
@@ -1079,7 +1084,7 @@ function setupInteraction(
 
       if (isCamionFilter) {
         if (band) band.clear();
-        panel.html(`<div class="tooltip-card" style="padding: 10px; font-size: 12px; font-weight: 500; border-left: 4px solid #3b82f6;">Buscando Camión: <b>#${targetCamion}</b></div>`);
+        panel.html(`<div class="tooltip-card" style="padding: 10px; font-size: 12px; font-weight: 500; border-left: 4px solid #3b82f6;">Buscando Camión: <b>#${getBaseCamion(targetCamion)}</b></div>`);
       } else {
         drawActiveArea({ overlay, layers, getCapas, activa: focus, scales, colorOrigen, colorSort: getColorSort(focus) });
         band.show(focus, getColorSort(focus));
@@ -1089,10 +1094,10 @@ function setupInteraction(
       d3.selectAll(".gantt-row")
         .classed("inactive", d => {
           if (isDisponiblesMode) {
-            return isCamionFilter ? String(d.Camion) !== String(targetCamion) : d.id !== focus.id;
+            return isCamionFilter ? (getBaseCamion(d.Camion) !== getBaseCamion(targetCamion)) : d.id !== focus.id;
           }
           if (isCamionFilter) {
-            return String(d.Camion) !== String(targetCamion);
+            return getBaseCamion(d.Camion) !== getBaseCamion(targetCamion);
           }
           const isSameParent = (d.parentPedidoId || d.id) === parentId;
           const isSameObra = !isHover && codObra && d.CodObra === codObra;
@@ -1100,10 +1105,10 @@ function setupInteraction(
         })
         .classed("active", d => {
           if (isDisponiblesMode) {
-            return isCamionFilter ? String(d.Camion) === String(targetCamion) : d.id === focus.id;
+            return isCamionFilter ? (getBaseCamion(d.Camion) === getBaseCamion(targetCamion)) : d.id === focus.id;
           }
           if (isCamionFilter) {
-            return String(d.Camion) === String(targetCamion);
+            return getBaseCamion(d.Camion) === getBaseCamion(targetCamion);
           }
           const isSameParent = (d.parentPedidoId || d.id) === parentId;
           const isSameObra = !isHover && codObra && d.CodObra === codObra;

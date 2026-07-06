@@ -229,6 +229,48 @@ function repairTicketTimes(t) {
     return repaired;
 }
 
+function getTicketRealTimes(t, ped) {
+  const hasEnded = (t.Enplanta && t.Enplanta !== "0" && t.Enplanta !== "");
+  const isEnCurso = !hasEnded;
+  const pImpreso = (t.Impreso && t.Impreso !== "0") ? safeHhmmssToMin(t.Impreso) : (ped.HoraAsignacionMin || 0);
+
+  let HoraAsignacionMin = pImpreso;
+  let HoraFinalMin;
+
+  const fields = ["Impreso", "InicioCarga", "FinCarga", "AObra", "EnObra", "InicioDescarga", "Aplanta", "Enplanta"];
+
+  if (isEnCurso) {
+    let maxVal = pImpreso;
+    fields.forEach(f => {
+      const valStr = t[f];
+      if (valStr && valStr !== "0" && valStr !== "") {
+        const min = safeHhmmssToMin(valStr);
+        if (min !== null && min > maxVal) {
+          maxVal = min;
+        }
+      }
+    });
+    if (maxVal === pImpreso) {
+      maxVal = pImpreso + 15;
+    }
+    const horaReporteMin = safeHhmmssToMin(window.horaReporte);
+    if (horaReporteMin !== null && horaReporteMin > HoraAsignacionMin) {
+      HoraFinalMin = Math.max(maxVal, horaReporteMin);
+    } else {
+      HoraFinalMin = maxVal;
+    }
+  } else {
+    const repaired = repairTicketTimes(t);
+    HoraAsignacionMin = repaired.Impreso;
+    HoraFinalMin = repaired.Enplanta;
+  }
+
+  return {
+    startMin: HoraAsignacionMin,
+    endMin: HoraFinalMin
+  };
+}
+
 function calculateRealDespachosForPedido(p, tickets, granularidad) {
     if (!tickets || tickets.length === 0) return [];
     
@@ -694,47 +736,35 @@ function calculateDisponiblesDespachos(allPedidos, selectedDate, permitidas, gra
     .map(([tId, t]) => ({ ...t, ticketId: tId }))
     .filter(t => datePedidoIds.has(String(t.Pedido)));
   
-  const activeTickets = dateTickets.filter(t => 
-    !t.CodAnulacion || t.CodAnulacion === "0" || t.CodAnulacion === ""
-  );
+  const activeTickets = [];
+  dateTickets.forEach(t => {
+    if (t.CodAnulacion && t.CodAnulacion !== "0" && t.CodAnulacion !== "") {
+      return;
+    }
+    
+    const ped = datePedidos.find(o => String(o.id) === String(t.Pedido));
+    const ticketPlant = ped ? ped.Planta : (t.Planta || "");
+    
+    if (permitidas.includes(ticketPlant)) {
+      activeTickets.push({
+        ...t,
+        ticketPlant,
+        ped
+      });
+    }
+  });
   
   const trucksMap = {};
   activeTickets.forEach(t => {
     const camion = t.Camion;
     if (!camion) return;
     
-    // Buscar pedido correspondiente
-    const ped = datePedidos.find(o => String(o.id) === String(t.Pedido)) || datePedidos[0] || {};
+    const ped = t.ped || {};
     
-    const pImpreso = (t.Impreso && t.Impreso !== "0" && t.Impreso !== "") 
-        ? safeHhmmssToMin(t.Impreso) 
-        : (ped.HoraAsignacionMin || 0);
-    const pInicioCarga = (t.InicioCarga && t.InicioCarga !== "0" && t.InicioCarga !== "") 
-        ? safeHhmmssToMin(t.InicioCarga) 
-        : pImpreso;
-    const pFinCarga = (t.FinCarga && t.FinCarga !== "0" && t.FinCarga !== "") 
-        ? safeHhmmssToMin(t.FinCarga) 
-        : (pInicioCarga + (ped.TiempoCarga || 0));
-    const pAObra = (t.AObra && t.AObra !== "0" && t.AObra !== "") 
-        ? safeHhmmssToMin(t.AObra) 
-        : pFinCarga;
-    const pEnObra = (t.EnObra && t.EnObra !== "0" && t.EnObra !== "") 
-        ? safeHhmmssToMin(t.EnObra) 
-        : (pAObra + (ped.TiempoViaje || 0));
-    const pInicioDescarga = (t.InicioDescarga && t.InicioDescarga !== "0" && t.InicioDescarga !== "") 
-        ? safeHhmmssToMin(t.InicioDescarga) 
-        : pEnObra;
-    const pAplanta = (t.Aplanta && t.Aplanta !== "0" && t.Aplanta !== "") 
-        ? safeHhmmssToMin(t.Aplanta) 
-        : (pEnObra + (ped.Frecuencia || 0));
-    const pEnplanta = (t.Enplanta && t.Enplanta !== "0" && t.Enplanta !== "") 
-        ? safeHhmmssToMin(t.Enplanta) 
-        : (pAplanta + (ped.TiempoViaje || 0));
-        
-    const tkStartMin = pImpreso;
-    const tkEndMin = pEnplanta;
+    const times = getTicketRealTimes(t, ped);
+    const tkStartMin = times.startMin;
+    const tkEndMin = times.endMin;
     
-    // Buscar obra y cliente del pedido correspondiente
     const obra = ped.Obra || "";
     const cliente = ped.Cliente || "";
     const ticketWithObra = { 
@@ -749,13 +779,13 @@ function calculateDisponiblesDespachos(allPedidos, selectedDate, permitidas, gra
       trucksMap[camion] = {
         impresoMin: tkStartMin,
         ticketId: t.ticketId || "",
-        Planta: t.Planta || "",
+        Planta: t.ticketPlant,
         tickets: []
       };
     } else if (tkStartMin < trucksMap[camion].impresoMin) {
       trucksMap[camion].impresoMin = tkStartMin;
       trucksMap[camion].ticketId = t.ticketId || "";
-      trucksMap[camion].Planta = t.Planta || "";
+      trucksMap[camion].Planta = t.ticketPlant;
     }
     
     trucksMap[camion].tickets.push(ticketWithObra);
@@ -774,144 +804,63 @@ function calculateDisponiblesDespachos(allPedidos, selectedDate, permitidas, gra
     }
     
     const startMin = info.impresoMin;
-    const finJornadaNormalMin = startMin + (CFG.jornadaLaboralHrs || 8) * 60;
     
-    // El fin de jornada es el máximo entre startMin + 8 horas y el fin del último ticket del día
-    let maxTicketEndMin = finJornadaNormalMin;
+    // El fin de jornada es el fin del último ticket del día
+    let maxTicketEndMin = startMin;
     info.tickets.forEach(tk => {
       if (tk.endMin > maxTicketEndMin) {
         maxTicketEndMin = tk.endMin;
       }
     });
     
-    const totalOvertimeMin = maxTicketEndMin - finJornadaNormalMin;
-    const limitOvertimeMin = (CFG.limiteSobretiempoHrs !== undefined ? CFG.limiteSobretiempoHrs : 3) * 60;
+    const duration = maxTicketEndMin - startMin;
+    const offset = Math.floor(startMin / granularidad);
+    const finrel = Math.ceil(duration / granularidad);
     
-    function splitShifts(ticketsList) {
-      if (ticketsList.length === 0) return [];
-      
-      const shiftStartMin = ticketsList[0].startMin;
-      const shiftFinJornadaNormalMin = shiftStartMin + (CFG.jornadaLaboralHrs || 8) * 60;
-      
-      let shiftMaxTicketEndMin = shiftFinJornadaNormalMin;
-      ticketsList.forEach(tk => {
-        if (tk.endMin > shiftMaxTicketEndMin) {
-          shiftMaxTicketEndMin = tk.endMin;
-        }
-      });
-      
-      const shiftOvertimeMin = shiftMaxTicketEndMin - shiftFinJornadaNormalMin;
-      
-      if (shiftOvertimeMin <= limitOvertimeMin) {
-        return [ticketsList];
-      }
-      
-      const thresholdHrs = (CFG.jornadaLaboralHrs || 8) + (CFG.limiteSobretiempoHrs || 3) - (CFG.margenToleranciaHrs || 1);
-      const thresholdMin = shiftStartMin + thresholdHrs * 60;
-      
-      let ticketsT1 = ticketsList.filter(tk => tk.startMin <= thresholdMin);
-      let ticketsT2 = ticketsList.filter(tk => tk.startMin > thresholdMin);
-      
-      if (ticketsT2.length === 0 && ticketsT1.length > 1) {
-        const lastTk = ticketsT1[ticketsT1.length - 1];
-        ticketsT1 = ticketsT1.slice(0, -1);
-        ticketsT2 = [lastTk];
-      }
-      
-      if (ticketsT1.length > 0 && ticketsT2.length > 0) {
-        return [...splitShifts(ticketsT1), ...splitShifts(ticketsT2)];
-      }
-      
-      return [ticketsList];
-    }
-
-    const shifts = splitShifts(info.tickets);
-    const infosToProcess = [];
-    if (shifts.length > 1) {
-      shifts.forEach((sh, idx) => {
-        infosToProcess.push({
-          camionSuffix: ` T${idx + 1}`,
-          impresoMin: sh[0].startMin,
-          ticketId: sh[0].ticketId,
-          Planta: sh[0].Planta,
-          tickets: sh
-        });
-      });
-    } else {
-      infosToProcess.push({
-        camionSuffix: "",
-        impresoMin: startMin,
-        ticketId: info.ticketId,
-        Planta: info.Planta,
-        tickets: info.tickets
-      });
-    }
+    const baseP = datePedidos.find(o => o.Planta === info.Planta) || datePedidos[0] || {};
+    const sanitizedId = `disponibles_${camion.replace(/\s+/g, "_")}`;
     
-    infosToProcess.forEach(item => {
-      const tStartMin = item.impresoMin;
-      const tFinJornadaNormalMin = tStartMin + (CFG.jornadaLaboralHrs || 8) * 60;
-      
-      let tMaxTicketEndMin = tFinJornadaNormalMin;
-      item.tickets.forEach(tk => {
-        if (tk.endMin > tMaxTicketEndMin) {
-          tMaxTicketEndMin = tk.endMin;
-        }
-      });
-      
-      const tEndMin = tMaxTicketEndMin;
-      const duration = tEndMin - tStartMin;
-      
-      const baseP = datePedidos.find(o => o.Planta === item.Planta) || datePedidos[0] || {};
-      
-      const offset = Math.floor(tStartMin / granularidad);
-      const finrel = Math.ceil(duration / granularidad);
-      
-      const fullCamionName = `${camion}${item.camionSuffix}`;
-      
-      const sanitizedId = `disponibles_${fullCamionName.replace(/\s+/g, "_")}`;
-      disponibles.push({
-        ...baseP,
+    disponibles.push({
+      ...baseP,
+      id: sanitizedId,
+      Planta: info.Planta,
+      parentPedidoId: sanitizedId,
+      parentPedido: {
         id: sanitizedId,
-        parentPedidoId: sanitizedId,
-        parentPedido: {
-          id: sanitizedId,
-          CantCargas: 1,
-          MaxCamiones: 1,
-          CantPedidosObra: 1
-        },
-        Camion: fullCamionName,
-        ticketId: item.ticketId,
-        isDespacho: true,
-        isDisponibles: true,
-        isRealDespacho: false,
-        isMixedDespacho: false,
-        isAnulado: false,
-        Confirmado: "SI",
-        CantProgramada: 1, // height 1
-        HoraAsignacionMin: tStartMin,
-        HoraInicioMin: tStartMin,
-        HoraFinalMin: tEndMin,
-        HoraFinJornadaNormalMin: tFinJornadaNormalMin,
-        HoraFinJornadaNormalHhmm: minToHHMM(tFinJornadaNormalMin),
-        HoraAsignacionHhmm: minToHHMM(tStartMin),
-        HoraInicio: minToHHMM(tStartMin),
-        HoraFinalHhmm: minToHHMM(tEndMin),
-        Descargas: [{ idx: 0, Min: tStartMin, Hhmm: minToHHMM(tStartMin) }],
-        descargasBandXY: [],
-        XG: {
-          offset,
-          descargarel: [],
-          finrel,
-          ciclo: finrel,
-          freq: 0,
-          demanda: new Array(finrel).fill(1)
-        },
-        ColorPedido: 11,
-        Cliente: `Camión ${fullCamionName}`,
-        Obra: `Disponible (Primer Ticket #${item.ticketId})`,
-        Producto: "Disponibilidad Camión",
-        allTickets: item.tickets
-      });
+        CantCargas: 1,
+        MaxCamiones: 1,
+        CantPedidosObra: 1
+      },
+      Camion: camion,
+      ticketId: info.ticketId,
+      isDespacho: true,
+      isDisponibles: true,
+      isRealDespacho: false,
+      isMixedDespacho: false,
+      isAnulado: false,
+      Confirmado: "SI",
+      CantProgramada: 1, // height 1
+      HoraAsignacionMin: startMin,
+      HoraInicioMin: startMin,
+      HoraFinalMin: maxTicketEndMin,
+      HoraAsignacionHhmm: minToHHMM(startMin),
+      HoraInicio: minToHHMM(startMin),
+      HoraFinalHhmm: minToHHMM(maxTicketEndMin),
+      Descargas: [{ idx: 0, Min: startMin, Hhmm: minToHHMM(startMin) }],
+      descargasBandXY: [],
+      XG: {
+        offset,
+        descargarel: [],
+        finrel,
+        ciclo: finrel,
+        freq: 0,
+        demanda: new Array(finrel).fill(1)
+      },
+      ColorPedido: 11,
+      Cliente: `Camión ${camion}`,
+      Obra: `Disponible (Primer Ticket #${info.ticketId})`,
+      Producto: "Disponibilidad Camión",
+      allTickets: info.tickets
     });
   });
   

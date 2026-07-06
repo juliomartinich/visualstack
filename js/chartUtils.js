@@ -1272,66 +1272,50 @@ function drawOrangeCurve(gElement, subsetPedidos, scales, yScale) {
   const selectedDate = window.selectedDate;
   if (!selectedDate) return;
   
-  const viewPedidoIds = new Set(subsetPedidos.map(p => {
-    const ref = p.parentPedido || p;
-    return String(ref.id);
-  }));
+  // Obtener las plantas permitidas en base a los pedidos de la vista
+  const permitidas = Array.from(new Set(subsetPedidos.map(p => p.Planta)));
   
-  // Obtener todos los tickets de los pedidos en la vista actual (filtrada por Planta/Grupo)
+  const datePedidos = (window.fullPedidos || []).filter(p => p["Fecha Pedido"] === selectedDate);
+  const datePedidoIds = new Set(datePedidos.map(p => p.id));
+  
   const dateTickets = Object.entries(window.ticketsData || {})
     .map(([tId, t]) => ({ ...t, ticketId: tId }))
-    .filter(t => viewPedidoIds.has(String(t.Pedido)));
+    .filter(t => datePedidoIds.has(String(t.Pedido)));
   
-  // Quedarse solo con los activos (no anulados)
-  const activeTickets = dateTickets.filter(t => 
-    !t.CodAnulacion || t.CodAnulacion === "0" || t.CodAnulacion === ""
-  );
+  // Filtrar los tickets activos basándonos en la planta del pedido correspondiente
+  const activeTickets = [];
+  dateTickets.forEach(t => {
+    if (t.CodAnulacion && t.CodAnulacion !== "0" && t.CodAnulacion !== "") {
+      return;
+    }
+    
+    const ped = datePedidos.find(o => String(o.id) === String(t.Pedido));
+    const ticketPlant = ped ? ped.Planta : (t.Planta || "");
+    
+    if (permitidas.includes(ticketPlant)) {
+      activeTickets.push({
+        ...t,
+        ticketPlant,
+        ped
+      });
+    }
+  });
   
-  // Agrupar por camión, encontrar su primer ticket (startMin) y recopilar todos sus tickets para calcular el fin de jornada extendido
   const truckInfo = {};
   activeTickets.forEach(t => {
     const camion = t.Camion;
     if (!camion) return;
     
-    // Buscar pedido correspondiente en subsetPedidos
-    const ped = subsetPedidos.find(o => {
-      const ref = o.parentPedido || o;
-      return String(ref.id) === String(t.Pedido);
-    }) || subsetPedidos[0] || {};
+    const ped = t.ped || {};
     
-    // Proyectar el fin de ticket en curso (pEnplanta)
-    const pImpreso = (t.Impreso && t.Impreso !== "0" && t.Impreso !== "") 
-        ? safeHhmmssToMin(t.Impreso) 
-        : (ped.HoraAsignacionMin || 0);
-    const pInicioCarga = (t.InicioCarga && t.InicioCarga !== "0" && t.InicioCarga !== "") 
-        ? safeHhmmssToMin(t.InicioCarga) 
-        : pImpreso;
-    const pFinCarga = (t.FinCarga && t.FinCarga !== "0" && t.FinCarga !== "") 
-        ? safeHhmmssToMin(t.FinCarga) 
-        : (pInicioCarga + (ped.TiempoCarga || 0));
-    const pAObra = (t.AObra && t.AObra !== "0" && t.AObra !== "") 
-        ? safeHhmmssToMin(t.AObra) 
-        : pFinCarga;
-    const pEnObra = (t.EnObra && t.EnObra !== "0" && t.EnObra !== "") 
-        ? safeHhmmssToMin(t.EnObra) 
-        : (pAObra + (ped.TiempoViaje || 0));
-    const pInicioDescarga = (t.InicioDescarga && t.InicioDescarga !== "0" && t.InicioDescarga !== "") 
-        ? safeHhmmssToMin(t.InicioDescarga) 
-        : pEnObra;
-    const pAplanta = (t.Aplanta && t.Aplanta !== "0" && t.Aplanta !== "") 
-        ? safeHhmmssToMin(t.Aplanta) 
-        : (pEnObra + (ped.Frecuencia || 0));
-    const pEnplanta = (t.Enplanta && t.Enplanta !== "0" && t.Enplanta !== "") 
-        ? safeHhmmssToMin(t.Enplanta) 
-        : (pAplanta + (ped.TiempoViaje || 0));
-        
-    const tkStartMin = pImpreso;
-    const tkEndMin = pEnplanta;
+    const times = getTicketRealTimes(t, ped);
+    const tkStartMin = times.startMin;
+    const tkEndMin = times.endMin;
     
     if (!truckInfo[camion]) {
       truckInfo[camion] = {
         startMin: tkStartMin,
-        maxEndMin: tkStartMin + 480
+        maxEndMin: tkEndMin
       };
     } else {
       if (tkStartMin < truckInfo[camion].startMin) {
@@ -1370,6 +1354,8 @@ function drawOrangeCurve(gElement, subsetPedidos, scales, yScale) {
     .y(d => y(d.value))
     .curve(d3.curveMonotoneX);
     
+  gElement.selectAll(".orange-trucks-curve").remove(); // Limpiar previas
+  
   gElement.append("path")
     .datum(curveData)
     .attr("class", "orange-trucks-curve")
@@ -1378,4 +1364,4 @@ function drawOrangeCurve(gElement, subsetPedidos, scales, yScale) {
     .attr("stroke", "orange")
     .attr("stroke-width", 3.5)
     .style("pointer-events", "none");
-} 
+}
