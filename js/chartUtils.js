@@ -57,7 +57,7 @@ function drawGrids(g, scales, maxX, granularidad, innerW, innerH, yMax) {
 
   const isSameDay = window.selectedDate && window.diaReporte && window.selectedDate.replace(/-/g, "") === window.diaReporte;
 
-  if (isSameDay && (currentGanttView === "despachos_reales" || currentGanttView === "despachos_mix") && window.horaReporte) {
+  if (isSameDay && (currentGanttView === "despachos_reales" || currentGanttView === "despachos_mix" || currentGanttView === "almuerzo") && window.horaReporte) {
     const reportMin = safeHhmmssToMin(window.horaReporte);
     if (reportMin !== null) {
       const xPos = scales.x(reportMin / granularidad);
@@ -270,6 +270,9 @@ function getSlotState(slotMin, startMin, ticketsTimes, granularidad) {
 }
 
 function getColorSort(pedido) {
+  if (pedido.isAlmuerzo) {
+    return "rgba(255, 140, 0, 0.8)"; // Borde naranja fuerte
+  }
   if (pedido.isDisponibles) {
     return "orange";
   }
@@ -301,6 +304,9 @@ function getColorSort(pedido) {
 
 /* ==== * Color de Área * ===================== */
 function getColorOrigen(pedido) {
+  if (pedido.isAlmuerzo) {
+    return "rgba(255, 140, 0, 0.6)"; // Naranja semi-transparente para la línea
+  }
   if (pedido.isDisponibles) {
     return "orange";
   }
@@ -315,6 +321,9 @@ function getColorOrigen(pedido) {
 }
 
 function getAreaColor(pedido) {
+  if (pedido.isAlmuerzo) {
+    return "rgba(255, 140, 0, 0.4)"; // Naranja más transparente para el área
+  }
   if (pedido.isDisponibles) {
     return "orange";
   }
@@ -829,7 +838,7 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
 
       const isSameDay = window.selectedDate && window.diaReporte && window.selectedDate.replace(/-/g, "") === window.diaReporte;
 
-      if (isSameDay && (currentGanttView === "despachos_reales" || currentGanttView === "despachos_mix") && window.horaReporte) {
+      if (isSameDay && (currentGanttView === "despachos_reales" || currentGanttView === "despachos_mix" || currentGanttView === "almuerzo") && window.horaReporte) {
         const reportMin = safeHhmmssToMin(window.horaReporte);
         if (reportMin !== null) {
           const configGran = window.CFG ? window.CFG.granularidadMin : 5;
@@ -1155,7 +1164,7 @@ function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scal
 
         const plantMetrics = stackResult.plantStacks[pCode].metrics;
         const isColasAndReal = currentGraphView === 'colas' && currentGanttView === 'despachos_reales';
-        const isColasAndMix = currentGraphView === 'colas' && currentGanttView === 'despachos_mix';
+        const isColasAndMix = currentGraphView === 'colas' && (currentGanttView === 'despachos_mix' || currentGanttView === 'almuerzo');
         if (plantMetrics.delay2ByTime && !isColasAndReal) {
           drawDelayCurve(gPlant, plantMetrics.delay2ByTime, scales, CFG.granularidadMin, yDelayScale);
           const rightAxisG = drawRightAxis(gPlant, yDelayScale, innerW, "Delay Max [min]", "red");
@@ -1207,7 +1216,7 @@ function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scal
           .range([innerH * 0.75, innerH * 0.05]); 
         
         const isColasAndReal = currentGraphView === 'colas' && currentGanttView === 'despachos_reales';
-        const isColasAndMix = currentGraphView === 'colas' && currentGanttView === 'despachos_mix';
+        const isColasAndMix = currentGraphView === 'colas' && (currentGanttView === 'despachos_mix' || currentGanttView === 'almuerzo');
         if (!isColasAndReal) {
           drawDelayCurve(g, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
           const rightAxisG = drawRightAxis(g, scales.yDelay, innerW, "Delay Max [min]", "red");
@@ -1280,6 +1289,7 @@ function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scal
   } else {
     const area = createArea(scales);
     layers = drawLayers(g, subsetPedidos, area, scales);
+    
     if (currentGanttView === 'despachos_mix') {
       drawOrangeCurve(g, subsetPedidos, scales, scales.y);
     }

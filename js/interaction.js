@@ -37,7 +37,7 @@ function getCurrentGraphView() {
   if (graphView === 'camiones' && ganttView === 'despachos_reales') {
     return 'camiones_cd';
   }
-  if (graphView === 'camiones' && ganttView === 'despachos_mix') {
+  if (graphView === 'camiones' && (ganttView === 'despachos_mix' || ganttView === 'almuerzo')) {
     return 'camiones_mix';
   }
   return graphView;
