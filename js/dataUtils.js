@@ -945,14 +945,26 @@ function calculateAlmuerzoDespachos(allPedidos, selectedDate, permitidas, granul
     trucksByPlant[info.Planta].push(camion);
   });
 
+  // Calcular la envolvente base actual usando los activeTickets
+  const ocupacionBase = new Array(Math.ceil(1440 / granularidad)).fill(0);
+  activeTickets.forEach(t => {
+    const ped = t.ped || {};
+    const times = getTicketRealTimes(t, ped);
+    const startSlot = Math.max(0, Math.floor(times.startMin / granularidad));
+    const endSlot = Math.min(ocupacionBase.length - 1, Math.floor(times.endMin / granularidad));
+    for (let s = startSlot; s <= endSlot; s++) {
+      ocupacionBase[s]++;
+    }
+  });
+
   const almuerzos = [];
   
-  const startSlotGlobal = 690 / granularidad; // 11:30
-  const maxStartSlotGlobal = 825 / granularidad; // 13:45
+  const startSlotGlobal = 660 / granularidad; // 11:00
+  const maxStartSlotGlobal = 855 / granularidad; // 14:15
   const durationSlots = 45 / granularidad; // 9
   const shiftIntervalSlots = 15 / granularidad; // 3 slots (15 mins)
   
-  // Posibles turnos cada 15 min (12:00, 12:15, 12:30, ..., 14:15)
+  // Posibles turnos cada 15 min (11:00, 11:15, 11:30, ..., 14:15)
   const shiftStarts = [];
   for (let s = startSlotGlobal; s <= maxStartSlotGlobal; s += shiftIntervalSlots) {
     shiftStarts.push(s);
@@ -961,10 +973,39 @@ function calculateAlmuerzoDespachos(allPedidos, selectedDate, permitidas, granul
   Object.entries(trucksByPlant).forEach(([planta, camiones]) => {
     const baseP = datePedidos.find(o => o.Planta === planta) || datePedidos[0] || {};
     
-    // Distribuir equitativamente usando round-robin
+    const isValleyFilling = document.getElementById("filter-valley-filling")?.checked !== false;
+
+    // Distribuir usando Greedy Valley-Filling o Round-Robin
     camiones.forEach((camion, i) => {
-      const shiftIndex = i % shiftStarts.length;
-      const assignedStart = shiftStarts[shiftIndex];
+      let assignedStart;
+      
+      if (isValleyFilling) {
+        let bestShift = shiftStarts[0];
+        let minDemand = Infinity;
+        
+        shiftStarts.forEach(startSlot => {
+          let currentDemand = 0;
+          for (let s = startSlot; s < startSlot + durationSlots; s++) {
+            currentDemand += ocupacionBase[s] || 0;
+          }
+          if (currentDemand < minDemand) {
+            minDemand = currentDemand;
+            bestShift = startSlot;
+          }
+        });
+        
+        assignedStart = bestShift;
+        
+        // Actualizar la envolvente base con este almuerzo para que el siguiente camión "vea" el valle un poco más lleno
+        for (let s = assignedStart; s < assignedStart + durationSlots; s++) {
+          if (s < ocupacionBase.length) {
+            ocupacionBase[s]++;
+          }
+        }
+      } else {
+        const shiftIndex = i % shiftStarts.length;
+        assignedStart = shiftStarts[shiftIndex];
+      }
 
       // Crear objeto de despacho/pedido simulado
       const sanitizedId = `almuerzo_${camion.replace(/\s+/g, "_")}`;
@@ -974,7 +1015,7 @@ function calculateAlmuerzoDespachos(allPedidos, selectedDate, permitidas, granul
       almuerzos.push({
         ...baseP,
         id: sanitizedId,
-        parentPedido: { ...baseP, id: sanitizedId, Confirmado: "SI", MaxCamiones: 1 },
+        parentPedido: { ...baseP, id: sanitizedId, Confirmado: "SI", MaxCamiones: 1, isAlmuerzo: true },
         isAlmuerzo: true, // flag custom
         Planta: planta,
         Obra: "ALMUERZO",

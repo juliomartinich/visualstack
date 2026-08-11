@@ -22,6 +22,10 @@ function buildStack(pedidos) {
     const refA = a.parentPedido || a;
     const refB = b.parentPedido || b;
 
+    const isAlmuerzoA = (a.isAlmuerzo || refA.isAlmuerzo) ? 1 : 0;
+    const isAlmuerzoB = (b.isAlmuerzo || refB.isAlmuerzo) ? 1 : 0;
+    if (isAlmuerzoA !== isAlmuerzoB) return isAlmuerzoB - isAlmuerzoA;
+
     const getPriority = (p) => {
       // 1. Masivos (> 100 m3)
       if ((p.CantProgramada ?? 0) > 100) return 0;
@@ -304,6 +308,10 @@ function buildPlantLoadStack(pedidos, granularidadMin) {
   });
 
   const sorted = [...pedidos].sort((a, b) => {
+    const isAlmuerzoA = (a.isAlmuerzo || (a.parentPedido && a.parentPedido.isAlmuerzo)) ? 1 : 0;
+    const isAlmuerzoB = (b.isAlmuerzo || (b.parentPedido && b.parentPedido.isAlmuerzo)) ? 1 : 0;
+    if (isAlmuerzoA !== isAlmuerzoB) return isAlmuerzoB - isAlmuerzoA;
+
     const valA = a.HoraAsignacionMin ?? (a.despachoIndex ?? 0);
     const valB = b.HoraAsignacionMin ?? (b.despachoIndex ?? 0);
     return valA - valB;
