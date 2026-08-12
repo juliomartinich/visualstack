@@ -250,6 +250,43 @@ function renderTooltip(panel, activa, t, granularidad) {
   const hh = Math.floor(totalMin / 60);
   const mm = totalMin % 60;
 
+  if (p.isAlmuerzo) {
+    const offsetMin = (p.XG?.offset || 0) * granularidad;
+    const durationMin = (p.XG?.finrel || 0) * granularidad;
+    const startStr = String(Math.floor(offsetMin / 60)).padStart(2, "0") + ":" + String(offsetMin % 60).padStart(2, "0");
+    const endStr = String(Math.floor((offsetMin + durationMin) / 60)).padStart(2, "0") + ":" + String((offsetMin + durationMin) % 60).padStart(2, "0");
+    
+    panel.html(`
+      <div class="tooltip-card" style="border-top: 4px solid #f59e0b;">
+        <div class="tooltip-header" style="border-bottom: 1px solid #eee; padding-bottom: 6px; margin-bottom: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="title" style="color: #d97706; display: flex; align-items: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path>
+                <path d="M7 2v20"></path>
+                <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path>
+              </svg>
+              Turno de Almuerzo
+            </div>
+            <div style="font-size: 11px; font-weight: 600; color: #4b5563; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">45 min</div>
+          </div>
+          <div style="font-size: 18px; font-weight: 800; color: #111827; margin-top: 6px;">Camión #${p.Camion || "-"}</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="metric">
+            <span class="label">Inicio</span>
+            <span class="value" style="font-size: 15px;">${startStr}</span>
+          </div>
+          <div class="metric">
+            <span class="label">Fin</span>
+            <span class="value" style="font-size: 15px;">${endStr}</span>
+          </div>
+        </div>
+      </div>
+    `);
+    return;
+  }
+
   if (p.isDisponibles) {
     const ticketsRowsHtml = (p.allTickets || [])
       .map(tk => {

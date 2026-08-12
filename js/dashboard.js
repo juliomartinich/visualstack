@@ -126,7 +126,6 @@ function inicializarControles() {
   // 8. Registrar escuchadores de eventos para los filtros checkbox "verdes"
   filterCheck.on("change", handleFilterCheck);
   if (!headerFilterCheck.empty()) headerFilterCheck.on("change", handleFilterCheck);
-  d3.select("#filter-valley-filling").on("change", handleFilterCheck);
 
   // 9. Actualizar y obtener el valor inicial seleccionado para plantas y grupos
   const initialSaved = updateFiltersForDate();
@@ -377,9 +376,7 @@ const handleObraInput = (e) => {
       .attr("stroke-width", d => (d.id === parentId) ? 2.5 : CFG.lineStrokeWidth);
 
     if (window.currentBand) {
-      const startT = focus.XG?.offset ?? 0;
-      const endT = startT + (focus.XG?.finrel ?? 0);
-      window.currentBand.draw(startT, endT, "red");
+      window.currentBand.show(focus, "red");
     }
 
     renderTooltip(panel, focus, focus.XG?.offset ?? 0, CFG.granularidadMin);
@@ -497,7 +494,7 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
       tempPedidos = tempPedidos.flatMap(p => calculateMixedDespachosForPedido(p, p.realDespachos || [], CFG.granularidadMin));
     } else if (currentGanttView === 'almuerzo') {
       const pedidosDespachos = tempPedidos.flatMap(p => (p.despachos || []).map(d => ({ ...d, parentPedido: p })));
-      const almuerzos = calculateAlmuerzoDespachos(fullPedidos, selectedDate, permitidas, CFG.granularidadMin);
+      const almuerzos = calculateAlmuerzoDespachos(fullPedidos, selectedDate, permitidas, CFG.granularidadMin, pedidosDespachos);
       tempPedidos = [...pedidosDespachos, ...almuerzos];
     } else if (currentGanttView === 'disponibles') {
       tempPedidos = disponiblesDesp;
