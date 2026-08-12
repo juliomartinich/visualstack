@@ -1002,7 +1002,7 @@ function calculateAlmuerzoDespachos(allPedidos, selectedDate, permitidas, granul
     const windowEnd = maxStartSlotGlobal + durationSlots;
     let tempOcupacion = ocupacionBase.slice(startSlotGlobal, windowEnd);
 
-    console.log("tempOcupacion inicial:", tempOcupacion.join(", "));
+    // console.log("tempOcupacion inicial:", tempOcupacion.join(", "));
 
     allTrucks.forEach(t => {
       // Buscar el fondo absoluto del valle en la ventana
@@ -1035,7 +1035,7 @@ function calculateAlmuerzoDespachos(allPedidos, selectedDate, permitidas, granul
       const medioHHMM = slotToHHMM(minSlot, granularidad);
       const finHHMM = slotToHHMM(closestStart + durationSlots, granularidad);
 
-      console.log(`Asignacion camion ${t.camion}: Inicio=${inicioHHMM}, Medio (valle)=${medioHHMM}, Fin=${finHHMM} | minVal=${minVal}, minSlot=${minSlot}`);
+      // console.log(`Asignacion camion ${t.camion}: Inicio=${inicioHHMM}, Medio (valle)=${medioHHMM}, Fin=${finHHMM} | minVal=${minVal}, minSlot=${minSlot}`);
     });
 
     // 2. Simulated Annealing
