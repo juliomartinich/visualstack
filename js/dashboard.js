@@ -52,42 +52,11 @@ function inicializarControles() {
   // 1. Obtener el panel lateral de filtros y construir dinámicamente la botonera del header
   filterFechaPanel = document.getElementById("filter-fecha");
   const headerContainer = document.getElementById("header-date-container");
-  headerContainer.innerHTML = `
-    <div style="display: flex; align-items: center; gap: 10px; font-size: 11px; background: transparent; padding: 0; flex-wrap: nowrap; overflow: hidden;">
-      <!-- Grupo Día -->
-      <div style="display: flex; align-items: center; gap: 4px;">
-        <label for="header-filter-fecha" style="font-weight: 600; color: #555;">Día:</label>
-        <select id="header-filter-fecha" title="Cambiar Fecha" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
-      </div>
-      
-      <!-- Grupo Planta -->
-      <div style="display: flex; align-items: center; gap: 4px;">
-        <label for="header-filter-plantagrupo" style="font-weight: 600; color: #555;">Planta:</label>
-        <select id="header-filter-plantagrupo" title="Cambiar Planta" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;"></select>
-      </div>      
-
-      <!-- Grupo Vistas -->
-      <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
-        <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
-        <select id="header-viewgraph" name="headerViewGraph" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
-          <option value="camiones">Camiones</option>
-          <option value="plantas">Asignaciones</option>
-          <option value="colas">Plantas</option>
-          <option value="recursos">Recursos</option>
-        </select>
-        
-        <label for="header-viewgantt" style="font-weight: 600; color: #555; margin-left: 6px;">Gantt:</label>
-        <select id="header-viewgantt" name="headerViewGantt" style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
-          <option value="pedidos">Pedidos</option>
-          <option value="despachos">Despachos</option>
-          <option value="despachos_reales">Despachos reales</option>
-          <option value="despachos_mix">Despachos Mix</option>
-        </select>
-      </div>
-    </div>
-  `;
-
-  // 2. Guardar referencias a los selectores del encabezado recién inyectados
+  
+  // (La inyección de HTML del header fue movida a index.html para usar Alpine.js)
+  
+  // 2. Guardar referencias a los selectores (ya no son estrictamente necesarios para sync, 
+  // pero los mantenemos por ahora si hay código residual)
   filterFechaHeader = document.getElementById("header-filter-fecha");
   filterPlantaHeader = document.getElementById("header-filter-plantagrupo");
 
@@ -111,21 +80,11 @@ function inicializarControles() {
   filterCheck = d3.select("#filter-green");
   headerFilterCheck = d3.select("#header-filter-green");
 
-  // 6. Registrar escuchadores de eventos para los cambios de fecha y planta
-  filterFechaPanel.addEventListener("change", handleDateChange);
-  filterFechaHeader.addEventListener("change", handleDateChange);
-
-  filterSelect.addEventListener("change", handlePlantaChange);
-  filterPlantaHeader.addEventListener("change", handlePlantaChange);
-
-  // 7. Registrar escuchador de eventos para el filtrado por código de obra e input de camión
-  codObraInput.addEventListener("input", handleObraInput);
-  if (headerCodObraInput) headerCodObraInput.addEventListener("input", handleObraInput);
-  if (camionInput) camionInput.addEventListener("input", handleCamionInput);
-
-  // 8. Registrar escuchadores de eventos para los filtros checkbox "verdes"
-  filterCheck.on("change", handleFilterCheck);
-  if (!headerFilterCheck.empty()) headerFilterCheck.on("change", handleFilterCheck);
+  // 6. (Eliminados los escuchadores manuales de change porque ahora los maneja Alpine.js)
+  
+  // 7. (Eliminados escuchadores manuales de filter-codobra y filter-camion, ahora los maneja Alpine)
+  
+  // 8. (Eliminados escuchadores de filter-green, ahora lo maneja Alpine)
 
   // 9. Actualizar y obtener el valor inicial seleccionado para plantas y grupos
   const initialSaved = updateFiltersForDate();
@@ -157,35 +116,29 @@ function inicializarControles() {
   // Actualizar visibilidad inicial de la opción "Disponibles"
   actualizarOpcionesGantt();
 
-  // 13. Manejador global de eventos 'change' para sincronizar vistas y persistir en cookies
-  document.addEventListener("change", (e) => {
-    const ctrl = e.target;
-    const name = ctrl.name;
-    // Filtrar únicamente los controles de cambio de vista (gráfico o gantt)
-    if (!["viewGraph", "headerViewGraph", "viewGantt", "headerViewGantt"].includes(name)) return;
-
-    const val = ctrl.value;
-    if (name === "viewGraph" || name === "headerViewGraph") {
-      setCookie("viewGraph", val);
-      // Sincronizar el valor entre el selector del panel lateral y del header
-      const s1 = document.getElementById("filter-viewgraph");
-      const s2 = document.getElementById("header-viewgraph");
-      if (s1) s1.value = val;
-      if (s2) s2.value = val;
+  // 13. Exponer función global para que Alpine dispare el redibujado
+  window.reRenderDashboard = () => {
+      const store = Alpine?.store('filtros');
+      if (!store) return;
       
-      // Actualizar visibilidad de la opción "Disponibles" en base al nuevo gráfico
+      // Sincronizar el estado de Alpine de vuelta a nuestras variables globales
+      if (rawReportDate !== store.fecha) {
+          rawReportDate = store.fecha;
+          updateFiltersForDate();
+      }
+      
+      // Actualizar cookies para retrocompatibilidad
+      setCookie("viewGraph", store.viewGraph);
+      setCookie("viewGantt", store.viewGantt);
+      
       actualizarOpcionesGantt();
-    } else if (name === "viewGantt" || name === "headerViewGantt") {
-      setCookie("viewGantt", val);
-      // Sincronizar el valor entre el selector del panel lateral y del header
-      const s1 = document.getElementById("filter-viewgantt");
-      const s2 = document.getElementById("header-viewgantt");
-      if (s1) s1.value = val;
-      if (s2) s2.value = val;
-    }
-    // Redibujar el tablero con el filtro activo de planta/grupo
-    dibujar();
-  });
+      dibujar();
+  };
+  
+  // Le avisamos a Alpine que ya puede empezar a mandar eventos
+  if (Alpine && Alpine.store('filtros')) {
+      Alpine.store('filtros').isInitialized = true;
+  }
 }
 
 function populateDateSelect(selectEl, customDates = null) {
@@ -812,111 +765,17 @@ function startDrag(e, panel) {
 document.addEventListener("DOMContentLoaded", () => {
   const filterPanel = document.getElementById("filter-config-panel");
   const filterHeader = document.getElementById("filter-config-header");
-  const filterCloseBtn = document.getElementById("filter-config-close");
   const settingsPanel = document.getElementById("settings-panel");
   const settingsHeader = document.getElementById("settings-header");
-  const settingsCloseBtn = document.getElementById("settings-close");
-  const helpModal = document.getElementById("help-modal");
-  const helpCloseBtn = document.getElementById("help-modal-close");
-
-  if (helpCloseBtn) { helpCloseBtn.addEventListener("click", () => helpModal.classList.add("hidden")); }
 
   let activeDragPanel = null;
   let offsetX = 0;
   let offsetY = 0;
 
-  const strokeSlider = document.getElementById("range-stroke-width");
-  const strokeVal = document.getElementById("val-stroke-width");
-  if (strokeSlider) {
-    strokeSlider.value = CFG.lineStrokeWidth;
-    strokeVal.textContent = CFG.lineStrokeWidth;
-    strokeSlider.addEventListener("input", (e) => {
-      const val = parseFloat(e.target.value);
-      strokeVal.textContent = val;
-      CFG.lineStrokeWidth = val;
-      localStorage.setItem("lineStrokeWidth", val);
-      if (typeof updateVisualStyles === "function") updateVisualStyles();
-    });
-  }
+  // (Los event listeners de los sliders de estética fueron migrados a Alpine.js)
 
-  const opacitySlider = document.getElementById("range-opacity");
-  const opacityVal = document.getElementById("val-opacity");
-  if (opacitySlider) {
-    opacitySlider.value = CFG.lineOpacity;
-    opacityVal.textContent = CFG.lineOpacity;
-    opacitySlider.addEventListener("input", (e) => {
-      const val = parseFloat(e.target.value);
-      opacityVal.textContent = val;
-      CFG.lineOpacity = val;
-      localStorage.setItem("lineOpacity", val);
-      if (typeof updateVisualStyles === "function") updateVisualStyles();
-    });
-  }
-
-  const triangleOpacitySlider = document.getElementById("range-triangle-opacity");
-  const triangleOpacityVal = document.getElementById("val-triangle-opacity");
-  if (triangleOpacitySlider) {
-    triangleOpacitySlider.value = CFG.triangleOpacity;
-    triangleOpacityVal.textContent = CFG.triangleOpacity;
-    triangleOpacitySlider.addEventListener("input", (e) => {
-      const val = parseFloat(e.target.value);
-      triangleOpacityVal.textContent = val;
-      CFG.triangleOpacity = val;
-      localStorage.setItem("triangleOpacity", val);
-      if (typeof updateVisualStyles === "function") updateVisualStyles();
-    });
-  }
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "L" || e.key === "l") {
-      e.preventDefault();
-      resetFilters();
-      const codObraInput = document.getElementById("filter-codobra");
-      if (codObraInput) codObraInput.focus();
-      return;
-    }
-    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-    if (e.key === "P" || e.key === "p") {
-      if (filterPanel.classList.contains("hidden")) {
-        const gantt = document.getElementById("gantt-scroll-container");
-        if (gantt) {
-          const rect = gantt.getBoundingClientRect();
-          filterPanel.style.top = `${rect.top}px`;
-          filterPanel.style.left = `${rect.left}px`;
-        }
-        filterPanel.classList.remove("hidden");
-      }
-    } else if (e.key === "C" || e.key === "c") {
-      if (settingsPanel && settingsPanel.classList.contains("hidden")) {
-        const gantt = document.getElementById("gantt-scroll-container");
-        if (gantt) {
-          const rect = gantt.getBoundingClientRect();
-          settingsPanel.style.top = `${rect.top}px`;
-          const panelWidth = settingsPanel.offsetWidth || 480;
-          settingsPanel.style.left = `${rect.right - panelWidth}px`;
-        }
-        settingsPanel.classList.remove("hidden");
-      }
-    } else if (e.key === "H" || e.key === "h") {
-      helpModal.classList.toggle("hidden");
-    } else if (e.key === "S" || e.key === "s" || e.key === "Escape") {
-      filterPanel.classList.add("hidden");
-      if (settingsPanel) settingsPanel.classList.add("hidden");
-      helpModal.classList.add("hidden");
-      resetFilters();
-    }
-  });
-
-  filterCloseBtn.addEventListener("click", () => {
-    filterPanel.classList.add("hidden");
-    resetFilters();
-  });
-
-  if (settingsCloseBtn) {
-    settingsCloseBtn.addEventListener("click", () => {
-      settingsPanel.classList.add("hidden");
-    });
-  }
+  // Los listeners de teclado (P, C, H, S, Esc) y los botones de cierre 
+  // fueron migrados a Alpine.js en index.html (@keydown.window, @click, etc.)
 
   function startDragLocal(e, panel) {
     activeDragPanel = panel;
@@ -950,3 +809,6 @@ window.getDashboardData = getDashboardData;
 window.populateDateSelect = populateDateSelect;
 window.updateSelectStyle = updateSelectStyle;
 window.updateFiltersForDate = updateFiltersForDate;
+window.handleObraInput = handleObraInput;
+window.handleCamionInput = handleCamionInput;
+window.handleFilterCheck = handleFilterCheck;

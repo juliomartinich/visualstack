@@ -8,14 +8,71 @@
   <!-- D3 -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
 
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
   <!-- Estilos -->
   <link rel="stylesheet" href="styles.css">
 </head>
 
-<body>
+<body x-data="{ openFilters: false, openSettings: false, openHelp: false }"
+  @keydown.window.escape="openFilters = false; openSettings = false; openHelp = false;"
+  @keyup.window.s="if($event.target.tagName !== 'INPUT') { openFilters = false; openSettings = false; openHelp = false; }"
+  @keyup.window.p="if($event.target.tagName !== 'INPUT') openFilters = !openFilters"
+  @keyup.window.c="if($event.target.tagName !== 'INPUT') openSettings = !openSettings"
+  @keyup.window.h="if($event.target.tagName !== 'INPUT') openHelp = !openHelp"
+  @keyup.window.l="if($event.target.tagName !== 'INPUT') { $event.preventDefault(); window.resetFilters(); document.getElementById('filter-codobra')?.focus(); }">
 
-  <div id="chart-container">
-    <div id="header-date-container"></div>
+  <div id="chart-container" x-data>
+    <div id="header-date-container">
+      <div
+        style="display: flex; align-items: center; gap: 10px; font-size: 11px; background: transparent; padding: 0; flex-wrap: nowrap; overflow: hidden;">
+        <!-- Grupo Día -->
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <label for="header-filter-fecha" style="font-weight: 600; color: #555;">Día:</label>
+          <select id="header-filter-fecha" x-model="$store.filtros.fecha" title="Cambiar Fecha"
+            style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
+            <template x-for="date in $store.filtros.availableDates" :key="date">
+              <option :value="date" x-text="date"></option>
+            </template>
+          </select>
+        </div>
+
+        <!-- Grupo Planta -->
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <label for="header-filter-plantagrupo" style="font-weight: 600; color: #555;">Planta:</label>
+          <select id="header-filter-plantagrupo" x-model="$store.filtros.planta" title="Cambiar Planta"
+            style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
+            <template x-for="planta in $store.filtros.availablePlantas" :key="planta">
+              <option :value="planta" x-text="planta"></option>
+            </template>
+          </select>
+        </div>
+
+        <!-- Grupo Vistas -->
+        <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
+          <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
+          <select id="header-viewgraph" x-model="$store.filtros.viewGraph" name="headerViewGraph"
+            style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
+            <option value="camiones">Camiones</option>
+            <option value="plantas">Asignaciones</option>
+            <option value="colas">Plantas</option>
+            <option value="recursos">Recursos</option>
+          </select>
+
+          <label for="header-viewgantt" style="font-weight: 600; color: #555; margin-left: 6px;">Gantt:</label>
+          <select id="header-viewgantt" x-model="$store.filtros.viewGantt" name="headerViewGantt"
+            style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
+            <option value="pedidos">Pedidos</option>
+            <option value="almuerzo">Almuerzo</option>
+            <option value="despachos">Despachos</option>
+            <option value="despachos_reales">Despachos reales</option>
+            <option value="despachos_mix">Despachos Mix</option>
+            <option value="disponibles">Disponibles</option>
+          </select>
+        </div>
+      </div>
+    </div>
     <div id="chart"></div>
     <div id="panel"></div>
   </div>
@@ -24,25 +81,33 @@
   </div>
 
 
-  <div id="filter-config-panel" class="hidden">
+  <div id="filter-config-panel" x-show="openFilters" x-transition style="display: none;">
     <div id="filter-config-header">
       <span>Filtros</span>
-      <button id="filter-config-close">Salir</button>
+      <button id="filter-config-close" @click="openFilters = false">Salir</button>
     </div>
     <div id="filter-config-content" class="compact-grid">
       <div class="filter-group">
         <label for="filter-plantagrupo">Planta</label>
-        <select id="filter-plantagrupo"></select>
+        <select id="filter-plantagrupo" x-model="$store.filtros.planta">
+          <template x-for="planta in $store.filtros.availablePlantas" :key="planta">
+            <option :value="planta" x-text="planta"></option>
+          </template>
+        </select>
       </div>
 
       <div class="filter-group">
         <label for="filter-fecha">Fecha</label>
-        <select id="filter-fecha"></select>
+        <select id="filter-fecha" x-model="$store.filtros.fecha">
+          <template x-for="date in $store.filtros.availableDates" :key="date">
+            <option :value="date" x-text="date"></option>
+          </template>
+        </select>
       </div>
 
       <div class="filter-group">
         <label for="filter-viewgraph">Vista Gráfico</label>
-        <select id="filter-viewgraph" name="viewGraph">
+        <select id="filter-viewgraph" x-model="$store.filtros.viewGraph" name="viewGraph">
           <option value="camiones">Camiones</option>
           <option value="plantas">Asignaciones</option>
           <option value="colas">Plantas</option>
@@ -52,7 +117,7 @@
 
       <div class="filter-group">
         <label for="filter-viewgantt">Vista Gantt</label>
-        <select id="filter-viewgantt" name="viewGantt">
+        <select id="filter-viewgantt" x-model="$store.filtros.viewGantt" name="viewGantt">
           <option value="pedidos">Pedidos</option>
           <option value="despachos">Despachos</option>
           <option value="despachos_reales">Despachos reales</option>
@@ -64,59 +129,64 @@
 
       <div class="filter-group">
         <label for="filter-codobra">Obra</label>
-        <input list="codobras-list" id="filter-codobra" placeholder="-- Buscar --" autocomplete="off">
+        <input list="codobras-list" id="filter-codobra" x-model="$store.filtros.codObra" placeholder="-- Buscar --"
+          autocomplete="off">
         <datalist id="codobras-list"></datalist>
       </div>
 
       <div class="filter-group">
         <label for="filter-camion">Camión</label>
-        <input list="camiones-list" id="filter-camion" placeholder="-- Buscar --" autocomplete="off">
+        <input list="camiones-list" id="filter-camion" x-model="$store.filtros.camion" placeholder="-- Buscar --"
+          autocomplete="off">
         <datalist id="camiones-list"></datalist>
       </div>
 
       <div class="filter-group checkbox-group">
-        <input type="checkbox" id="filter-green" title="Filtrar Verdes (Confirmados Mono)">
+        <input type="checkbox" id="filter-green" x-model="$store.filtros.soloVerde"
+          title="Filtrar Verdes (Confirmados Mono)">
         <label for="filter-green" style="margin-bottom: 0;">Solo Confirmados (1 camión)</label>
       </div>
     </div>
   </div>
 
   <!-- Panel de Configuración Estética -->
-  <div id="settings-panel" class="hidden">
+  <div id="settings-panel" x-show="openSettings" x-transition style="display: none;">
     <div id="settings-header">
       <span>Configuración Visual</span>
-      <button id="settings-close">Cerrar</button>
+      <button id="settings-close" @click="openSettings = false">Cerrar</button>
     </div>
     <div id="settings-content" class="compact-grid">
       <div class="filter-group">
         <label for="range-stroke-width">Grosor Línea</label>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <input type="range" id="range-stroke-width" min="0.1" max="2" step="0.1">
-          <span id="val-stroke-width" style="font-size: 11px; width: 25px;">-</span>
+          <input type="range" id="range-stroke-width" x-model="$store.filtros.strokeWidth" min="0.1" max="2" step="0.1">
+          <span id="val-stroke-width" x-text="$store.filtros.strokeWidth" style="font-size: 11px; width: 25px;">-</span>
         </div>
       </div>
       <div class="filter-group">
         <label for="range-opacity">Op. Líneas</label>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <input type="range" id="range-opacity" min="0.1" max="1" step="0.1">
-          <span id="val-opacity" style="font-size: 11px; width: 25px;">-</span>
+          <input type="range" id="range-opacity" x-model="$store.filtros.opacity" min="0.1" max="1" step="0.1">
+          <span id="val-opacity" x-text="$store.filtros.opacity" style="font-size: 11px; width: 25px;">-</span>
         </div>
       </div>
       <div class="filter-group">
         <label for="range-triangle-opacity">Op. Triángulos</label>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <input type="range" id="range-triangle-opacity" min="0.1" max="1" step="0.1">
-          <span id="val-triangle-opacity" style="font-size: 11px; width: 25px;">-</span>
+          <input type="range" id="range-triangle-opacity" x-model="$store.filtros.triangleOpacity" min="0.1" max="1"
+            step="0.1">
+          <span id="val-triangle-opacity" x-text="$store.filtros.triangleOpacity"
+            style="font-size: 11px; width: 25px;">-</span>
         </div>
       </div>
     </div>
   </div>
 
-  <div id="help-modal" class="hidden">
-    <div id="help-modal-content">
+  <div id="help-modal" x-show="openHelp" x-transition style="display: none;">
+    <div id="help-modal-content" @click.stop>
       <div id="help-modal-header">
         <span>Ayuda e Interacción</span>
-        <button id="help-modal-close">Cerrar</button>
+        <button id="help-modal-close" @click="openHelp = false">Cerrar</button>
       </div>
       <div id="help-modal-body">
         <div class="shortcut-list">
@@ -139,6 +209,7 @@
 
   <!-- Scripts del gráfico -->
   <script src="js/config.js?v=1.0.6"></script>
+  <script src="js/alpineStore.js?v=1.0.6"></script>
   <script src="js/dataUtils.js?v=1.0.6"></script>
   <script src="js/stackUtils.js?v=1.0.6"></script>
   <script src="js/chartUtils.js?v=1.0.6"></script>
