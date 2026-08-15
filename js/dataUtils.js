@@ -1038,7 +1038,8 @@ function calculateAlmuerzoDespachos(allPedidos, selectedDate, permitidas, granul
       // console.log(`Asignacion camion ${t.camion}: Inicio=${inicioHHMM}, Medio (valle)=${medioHHMM}, Fin=${finHHMM} | minVal=${minVal}, minSlot=${minSlot}`);
     });
 
-    // 2. Simulated Annealing
+    // 2. Simulated Annealing (recocido simulado)
+    // funcion de Costo
     const calculateCost = (ocupacionArr) => {
       let maxVal = 0;
       let sum = 0;
@@ -1053,6 +1054,8 @@ function calculateAlmuerzoDespachos(allPedidos, selectedDate, permitidas, granul
         count++;
       }
       const variance = (sumSq - (sum * sum) / count) / count;
+      // aplasta el pico mas alto a toda costa (*10000),
+      //  e intenta dejarlo lo mas liso posible
       return maxVal * 10000 + variance;
     };
 
@@ -1064,22 +1067,25 @@ function calculateAlmuerzoDespachos(allPedidos, selectedDate, permitidas, granul
     const coolingRate = 0.995;
     const iterations = 5000;
 
+    // el loop termina por las 5000 iteracionesm o porque llega a las temp < 0.1
     for (let i = 0; i < iterations; i++) {
       if (temp < 0.1) break;
 
+      // elige un camion al azar
       const truckIdx = Math.floor(Math.random() * allTrucks.length);
       const truck = allTrucks[truckIdx];
       const oldStart = truck.assignedStart;
 
+      // mueve el comienzo del almuerzo al azar para el camion elegido al azar
       const newStart = shiftStarts[Math.floor(Math.random() * shiftStarts.length)];
       if (oldStart === newStart) continue;
 
-      // Update tempOcupacion delta
+      // Update tempOcupacion delta (primero resta el viejo, luego suma el nuevo
       for (let s = oldStart; s < oldStart + durationSlots; s++) tempOcupacion[s - startSlotGlobal]--;
       for (let s = newStart; s < newStart + durationSlots; s++) tempOcupacion[s - startSlotGlobal]++;
 
       const newCost = calculateCost(tempOcupacion);
-
+      // acepta o rechaza el cambio segun si el Costo mejoró o no
       if (newCost < currentCost || Math.exp((currentCost - newCost) / temp) > Math.random()) {
         currentCost = newCost;
         truck.assignedStart = newStart;

@@ -732,33 +732,12 @@ function renderDashboard(filterKey) {
       return String(a.Camion).localeCompare(String(b.Camion));
     }
 
-    const refA = a.parentPedido || a;
-    const refB = b.parentPedido || b;
-
-    const getPriority = (p) => {
-      if ((p.CantProgramada ?? 0) > 100) return 0;
-      if (p.ColorPedido == 11 || p.ColorPedido == 12) return 1;
-      if (p.Confirmado !== "SI") return 5;
-      const maxCam = p.MaxCamiones;
-      if (maxCam > 1) return 2;
-      if (p.CantPedidosObra === 1) return 4;
-      return 3;
-    };
-
-    const prioA = getPriority(refA);
-    const prioB = getPriority(refB);
-    if (prioA !== prioB) return prioA - prioB;
-
-    const offsetA = refA.XG?.offset ?? 0;
-    const offsetB = refB.XG?.offset ?? 0;
+    const offsetA = a.XG?.offset ?? 0;
+    const offsetB = b.XG?.offset ?? 0;
     if (offsetA !== offsetB) return offsetA - offsetB;
 
-    if (refA.id === refB.id) {
-      const timeA = a.HoraAsignacionMin ?? 0;
-      const timeB = b.HoraAsignacionMin ?? 0;
-      return timeA - timeB;
-    }
-
+    const refA = a.parentPedido || a;
+    const refB = b.parentPedido || b;
     return String(refA.id).localeCompare(String(refB.id));
   });
 
