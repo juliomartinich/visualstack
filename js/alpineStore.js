@@ -34,17 +34,14 @@ document.addEventListener('alpine:init', () => {
             // Podemos hacer setup adicional aquí si es necesario
         },
 
-        // Método para cargar opciones dinámicamente desde dashboard.js
-        setAvailableOptions(dates, plantas) {
-            this.availableDates = dates;
+        // Método para cargar plantas dinámicamente desde dashboard.js
+        setPlantasDisponibles(plantas) {
             this.availablePlantas = plantas;
-            
-            // Validar que la fecha actual existe
-            if (!this.availableDates.includes(this.fecha) && this.availableDates.length > 0) {
-                this.fecha = this.availableDates[0];
+            // Validar que la planta actual existe en las opciones actualizadas
+            const exists = this.availablePlantas.some(p => p.id === this.planta);
+            if (!exists && this.availablePlantas.length > 0) {
+                this.planta = this.availablePlantas[0].id;
             }
-            
-            this.isInitialized = true;
         },
 
         // Método para cargar la data del reporte desde dashboard.js

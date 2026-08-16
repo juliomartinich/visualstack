@@ -61,8 +61,8 @@
           <label for="header-filter-plantagrupo" style="font-weight: 600; color: #555;">Planta:</label>
           <select id="header-filter-plantagrupo" x-model="$store.filtros.planta" title="Cambiar Planta"
             :style="`font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; background-color: ${window.getDateStyles($store.filtros.fecha).bg}; color: ${window.getDateStyles($store.filtros.fecha).text};`">
-            <template x-for="planta in $store.filtros.availablePlantas" :key="planta">
-              <option :value="planta" x-text="planta"></option>
+            <template x-for="planta in $store.filtros.availablePlantas" :key="planta.id">
+              <option :value="planta.id" x-text="planta.label"></option>
             </template>
           </select>
         </div>
@@ -211,8 +211,8 @@
       <div class="filter-group">
         <label for="filter-plantagrupo">Planta</label>
         <select id="filter-plantagrupo" x-model="$store.filtros.planta">
-          <template x-for="planta in $store.filtros.availablePlantas" :key="planta">
-            <option :value="planta" x-text="planta"></option>
+          <template x-for="planta in $store.filtros.availablePlantas" :key="planta.id">
+            <option :value="planta.id" x-text="planta.label"></option>
           </template>
         </select>
       </div>

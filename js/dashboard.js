@@ -170,17 +170,11 @@ function updateSelectStyle(dateSelect, plantSelect) {
 }
 
 function updateFiltersForDate() {
-  const filterSelect = document.getElementById("filter-plantagrupo");
-  const headerFilterSelect = document.getElementById("header-filter-plantagrupo");
   const reportDatePedidos = fullPedidos.filter(p => p["Fecha Pedido"] === rawReportDate);
-  filterSelect.innerHTML = "";
-  headerFilterSelect.innerHTML = "";
   const plantVolumes = {};
-  let totalVolumen = 0;
   reportDatePedidos.forEach(p => {
     const vol = p.CantProgramada || 0;
     plantVolumes[p.Planta] = (plantVolumes[p.Planta] || 0) + vol;
-    totalVolumen += vol;
   });
   const plantsWithVolume = Object.keys(plantVolumes).sort();
   const groupsWithVolume = new Set();
@@ -190,49 +184,40 @@ function updateFiltersForDate() {
   });
   const sortedGroups = Array.from(groupsWithVolume).sort();
 
-  const addOption = (select, value, text) => {
-    const opt = document.createElement("option");
-    opt.value = value;
-    opt.textContent = text;
-    select.appendChild(opt);
-  };
+  const plantasActualizadas = [];
 
-  [filterSelect, headerFilterSelect].forEach(select => {
-    if (!select) return;
+  const groupPlantsSet = new Set();
+  sortedGroups.forEach(g => {
+    const gPlants = window.grupos[g] || [];
+    const activeGPlants = gPlants.filter(p => plantsWithVolume.includes(p)).sort();
+    const gVol = d3.sum(activeGPlants, p => plantVolumes[p] || 0);
     
-    const groupPlantsSet = new Set();
-
-    sortedGroups.forEach(g => {
-      const gPlants = window.grupos[g] || [];
-      const activeGPlants = gPlants.filter(p => plantsWithVolume.includes(p)).sort();
-      const gVol = d3.sum(activeGPlants, p => plantVolumes[p] || 0);
-      
-      addOption(select, `Grupo:${g}`, `Grupo ${g} (${formatM3(gVol)} m3)`);
-      
-      activeGPlants.forEach(pCode => {
-        groupPlantsSet.add(pCode);
-        const pVol = plantVolumes[pCode] || 0;
-        const pName = window.plantasData[pCode]?.nombre || pCode;
-        addOption(select, `Planta:${pCode}`, `\u00A0\u00A0\u00A0\u00A0${pName} (${formatM3(pVol)} m3)`);
-      });
-    });
+    plantasActualizadas.push({ id: `Grupo:${g}`, label: `Grupo ${g} (${formatM3(gVol)} m3)` });
     
-    plantsWithVolume.forEach(pCode => {
-      if (!groupPlantsSet.has(pCode)) {
-        const pVol = plantVolumes[pCode] || 0;
-        const pName = window.plantasData[pCode]?.nombre || pCode;
-        addOption(select, `Planta:${pCode}`, `${pName} (${formatM3(pVol)} m3)`);
-      }
+    activeGPlants.forEach(pCode => {
+      groupPlantsSet.add(pCode);
+      const pVol = plantVolumes[pCode] || 0;
+      const pName = window.plantasData[pCode]?.nombre || pCode;
+      plantasActualizadas.push({ id: `Planta:${pCode}`, label: `\u00A0\u00A0\u00A0\u00A0${pName} (${formatM3(pVol)} m3)` });
     });
   });
+  
+  plantsWithVolume.forEach(pCode => {
+    if (!groupPlantsSet.has(pCode)) {
+      const pVol = plantVolumes[pCode] || 0;
+      const pName = window.plantasData[pCode]?.nombre || pCode;
+      plantasActualizadas.push({ id: `Planta:${pCode}`, label: `${pName} (${formatM3(pVol)} m3)` });
+    }
+  });
 
-  const saved = localStorage.getItem("filterPlantaGrupo");
-  const optionExists = Array.from(filterSelect.options).some(o => o.value === saved);
-  const finalVal = optionExists ? saved : (filterSelect.options[0]?.value || "Grupo:RM");
-  filterSelect.value = finalVal;
-  if (headerFilterSelect) headerFilterSelect.value = finalVal;
-  localStorage.setItem("filterPlantaGrupo", finalVal);
-  return finalVal;
+  if (Alpine && Alpine.store('filtros')) {
+    Alpine.store('filtros').setPlantasDisponibles(plantasActualizadas);
+    const store = Alpine.store('filtros');
+    localStorage.setItem("filterPlantaGrupo", store.planta);
+    return store.planta;
+  }
+  
+  return "Grupo:RM";
 }
 
 const handleDateChange = (e) => {
