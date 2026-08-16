@@ -30,7 +30,7 @@
   @keyup.window.p="if($event.target.tagName !== 'INPUT') openFilters = !openFilters"
   @keyup.window.c="if($event.target.tagName !== 'INPUT') openSettings = !openSettings"
   @keyup.window.h="if($event.target.tagName !== 'INPUT') openHelp = !openHelp"
-  @keyup.window.l="if($event.target.tagName !== 'INPUT') { $event.preventDefault(); window.resetFilters(); document.getElementById('filter-codobra')?.focus(); }">
+  @keyup.window.l="if($event.target.tagName !== 'INPUT') { $event.preventDefault(); $store.filtros.resetFilters(); document.getElementById('filter-codobra')?.focus(); }">
 
   <div id="chart-container" x-data>
     <div id="header-date-container" 
@@ -47,11 +47,12 @@
         <div style="display: flex; align-items: center; gap: 4px;">
           <label for="header-filter-fecha" style="font-weight: 600; color: #555;">Día:</label>
           <select id="header-filter-fecha" x-model="$store.filtros.fecha" title="Cambiar Fecha"
-            :style="`font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; background-color: ${window.getDateStyles($store.filtros.fecha).bg}; color: ${window.getDateStyles($store.filtros.fecha).text};`">
+            style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer;"
+            :style="$store.filtros.currentStyles">
             <template x-for="date in $store.filtros.availableDates" :key="date">
               <option :value="date" 
-                      :style="`background-color: ${window.getDateStyles(date).bg}; color: ${window.getDateStyles(date).text};`"
-                      x-text="`Despacho: ${date} ${window.getDateStyles(date).label}`"></option>
+                      :style="$store.filtros.getOptionStyles(date)"
+                      x-text="`Despacho: ${window.formatFecha(date)} ${window.getDateStyles(date, $store.filtros.hoyStr, $store.filtros.tomorrowStr).label}`"></option>
             </template>
           </select>
         </div>
@@ -219,9 +220,12 @@
 
       <div class="filter-group">
         <label for="filter-fecha">Fecha</label>
-        <select id="filter-fecha" x-model="$store.filtros.fecha">
+        <select id="filter-fecha" x-model="$store.filtros.fecha"
+                :style="$store.filtros.currentStyles">
           <template x-for="date in $store.filtros.availableDates" :key="date">
-            <option :value="date" x-text="date"></option>
+            <option :value="date"
+                    :style="$store.filtros.getOptionStyles(date)"
+                    x-text="`${window.formatFecha(date)} ${window.getDateStyles(date, $store.filtros.hoyStr, $store.filtros.tomorrowStr).label}`"></option>
           </template>
         </select>
       </div>

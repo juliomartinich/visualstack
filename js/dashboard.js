@@ -49,85 +49,28 @@ function actualizarOpcionesGantt() {
 }
 
 function inicializarControles() {
-  // 1. Obtener el panel lateral de filtros y construir dinámicamente la botonera del header
-  filterFechaPanel = document.getElementById("filter-fecha");
-  const headerContainer = document.getElementById("header-date-container");
-  
-  // (La inyección de HTML del header fue movida a index.html para usar Alpine.js)
-  
-  // 2. Guardar referencias a los selectores (ya no son estrictamente necesarios para sync, 
-  // pero los mantenemos por ahora si hay código residual)
-  filterFechaHeader = document.getElementById("header-filter-fecha");
-  filterPlantaHeader = document.getElementById("header-filter-plantagrupo");
-
-  // 3. Poblar las opciones de fecha disponibles en los selectores del panel y del header
-  populateDateSelect(filterFechaPanel);
-  populateDateSelect(filterFechaHeader);
-
-  // 4. Seleccionar la fecha inicial (usando la del reporte o la primera disponible) y aplicar estilo
-  const initialDate = uniqueDates.includes(rawReportDate) ? rawReportDate : (uniqueDates[0] || "");
-  filterFechaPanel.value = initialDate;
-  filterFechaHeader.value = initialDate;
-  updateSelectStyle(filterFechaHeader, filterPlantaHeader);
-
-  // 5. Guardar referencias a otros inputs y filtros de la interfaz
-  filterSelect = document.getElementById("filter-plantagrupo");
-  codObraInput = document.getElementById("filter-codobra");
-  headerCodObraInput = document.getElementById("header-filter-codobra");
-  codObraList = document.getElementById("codobras-list");
-  camionInput = document.getElementById("filter-camion");
-  camionesList = document.getElementById("camiones-list");
-  filterCheck = d3.select("#filter-green");
-  headerFilterCheck = d3.select("#header-filter-green");
-
-  // 6. (Eliminados los escuchadores manuales de change porque ahora los maneja Alpine.js)
-  
-  // 7. (Eliminados escuchadores manuales de filter-codobra y filter-camion, ahora los maneja Alpine)
-  
-  // 8. (Eliminados escuchadores de filter-green, ahora lo maneja Alpine)
-
-  // 9. Actualizar y obtener el valor inicial seleccionado para plantas y grupos
-  const initialSaved = updateFiltersForDate();
-
-  // 10. Recuperar cookies guardadas para la vista de gráfico (Graph View), saneando valores obsoletos
-  let savedGraphView = getCookie("viewGraph") || "camiones";
-  if (savedGraphView === "camionesd" || savedGraphView === "camiones_cd" || savedGraphView === "camiones_mix") {
-    savedGraphView = "camiones";
-    setCookie("viewGraph", "camiones");
-  } else if (savedGraphView === "recursos2") {
-    savedGraphView = "recursos";
-    setCookie("viewGraph", "recursos");
+  if (Alpine && Alpine.store('filtros')) {
+    const store = Alpine.store('filtros');
+    // Ensure availableDates are rendered in the DOM before we set the selected value
+    setTimeout(() => {
+      if (!store.fecha || !uniqueDates.includes(store.fecha)) {
+        store.fecha = uniqueDates.includes(rawReportDate) ? rawReportDate : (uniqueDates[0] || "");
+      }
+    }, 50);
   }
 
-  // 11. Recuperar cookie guardada para la vista Gantt (Gantt View)
-  let savedGanttView = getCookie("viewGantt") || "pedidos";
-
-  // 12. Sincronizar selectores del panel y del header con las vistas iniciales recuperadas
-  const selectViewGraph = document.getElementById("filter-viewgraph");
-  const headerViewGraph = document.getElementById("header-viewgraph");
-  const selectViewGantt = document.getElementById("filter-viewgantt");
-  const headerViewGantt = document.getElementById("header-viewgantt");
-
-  if (selectViewGraph) selectViewGraph.value = savedGraphView;
-  if (headerViewGraph) headerViewGraph.value = savedGraphView;
-  if (selectViewGantt) selectViewGantt.value = savedGanttView;
-  if (headerViewGantt) headerViewGantt.value = savedGanttView;
-
-  // Actualizar visibilidad inicial de la opción "Disponibles"
+  updateFiltersForDate();
   actualizarOpcionesGantt();
 
-  // 13. Exponer función global para que Alpine dispare el redibujado
   window.reRenderDashboard = () => {
       const store = Alpine?.store('filtros');
       if (!store) return;
       
-      // Sincronizar el estado de Alpine de vuelta a nuestras variables globales
       if (rawReportDate !== store.fecha) {
           rawReportDate = store.fecha;
           updateFiltersForDate();
       }
       
-      // Actualizar cookies para retrocompatibilidad
       setCookie("viewGraph", store.viewGraph);
       setCookie("viewGantt", store.viewGantt);
       
@@ -135,39 +78,12 @@ function inicializarControles() {
       dibujar();
   };
   
-  // Le avisamos a Alpine que ya puede empezar a mandar eventos
   if (Alpine && Alpine.store('filtros')) {
       Alpine.store('filtros').isInitialized = true;
   }
 }
 
-function populateDateSelect(selectEl, customDates = null) {
-  const datesToUse = customDates || uniqueDates;
-  const currentVal = selectEl.value;
-  selectEl.innerHTML = "";
-  datesToUse.forEach(date => {
-    const opt = document.createElement("option");
-    const styles = getDateStyles(date);
-    opt.value = date;
-    opt.textContent = (selectEl.id === "header-filter-fecha" ? "Despacho: " : "") + formatFecha(date) + styles.label;
-    opt.style.backgroundColor = styles.bg;
-    opt.style.color = styles.text;
-    selectEl.appendChild(opt);
-  });
-  if (datesToUse.includes(currentVal)) {
-    selectEl.value = currentVal;
-  }
-}
 
-function updateSelectStyle(dateSelect, plantSelect) {
-  const styles = getDateStyles(dateSelect.value);
-  dateSelect.style.backgroundColor = styles.bg;
-  dateSelect.style.color = styles.text;
-  if (plantSelect) {
-    plantSelect.style.backgroundColor = styles.bg;
-    plantSelect.style.color = styles.text;
-  }
-}
 
 function updateFiltersForDate() {
   const reportDatePedidos = fullPedidos.filter(p => p["Fecha Pedido"] === rawReportDate);
@@ -220,50 +136,15 @@ function updateFiltersForDate() {
   return "Grupo:RM";
 }
 
-const handleDateChange = (e) => {
-  const val = e.target.value;
-  filterFechaPanel.value = val;
-  filterFechaHeader.value = val;
-  updateSelectStyle(filterFechaHeader, filterPlantaHeader);
-  updateFiltersForDate();
-  dibujar();
-};
 
-const handlePlantaChange = (e) => {
-  const val = e.target.value;
-  filterSelect.value = val;
-  filterPlantaHeader.value = val;
-  localStorage.setItem("filterPlantaGrupo", val);
-  if (codObraInput) codObraInput.value = "";
-  if (headerCodObraInput) headerCodObraInput.value = "";
-  const activeDate = filterFechaPanel.value;
-  
-  const allowedPlants = val.startsWith("Grupo:")
-    ? (window.grupos[val.split(":")[1]] || Object.keys(window.plantasData))
-    : [val.split(":")[1]];
-  const hasOrdersCurrentDate = fullPedidos.some(p =>
-    p["Fecha Pedido"] === activeDate && allowedPlants.includes(p.Planta)
-  );
-
-  if (!hasOrdersCurrentDate) {
-    filterFechaPanel.value = rawReportDate;
-    filterFechaHeader.value = rawReportDate;
-    updateSelectStyle(filterFechaHeader, filterPlantaHeader);
-  }
-
-  dibujar();
-};
 
 const handleObraInput = (e) => {
-  const val = e.target.value.split(" - ")[0].trim();
-  codObraInput.value = val;
-  if (headerCodObraInput) headerCodObraInput.value = val;
+  const val = String(e.target?.value || "").split(" - ")[0].trim();
 
   if (val !== "") {
-    // Limpiar filtro de camión para evitar conflictos
-    const camionInput = document.getElementById("filter-camion");
-    if (camionInput) {
-      camionInput.value = "";
+    // Limpiar filtro de camión para evitar conflictos usando el store
+    if (Alpine && Alpine.store('filtros').camion !== "") {
+      Alpine.store('filtros').camion = "";
       if (window.selectedCamion) window.selectedCamion.current = null;
     }
   }
@@ -323,14 +204,15 @@ const handleObraInput = (e) => {
 };
 
 const handleCamionInput = (e) => {
-  const val = e.target.value.trim();
+  const val = String(e.target?.value || "").trim();
   window.selectedCamion.current = val === "" ? null : val;
 
   if (val !== "") {
-    // Limpiar filtro de obra
-    if (codObraInput) codObraInput.value = "";
-    if (headerCodObraInput) headerCodObraInput.value = "";
-    selectedPedido.current = null;
+    // Limpiar filtro de obra usando el store
+    if (Alpine && Alpine.store('filtros').codObra !== "") {
+      Alpine.store('filtros').codObra = "";
+      selectedPedido.current = null;
+    }
   }
 
   if (window.highlightPedido) {
@@ -339,8 +221,6 @@ const handleCamionInput = (e) => {
 };
 
 const handleFilterCheck = () => {
-  const val = filterCheck.property("checked");
-  if (headerFilterCheck) headerFilterCheck.property("checked", val);
   dibujar();
 };
 
@@ -353,9 +233,9 @@ function renderDateOptionsForFilter(plantFilter) {
     fullPedidos.some(p => p["Fecha Pedido"] === date && allowedPlants.includes(p.Planta))
   );
 
-  populateDateSelect(filterFechaPanel, datesWithOrders);
-  populateDateSelect(filterFechaHeader, datesWithOrders);
-
+  if (Alpine && Alpine.store('filtros')) {
+    Alpine.store('filtros').availableDates = datesWithOrders;
+  }
 }
 
 function getDashboardData(selectedDate, filterKey, currentGraphView, currentGanttView) {
@@ -574,21 +454,24 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
   };
 }
 
-function renderDashboard(filterKey) {
+function renderDashboard() {
   svg.selectAll(".chart-header").remove();
   g.selectAll("*").remove();
   if (window.currentGanttPanel) {
     d3.select("#gantt-chart").selectAll("*").remove();
   }
-  const selectedDate = filterFechaPanel.value;
+
+  const store = Alpine?.store('filtros');
+  const filterKey = store?.planta || "Grupo:RM";
+  renderDateOptionsForFilter(filterKey);
+
+  const selectedDate = store?.fecha || rawReportDate;
   window.selectedDate = selectedDate;
   meta.DiaDespacho = formatFecha(selectedDate);
   meta.styles = getDateStyles(selectedDate);
 
-  const currentGraphView = getCurrentGraphView();
-  const vg1 = document.getElementById("filter-viewgantt")?.value;
-  const vg2 = document.getElementById("header-viewgantt")?.value;
-  const currentGanttView = (vg2 || vg1 || getCookie("viewGantt") || 'pedidos').trim();
+  const currentGraphView = store?.viewGraph || "camiones";
+  const currentGanttView = store?.viewGantt || "pedidos";
 
   const dashboardData = getDashboardData(selectedDate, filterKey, currentGraphView, currentGanttView);
   const {
@@ -660,7 +543,7 @@ function renderDashboard(filterKey) {
     currentGraphView, currentGanttView, subsetPedidos, scales, currentMetrics, stackResult, yMax
   );
 
-  let filteredForGantt = (filterCheck.property("checked") || (!headerFilterCheck.empty() && headerFilterCheck.property("checked")))
+  let filteredForGantt = (Alpine && Alpine.store('filtros').soloVerde)
     ? pedidos.filter(p => {
       const ref = p.parentPedido || p;
       const maxCam = ref.MaxCamiones;
@@ -722,26 +605,13 @@ function renderDashboard(filterKey) {
   if (Alpine && Alpine.store('filtros')) {
     Alpine.store('filtros').setAutocompleteOptions(obras, camiones);
   }
-
-  // Despachamos evento de input para triggers locales si aún queda algo
-  if (codObraInput) codObraInput.dispatchEvent(new Event('input'));
-  if (camionInput) camionInput.dispatchEvent(new Event('input'));
 }
+
+
 
 /* ================== DOM INTERACTION / KEYBINDINGS / SLIDERS ================== */
 
-function resetFilters() {
-  const codObraInput = document.getElementById("filter-codobra");
-  if (codObraInput && codObraInput.value !== "") {
-    codObraInput.value = "";
-    codObraInput.dispatchEvent(new Event("input"));
-  }
-  const camionInput = document.getElementById("filter-camion");
-  if (camionInput && camionInput.value !== "") {
-    camionInput.value = "";
-    camionInput.dispatchEvent(new Event("input"));
-  }
-}
+
 
 function startDrag(e, panel) {
   activeDragPanel = panel;
@@ -795,8 +665,6 @@ document.addEventListener("DOMContentLoaded", () => {
 window.inicializarControles = inicializarControles;
 window.renderDashboard = renderDashboard;
 window.getDashboardData = getDashboardData;
-window.populateDateSelect = populateDateSelect;
-window.updateSelectStyle = updateSelectStyle;
 window.updateFiltersForDate = updateFiltersForDate;
 window.handleObraInput = handleObraInput;
 window.handleCamionInput = handleCamionInput;

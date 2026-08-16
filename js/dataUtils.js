@@ -31,12 +31,9 @@ function formatFecha(yyyymmdd) {
   const d = Number(yyyymmdd.slice(6, 8));
   const fecha = new Date(y, m, d);
   const dias = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
-  const meses = [
-    "Ene", "Feb", "Mar", "Abr", "May", "Jun",
-    "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"
-  ];
-  return `${dias[fecha.getDay()]} ${d} ${meses[m]}`;
+  return `${dias[fecha.getDay()]} ${d}`;
 }
+window.formatFecha = formatFecha;
 
 function extendPedidoNegocio(pedido, id, plantasMap = {}) {
   const TiempoViaje = Number(pedido.TiempoViaje);

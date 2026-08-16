@@ -1,10 +1,25 @@
 document.addEventListener('alpine:init', () => {
     Alpine.store('filtros', {
         // Valores iniciales
-        fecha: localStorage.getItem("filterFecha") || "",
+        fecha: "",
         planta: localStorage.getItem("filterPlantaGrupo") || "Grupo:RM",
         viewGraph: localStorage.getItem("filterViewGraph") || "camiones",
         viewGantt: localStorage.getItem("filterViewGantt") || "pedidos",
+        
+        hoyStr: "",
+        tomorrowStr: "",
+        
+        get currentStyles() {
+            if (!window.getDateStyles) return { 'background-color': '#eee', 'color': '#555' };
+            const styles = window.getDateStyles(this.fecha, this.hoyStr, this.tomorrowStr);
+            return { 'background-color': styles.bg, 'color': styles.text };
+        },
+        
+        getOptionStyles(date) {
+            if (!window.getDateStyles) return { 'background-color': '#eee', 'color': '#555' };
+            const styles = window.getDateStyles(date, this.hoyStr, this.tomorrowStr);
+            return { 'background-color': styles.bg, 'color': styles.text };
+        },
         
         // Filtros secundarios
         codObra: "",
@@ -62,6 +77,14 @@ document.addEventListener('alpine:init', () => {
             this.availableCamiones = camiones || [];
         },
 
+        // Método para resetear filtros de búsqueda
+        resetFilters() {
+            this.codObra = "";
+            this.camion = "";
+            if (window.selectedCamion) window.selectedCamion.current = null;
+            if (window.selectedPedido) window.selectedPedido.current = null;
+        },
+
         // Datos del Tooltip
         tooltipData: null,
         
@@ -90,7 +113,6 @@ document.addEventListener('alpine:init', () => {
 
         if (store.isInitialized) {
             // Persistimos en localStorage
-            localStorage.setItem("filterFecha", currentFecha);
             localStorage.setItem("filterPlantaGrupo", currentPlanta);
             localStorage.setItem("filterViewGraph", currentViewGraph);
             localStorage.setItem("filterViewGantt", currentViewGantt);

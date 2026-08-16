@@ -10,9 +10,6 @@ const { svg, g, innerW, innerH } = createSVG("#chart", width, height, margin);
 let pedidos, layers, area, scales, band, ganttPanel;
 let fullPedidos, meta, rawReportDate, hoyStr, tomorrowStr, uniqueDates;
 window.grupos = {};
-let filterFechaPanel, filterFechaHeader, filterPlantaHeader, filterSelect;
-let codObraInput, headerCodObraInput, codObraList, filterCheck, headerFilterCheck;
-let camionInput, camionesList;
 window.appCache = {};
 
 /* ================== 1. LEER DATOS ================== */
@@ -106,13 +103,14 @@ function enriquecerDatos(data, coloresData, plantasData, ticketsData) {
   tomorrowStr = getTomorrow(hoyStr);
   uniqueDates = [...new Set(fullPedidos.map(p => p["Fecha Pedido"]))].sort();
   window.fullPedidos = fullPedidos;
+  if (Alpine && Alpine.store('filtros')) {
+    Alpine.store('filtros').hoyStr = hoyStr;
+    Alpine.store('filtros').tomorrowStr = tomorrowStr;
+  }
 }
 
-/* ================== 3. DIBUJAR ================== */
 function dibujar() {
-  const activePlanta = localStorage.getItem("filterPlantaGrupo") || (document.getElementById("filter-plantagrupo")?.options[0]?.value || "Grupo:RM");
-  renderDateOptionsForFilter(activePlanta);
-  renderDashboard(activePlanta);
+  renderDashboard();
 }
 window.dibujar = dibujar;
 

@@ -13,17 +13,11 @@ function getCurrentGanttView() {
 }
 
 function getCurrentGraphView() {
-  const vg1 = document.getElementById("filter-viewgraph")?.value;
-  const vg2 = document.getElementById("header-viewgraph")?.value;
-  let graphView = 'camiones';
-  if (vg2 || vg1) {
-    graphView = (vg2 || vg1).trim();
-  } else if (typeof getCookie === 'function') {
-    graphView = (getCookie("viewGraph") || 'camiones').trim();
-  }
-
-  const vgt1 = document.getElementById("filter-viewgantt")?.value;
-  const vgt2 = document.getElementById("header-viewgantt")?.value;
+  const currentGraphView = Alpine?.store('filtros')?.viewGraph || getCookie("viewGraph") || "camiones";
+  let graphView = currentGraphView;
+  
+  const vgt1 = Alpine?.store('filtros')?.viewGantt;
+  const vgt2 = Alpine?.store('filtros')?.viewGantt;
   let ganttView = 'pedidos';
   if (vgt2 || vgt1) {
     ganttView = (vgt2 || vgt1).trim();
@@ -951,7 +945,7 @@ function setupInteraction(
 
     const isCamionFilter = focus && focus.isCamionFilter;
     const targetCamion = focus && focus.Camion;
-    const isDisponiblesMode = (focus && focus.isDisponibles) || (document.getElementById("filter-viewgantt")?.value === "disponibles");
+    const isDisponiblesMode = (focus && focus.isDisponibles) || (Alpine?.store('filtros')?.viewGantt === "disponibles");
 
     // 1. Identify state changes
     const isFocusChange = focus !== lastActivePedido.current;
@@ -1134,8 +1128,9 @@ function setupInteraction(
     // Limpiar filtro general de camión si seleccionamos un pedido/despacho
     if (selectedPedido.current) {
       window.selectedCamion.current = null;
-      const camionInput = document.getElementById("filter-camion");
-      if (camionInput) camionInput.value = "";
+      if (Alpine && Alpine.store('filtros').camion !== "") {
+          Alpine.store('filtros').camion = "";
+      }
     }
 
     highlightPedido(null);
@@ -1179,13 +1174,6 @@ function setupInteraction(
     .attr("dy", "-6")
     .style("opacity", 0);
 
-  const delayLabel = envG.append("text")
-    .attr("text-anchor", "middle")
-    .attr("font-size", 10)
-    .attr("fill", "red")
-    .attr("dy", "-6")
-    .style("opacity", 0);
-
   interactionRect
     .on("mousemove", ev => {
       handlePointer(ev);
@@ -1193,21 +1181,10 @@ function setupInteraction(
     .on("click", ev => {
       const p = handlePointer(ev);
       window.selectPedido(p);
-
-      // Synchronize with CodObra filter panel
-      const codObraInput = document.getElementById("filter-codobra");
-      if (codObraInput) {
-        if (p && p.isDisponibles) {
-          codObraInput.value = "";
-          // No despachamos evento "input" para evitar sobreescribir el destacado exclusivo del camión disponible
-        } else if (p && p.CodObra) {
-          codObraInput.value = p.Obra ? `${p.CodObra} - ${p.Obra}` : String(p.CodObra);
-          codObraInput.dispatchEvent(new Event("input"));
-        } else {
-          // Clear if clicked background or order with no CodObra
-          codObraInput.value = "";
-          codObraInput.dispatchEvent(new Event("input"));
-        }
+      if (Alpine) {
+          if (Alpine.store('filtros').codObra !== "") {
+              Alpine.store('filtros').codObra = "";
+          }
       }
     })
     .on("mouseleave", () => {

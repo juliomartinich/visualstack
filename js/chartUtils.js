@@ -51,9 +51,8 @@ function drawGrids(g, scales, maxX, granularidad, innerW, innerH, yMax) {
     );
 
   // Draw vertical line for report time
-  const vg1 = document.getElementById("filter-viewgantt")?.value;
-  const vg2 = document.getElementById("header-viewgantt")?.value;
-  const currentGanttView = (vg2 || vg1 || "pedidos").trim();
+  const store = Alpine?.store('filtros');
+  const currentGanttView = store?.viewGantt || getCookie("viewGantt") || 'pedidos';
 
   const isSameDay = window.selectedDate && window.diaReporte && window.selectedDate.replace(/-/g, "") === window.diaReporte;
 
@@ -832,9 +831,7 @@ function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
       g.selectAll(".report-time-line-gantt").remove();
       g.selectAll(".report-time-label-gantt").remove();
 
-      const vg1 = document.getElementById("filter-viewgantt")?.value;
-      const vg2 = document.getElementById("header-viewgantt")?.value;
-      const currentGanttView = (vg2 || vg1 || "pedidos").trim();
+      const currentGanttView = Alpine?.store('filtros')?.viewGantt || getCookie("viewGantt") || 'pedidos';
 
       const isSameDay = window.selectedDate && window.diaReporte && window.selectedDate.replace(/-/g, "") === window.diaReporte;
 
@@ -981,10 +978,10 @@ function drawColasLoads(g, pedidos, scales, granularidadMin, yScale) {
   return layers;
 }
 
-function getDateStyles(dateStr) {
-  if (dateStr === hoyStr) return { bg: "#ff8c00", text: "#fff", label: " (Hoy)" };
-  if (dateStr === tomorrowStr) return { bg: "#28a745", text: "#fff", label: " (Mañana)" };
-  if (dateStr > tomorrowStr) return { bg: "#add8e6", text: "#000", label: "" };
+function getDateStyles(dateStr, hStr = hoyStr, tStr = tomorrowStr) {
+  if (dateStr === hStr) return { bg: "#ff8c00", text: "#fff", label: " (Hoy)" };
+  if (dateStr === tStr) return { bg: "#28a745", text: "#fff", label: " (Mañana)" };
+  if (dateStr > tStr && tStr) return { bg: "#add8e6", text: "#000", label: "" };
   return { bg: "#eee", text: "#555", label: "" };
 }
 
