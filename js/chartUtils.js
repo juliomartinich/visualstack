@@ -982,7 +982,7 @@ function drawColasLoads(g, pedidos, scales, granularidadMin, yScale) {
 }
 
 function getDateStyles(dateStr) {
-  if (dateStr === rawReportDate) return { bg: "#ff8c00", text: "#fff", label: " (Hoy)" };
+  if (dateStr === hoyStr) return { bg: "#ff8c00", text: "#fff", label: " (Hoy)" };
   if (dateStr === tomorrowStr) return { bg: "#28a745", text: "#fff", label: " (Mañana)" };
   if (dateStr > tomorrowStr) return { bg: "#add8e6", text: "#000", label: "" };
   return { bg: "#eee", text: "#555", label: "" };
@@ -1304,14 +1304,7 @@ function drawTopOverlay(svg, g, meta, scales, metrics, width, filterKey = "") {
   const HORA_X = 8;  // Offset a la derecha
   const VAL_X = -8;  // Offset a la izquierda
 
-  const headerG = svg.append("g").attr("class", "chart-header").attr("transform", "translate(10,14)");
-  headerG.append("text").attr("x", margin.left - 50).attr("y", 0).attr("font-size", 10).attr("fill", "#000")
-    .text(`@ ${meta.DiaReporte} ${meta.HoraReporte}`);
-
-  const txt = headerG.append("text").attr("x", width - margin.right).attr("y", 0).attr("text-anchor", "end");
-
-  txt.append("tspan").attr("font-size", 12).attr("fill", "#333").attr("font-weight", 600).text(`Volumen: ${formatM3(metrics.volumenT)} m3`);
-  txt.append("tspan").attr("font-size", 10).attr("fill", "#000").text(`, Confirmado: ${formatM3(metrics.volConfirmado)}`);
+  // Se ha movido la inyección de los textos (Fecha y Volúmenes) hacia Alpine.js en index.html
 
   if (typeof getCurrentGraphView === "function" && getCurrentGraphView() === "recursos") {
     return;

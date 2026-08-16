@@ -19,9 +19,15 @@ document.addEventListener('alpine:init', () => {
         // Listas disponibles que serán pobladas por dashboard.js
         availableDates: [],
         availablePlantas: [],
+        availableObras: [],
+        availableCamiones: [],
         
         // Controlamos si la inicialización ya terminó para no disparar renders prematuros
         isInitialized: false,
+
+        // Datos del reporte para el header HTML
+        reportMeta: { DiaReporte: "", HoraReporte: "" },
+        reportMetrics: { volumenT: 0, volConfirmado: 0 },
 
         init() {
             // Este método se llama cuando Alpine inicializa el store
@@ -39,6 +45,31 @@ document.addEventListener('alpine:init', () => {
             }
             
             this.isInitialized = true;
+        },
+
+        // Método para cargar la data del reporte desde dashboard.js
+        setReportData(meta, metrics) {
+            if (meta) {
+                this.reportMeta.DiaReporte = meta.DiaReporte || "";
+                this.reportMeta.HoraReporte = meta.HoraReporte || "";
+            }
+            if (metrics) {
+                this.reportMetrics.volumenT = metrics.volumenT || 0;
+                this.reportMetrics.volConfirmado = metrics.volConfirmado || 0;
+            }
+        },
+
+        // Método para cargar opciones de autocompletado desde dashboard.js
+        setAutocompleteOptions(obras, camiones) {
+            this.availableObras = obras || [];
+            this.availableCamiones = camiones || [];
+        },
+
+        // Datos del Tooltip
+        tooltipData: null,
+        
+        setTooltipData(data) {
+            this.tooltipData = data;
         }
     });
 

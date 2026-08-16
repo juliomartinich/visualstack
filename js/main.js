@@ -1,16 +1,14 @@
 /* ================== MAIN ================== */
 
-// Configuración y creación del SVG principal
-const width = 1260;
-const height = 490;
-const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+// Configuración y creación del SVG principal (Leído desde index.html)
+const { width, height, margin } = window.CHART_LAYOUT;
 
 const panel = d3.select("#panel");
 const { svg, g, innerW, innerH } = createSVG("#chart", width, height, margin);
 
 // Variables globales
 let pedidos, layers, area, scales, band, ganttPanel;
-let fullPedidos, meta, rawReportDate, tomorrowStr, uniqueDates;
+let fullPedidos, meta, rawReportDate, hoyStr, tomorrowStr, uniqueDates;
 window.grupos = {};
 let filterFechaPanel, filterFechaHeader, filterPlantaHeader, filterSelect;
 let codObraInput, headerCodObraInput, codObraList, filterCheck, headerFilterCheck;
@@ -35,6 +33,7 @@ function enriquecerDatos(data, coloresData, plantasData, ticketsData) {
 
   /* ===== INFO DE METADATOS ===== */
   rawReportDate = data.DiaReporte;
+  hoyStr = data.DiaReporte;
   window.horaReporte = data.HoraReporte;
   window.diaReporte = data.DiaReporte;
   meta = {
@@ -104,7 +103,7 @@ function enriquecerDatos(data, coloresData, plantasData, ticketsData) {
     }
   });
 
-  tomorrowStr = getTomorrow(rawReportDate);
+  tomorrowStr = getTomorrow(hoyStr);
   uniqueDates = [...new Set(fullPedidos.map(p => p["Fecha Pedido"]))].sort();
   window.fullPedidos = fullPedidos;
 }

@@ -654,6 +654,16 @@ function renderDashboard(filterKey) {
     (currentGraphView === 'colas' && stackResult.isSplit);
   drawGrids(g, scales, curHoraMax, CFG.granularidadMin, innerW, innerH, yMax);
   drawAxes(g, scales, curHoraMax, CFG.granularidadMin, innerH, isSplitGraph);
+  if (Alpine && Alpine.store('filtros')) {
+    Alpine.store('filtros').setReportData(
+      { DiaReporte: meta.DiaReporte, HoraReporte: meta.HoraReporte },
+      { 
+        volumenT: formatM3(currentMetrics.volumenT), 
+        volConfirmado: formatM3(currentMetrics.volConfirmado) 
+      }
+    );
+  }
+
   drawTopOverlay(svg, g, meta, scales, currentMetrics, width, filterKey);
 
   band = drawBand(g, scales, innerH, CFG.granularidadMin);
@@ -701,42 +711,36 @@ function renderDashboard(filterKey) {
     panel, innerW, innerH, ganttPanel, currentMetrics, margin, getColorSort
   );
 
-  codObraList.innerHTML = "";
   const codObraMap = new Map();
   subsetPedidos.forEach(p => { if (p.CodObra) codObraMap.set(p.CodObra, p.Obra || ""); });
-  Array.from(codObraMap.keys()).sort((a, b) => a - b).forEach(cod => {
-    const opt = document.createElement("option");
-    opt.value = codObraMap.get(cod) ? `${cod} - ${codObraMap.get(cod)}` : cod;
-    codObraList.appendChild(opt);
+  const obras = Array.from(codObraMap.keys()).sort((a, b) => a - b).map(cod => {
+    return codObraMap.get(cod) ? `${cod} - ${codObraMap.get(cod)}` : cod;
   });
-  codObraInput.dispatchEvent(new Event('input'));
 
-  if (camionesList) {
-    camionesList.innerHTML = "";
-    const camionesSet = new Set();
-    subsetPedidos.forEach(p => {
-      if (p.Camion) {
-        const base = String(p.Camion).replace(/\s+T\d+$/, "").trim();
-        camionesSet.add(base);
-      }
-      if (p.despachos) {
-        p.despachos.forEach(d => {
-          if (d.Camion) {
-            const base = String(d.Camion).replace(/\s+T\d+$/, "").trim();
-            camionesSet.add(base);
-          }
-        });
-      }
-    });
-    Array.from(camionesSet).sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true})).forEach(cam => {
-      const opt = document.createElement("option");
-      opt.value = cam;
-      camionesList.appendChild(opt);
-    });
+  const camionesSet = new Set();
+  subsetPedidos.forEach(p => {
+    if (p.Camion) {
+      const base = String(p.Camion).replace(/\s+T\d+$/, "").trim();
+      camionesSet.add(base);
+    }
+    if (p.despachos) {
+      p.despachos.forEach(d => {
+        if (d.Camion) {
+          const base = String(d.Camion).replace(/\s+T\d+$/, "").trim();
+          camionesSet.add(base);
+        }
+      });
+    }
+  });
+  const camiones = Array.from(camionesSet).sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true}));
+
+  if (Alpine && Alpine.store('filtros')) {
+    Alpine.store('filtros').setAutocompleteOptions(obras, camiones);
   }
-  if (camionInput) {
-    camionInput.dispatchEvent(new Event('input'));
-  }
+
+  // Despachamos evento de input para triggers locales si aún queda algo
+  if (codObraInput) codObraInput.dispatchEvent(new Event('input'));
+  if (camionInput) camionInput.dispatchEvent(new Event('input'));
 }
 
 /* ================== DOM INTERACTION / KEYBINDINGS / SLIDERS ================== */

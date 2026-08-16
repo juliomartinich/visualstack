@@ -256,74 +256,26 @@ function renderTooltip(panel, activa, t, granularidad) {
     const startStr = String(Math.floor(offsetMin / 60)).padStart(2, "0") + ":" + String(offsetMin % 60).padStart(2, "0");
     const endStr = String(Math.floor((offsetMin + durationMin) / 60)).padStart(2, "0") + ":" + String((offsetMin + durationMin) % 60).padStart(2, "0");
     
-    panel.html(`
-      <div class="tooltip-card" style="border-top: 4px solid #f59e0b;">
-        <div class="tooltip-header" style="border-bottom: 1px solid #eee; padding-bottom: 6px; margin-bottom: 8px;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div class="title" style="color: #d97706; display: flex; align-items: center; gap: 6px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path>
-                <path d="M7 2v20"></path>
-                <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path>
-              </svg>
-              Turno de Almuerzo
-            </div>
-            <div style="font-size: 11px; font-weight: 600; color: #4b5563; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">45 min</div>
-          </div>
-          <div style="font-size: 18px; font-weight: 800; color: #111827; margin-top: 6px;">Camión #${p.Camion || "-"}</div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-          <div class="metric">
-            <span class="label">Inicio</span>
-            <span class="value" style="font-size: 15px;">${startStr}</span>
-          </div>
-          <div class="metric">
-            <span class="label">Fin</span>
-            <span class="value" style="font-size: 15px;">${endStr}</span>
-          </div>
-        </div>
-      </div>
-    `);
+    if (Alpine && Alpine.store('filtros')) {
+      Alpine.store('filtros').setTooltipData({
+        type: 'almuerzo',
+        camion: p.Camion || "-",
+        duration: durationMin,
+        startStr,
+        endStr
+      });
+    }
     return;
   }
 
   if (p.isDisponibles) {
-    const ticketsRowsHtml = (p.allTickets || [])
-      .map(tk => {
-        const ticketId = tk.ticketId || "-";
-        const startStr = minToHHMM(tk.startMin);
-        const endStr = minToHHMM(tk.endMin);
-        const vol = tk.Volumen !== undefined ? `${tk.Volumen}` : "-";
-        const obraCliente = (tk.Obra || tk.Cliente)
-          ? `${tk.Obra || "-"}${tk.Cliente ? ` - ${tk.Cliente}` : ""}`
-          : "-";
-          
-        return `<tr style="border-bottom: 1px solid #f3f4f6;">
-          <td style="padding: 4px 2px; font-weight: 500;">#${ticketId}</td>
-          <td style="padding: 4px 2px; color: #4b5563;">${startStr}</td>
-          <td style="padding: 4px 2px; color: #4b5563;">${endStr}</td>
-          <td style="padding: 4px 2px; text-align: right; font-weight: 600; color: #111827;">${vol}</td>
-          <td style="padding: 4px 2px; padding-left: 8px; color: #4b5563; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;" title="${obraCliente}">${obraCliente}</td>
-        </tr>`;
-      })
-      .join("");
-
-    const tableHtml = ticketsRowsHtml 
-      ? `<table style="width: 100%; border-collapse: collapse; font-size: 10px; text-align: left; table-layout: fixed;">
-          <thead>
-            <tr style="border-bottom: 1.5px solid #d1d5db; font-weight: 700; color: #374151; position: sticky; top: 0; background: #fff;">
-              <th style="padding: 4px 2px; width: 50px;">ticket</th>
-              <th style="padding: 4px 2px; width: 35px;">inicio</th>
-              <th style="padding: 4px 2px; width: 35px;">fin</th>
-              <th style="padding: 4px 2px; width: 25px; text-align: right;">m3</th>
-              <th style="padding: 4px 2px; padding-left: 8px;">Obra - Cliente</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${ticketsRowsHtml}
-          </tbody>
-         </table>`
-      : `<div style="font-size: 11px; color: #999; padding: 4px 0;">Sin tickets registrados</div>`;
+    const tickets = (p.allTickets || []).map(tk => ({
+      ticketId: tk.ticketId || "-",
+      startStr: minToHHMM(tk.startMin),
+      endStr: minToHHMM(tk.endMin),
+      volumen: tk.Volumen !== undefined ? `${tk.Volumen}` : "-",
+      obraCliente: (tk.Obra || tk.Cliente) ? `${tk.Obra || "-"}${tk.Cliente ? ` - ${tk.Cliente}` : ""}` : "-"
+    }));
 
     const overtimeMin = (typeof p.HoraFinJornadaNormalMin === "number")
       ? Math.max(0, p.HoraFinalMin - p.HoraFinJornadaNormalMin)
@@ -332,29 +284,18 @@ function renderTooltip(panel, activa, t, granularidad) {
     const otM = overtimeMin % 60;
     const overtimeStr = `${String(otH).padStart(2, "0")}:${String(otM).padStart(2, "0")}`;
 
-    panel.html(`
-      <div class="tooltip-card">
-        <div class="tooltip-header" style="border-bottom: 1px solid #eee; padding-bottom: 6px;">
-          <div style="font-weight: 700; font-size: 14px;">Camión #${p.Camion}</div>
-          <div style="font-size: 11px; color: #666; margin-top: 2px;">Vista Camiones Disponibles</div>
-        </div>
-        <div style="margin-top: 10px; font-size: 12.5px; display: flex; flex-direction: column; gap: 6px;">
-          <div><b>Hora Inicio:</b> ${p.HoraInicio}</div>
-          <div><b>Fin 8 Hrs:</b> ${p.HoraFinJornadaNormalHhmm || "-"}</div>
-          <div><b>Hora Fin:</b> ${p.HoraFinalHhmm}</div>
-          <div><b>Sobretiempo:</b> ${overtimeStr}</div>
-        </div>
-        <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 6px;">
-          <span style="font-size: 11px; font-weight: bold; color: #333;">Tickets del Día (${(p.allTickets || []).length}):</span>
-          <div style="margin-top: 6px; max-height: 150px; overflow-y: auto; padding-right: 4px; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff;">
-            ${tableHtml}
-          </div>
-        </div>
-        <div style="margin-top: 10px; font-size: 10px; color: #888; border-top: 1px solid #eee; padding-top: 6px;">
-          <span>Cursor: ${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}</span>
-        </div>
-      </div>
-    `);
+    if (Alpine && Alpine.store('filtros')) {
+      Alpine.store('filtros').setTooltipData({
+        type: 'disponibles',
+        camion: p.Camion,
+        horaInicio: p.HoraInicio,
+        fin8Hrs: p.HoraFinJornadaNormalHhmm || "-",
+        horaFin: p.HoraFinalHhmm,
+        sobretiempo: overtimeStr,
+        tickets: tickets,
+        cursor: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`
+      });
+    }
     return;
   }
 
@@ -604,6 +545,13 @@ function renderTooltip(panel, activa, t, granularidad) {
       </div>
     </div>
   `);
+    
+    if (Alpine && Alpine.store('filtros')) {
+      Alpine.store('filtros').setTooltipData({
+        type: 'html',
+        content: panel.html()
+      });
+    }
 }
 
 /* ==== RESET ====*/
@@ -611,7 +559,10 @@ function resetInteraction({ cursor, layers, overlay, panel, band }) {
   layers.classed("inactive", false).classed("active", false);
   overlay.selectAll("*").remove();
   if (band) band.clear();
-  panel.html(`<div class="tooltip-card"></div>`);
+  
+  if (Alpine && Alpine.store('filtros')) {
+    Alpine.store('filtros').setTooltipData(null);
+  }
 }
 
 /* ========================= INTERACCIÓN PRINCIPAL =========================*/
