@@ -1,14 +1,7 @@
 /* ==== * SVG base * ===================== */
-function createSVG(container, width, height, margin) {
-  const svg = d3.select(container)
-    .append("svg")
-    .attr("width", width)
-    .attr("height", height)
-    .style("border", "2px solid gray"); // debug visual
-
-  const g = svg.append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
-
+function initSVG(svgSelector, groupSelector, width, height, margin) {
+  const svg = d3.select(svgSelector);
+  const g = d3.select(groupSelector);
   return {
     svg, g,
     innerW: width - margin.left - margin.right,
@@ -268,7 +261,15 @@ function getSlotState(slotMin, startMin, ticketsTimes, granularidad) {
   return "normal";
 }
 
-function getColorSort(pedido) {
+function getPedidoObj(d) {
+  if (Array.isArray(d) && d.key) {
+    return window.fullPedidos.find(p => String(p.id) === String(d.key)) || {};
+  }
+  return d || {};
+}
+
+function getColorSort(pedidoRaw) {
+  const pedido = getPedidoObj(pedidoRaw);
   if (pedido.isAlmuerzo) {
     return "rgba(255, 140, 0, 0.8)"; // Borde naranja fuerte
   }
@@ -319,7 +320,8 @@ function getColorOrigen(pedido) {
   return color || getColorSort(ref);
 }
 
-function getAreaColor(pedido) {
+function getAreaColor(pedidoRaw) {
+  const pedido = getPedidoObj(pedidoRaw);
   if (pedido.isAlmuerzo) {
     return "rgba(255, 140, 0, 0.4)"; // Naranja más transparente para el área
   }
@@ -597,32 +599,21 @@ function drawPlantLoads(g, pedidos, scales, granularidadMin, yScale) {
 /* ==== * Panel Gantt inferior (Scrollable) * ===================== */
 function drawGanttPanel({ container, scales, margin, rowHeight = 12 }) {
   const width = scales.x.range()[1] + margin.left + margin.right;
-
-  // No creamos el SVG acá todavia, lo creamos en show
   const ganttDiv = d3.select(container);
 
   return {
     clear() {
-      ganttDiv.selectAll("*").remove();
+      // no limpiamos todo el SVG, solo las filas de la capa
+      d3.select("#gantt-data-layer").selectAll("*").remove();
+      d3.select("#gantt-svg").selectAll(".report-time-line-gantt, .report-time-label-gantt, .gantt-interaction").remove();
     },
     show(pedidos, activo) {
       const totalHeight = pedidos.length * rowHeight + 20;
 
-      let svg = ganttDiv.select("svg");
-      if (svg.empty()) {
-        svg = ganttDiv.append("svg")
-          .attr("width", width)
-          .attr("height", totalHeight);
-      } else {
-        svg.attr("height", totalHeight);
-      }
+      let svg = d3.select("#gantt-svg");
+      svg.attr("height", totalHeight); // Aún ajustamos la altura dinámicamente
 
-      let g = svg.select("g.gantt-main");
-      if (g.empty()) {
-        g = svg.append("g")
-          .attr("class", "gantt-main")
-          .attr("transform", `translate(${margin.left}, 10)`);
-      }
+      let g = d3.select("#gantt-data-layer");
 
       const rowsG = g.selectAll("g.gantt-row")
         .data(pedidos, d => d.id)
@@ -978,10 +969,12 @@ function drawColasLoads(g, pedidos, scales, granularidadMin, yScale) {
   return layers;
 }
 
-function getDateStyles(dateStr, hStr = hoyStr, tStr = tomorrowStr) {
-  if (dateStr === hStr) return { bg: "#ff8c00", text: "#fff", label: " (Hoy)" };
-  if (dateStr === tStr) return { bg: "#28a745", text: "#fff", label: " (Mañana)" };
-  if (dateStr > tStr && tStr) return { bg: "#add8e6", text: "#000", label: "" };
+function getDateStyles(dateStr, hStr, tStr) {
+  const h = hStr || window.Alpine?.store('filtros')?.hoyStr;
+  const t = tStr || window.Alpine?.store('filtros')?.tomorrowStr;
+  if (dateStr === h) return { bg: "#ff8c00", text: "#fff", label: " (Hoy)" };
+  if (dateStr === t) return { bg: "#28a745", text: "#fff", label: " (Mañana)" };
+  if (dateStr > t && t) return { bg: "#add8e6", text: "#000", label: "" };
   return { bg: "#eee", text: "#555", label: "" };
 }
 
@@ -1111,8 +1104,9 @@ function setupDashboardScales(currentGraphView, currentMetrics, totalBocas, glob
   return { scales, yMax };
 }
 
-function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scales, currentMetrics, stackResult, yMax) {
+function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scales, currentMetrics, stackResult, yMax, innerW, innerH) {
   let layers;
+  const g = d3.select("#chart-data-layer");
 
   if (currentGraphView === 'plantas') {
     if (stackResult.isSplit) {

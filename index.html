@@ -19,7 +19,14 @@
     window.CHART_LAYOUT = {
       width: 1260,
       height: 490,
-      margin: { top: 20, right: 20, bottom: 40, left: 50 }
+      margin: { top: 25, right: 20, bottom: 40, left: 50 },
+      bandOffset: 20
+    };
+
+    window.GANTT_LAYOUT = {
+      width: 1260,
+      height: 400,
+      margin: { top: 20, right: 20, bottom: 20, left: 50 }
     };
   </script>
 </head>
@@ -32,176 +39,214 @@
   @keyup.window.h="if($event.target.tagName !== 'INPUT') openHelp = !openHelp"
   @keyup.window.l="if($event.target.tagName !== 'INPUT') { $event.preventDefault(); $store.filtros.resetFilters(); document.getElementById('filter-codobra')?.focus(); }">
 
-  <div id="chart-container" x-data>
-    <div id="header-date-container" 
-         x-data="{ layout: window.CHART_LAYOUT }"
-         :style="`display: flex; justify-content: space-between; align-items: center; width: ${layout.width}px; padding-left: ${layout.margin.left}px; padding-right: ${layout.margin.right}px; box-sizing: border-box;`">
-      
-      <div style="display: flex; align-items: center; gap: 10px; font-size: 11px; background: transparent; padding: 0; flex-wrap: nowrap; overflow: hidden;">
-        
-        <!-- Fecha del Reporte (Izquierda) -->
-        <span style="font-size: 10px; color: #000; font-family: sans-serif; margin-right: 5px; opacity: 0.8;" 
-              x-text="`@ ${$store.filtros.reportMeta.DiaReporte} ${$store.filtros.reportMeta.HoraReporte}`">
-        </span>
-        <!-- Grupo Día -->
-        <div style="display: flex; align-items: center; gap: 4px;">
-          <label for="header-filter-fecha" style="font-weight: 600; color: #555;">Día:</label>
-          <select id="header-filter-fecha" x-model="$store.filtros.fecha" title="Cambiar Fecha"
-            style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer;"
-            :style="$store.filtros.currentStyles">
-            <template x-for="date in $store.filtros.availableDates" :key="date">
-              <option :value="date" 
-                      :style="$store.filtros.getOptionStyles(date)"
-                      x-text="`Despacho: ${window.formatFecha(date)} ${window.getDateStyles(date, $store.filtros.hoyStr, $store.filtros.tomorrowStr).label}`"></option>
-            </template>
-          </select>
+  <div id="app-layout">
+    <div id="chart-container"
+      x-data="{ layout: window.CHART_LAYOUT, innerH() { return this.layout.height - this.layout.margin.top - this.layout.margin.bottom; } }">
+      <div id="header-date-container"
+        :style="`display: flex; justify-content: space-between; align-items: center; width: ${layout.width}px; padding-left: ${layout.margin.left}px; padding-right: ${layout.margin.right}px; box-sizing: border-box;`">
+
+        <div
+          style="display: flex; align-items: center; gap: 10px; font-size: 11px; background: transparent; padding: 0; flex-wrap: nowrap; overflow: hidden;">
+
+          <!-- Fecha del Reporte (Izquierda) -->
+          <span style="font-size: 10px; color: #000; font-family: sans-serif; margin-right: 5px; opacity: 0.8;"
+            x-text="`@ ${$store.filtros.reportMeta.DiaReporte} ${$store.filtros.reportMeta.HoraReporte}`">
+          </span>
+          <!-- Grupo Día -->
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <label for="header-filter-fecha" style="font-weight: 600; color: #555;">Día:</label>
+            <select id="header-filter-fecha" x-model="$store.filtros.fecha" title="Cambiar Fecha"
+              style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer;"
+              :style="$store.filtros.currentStyles">
+              <template x-for="date in $store.filtros.availableDates" :key="date">
+                <option :value="date" :style="$store.filtros.getOptionStyles(date)"
+                  x-text="`Despacho: ${window.formatFecha(date)} ${window.getDateStyles(date, $store.filtros.hoyStr, $store.filtros.tomorrowStr).label}`">
+                </option>
+              </template>
+            </select>
+          </div>
+
+          <!-- Grupo Planta -->
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <label for="header-filter-plantagrupo" style="font-weight: 600; color: #555;">Planta:</label>
+            <select id="header-filter-plantagrupo" x-model="$store.filtros.planta" title="Cambiar Planta"
+              :style="`font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; background-color: ${window.getDateStyles($store.filtros.fecha).bg}; color: ${window.getDateStyles($store.filtros.fecha).text};`">
+              <template x-for="planta in $store.filtros.availablePlantas" :key="planta.id">
+                <option :value="planta.id" x-text="planta.label"></option>
+              </template>
+            </select>
+          </div>
+
+          <!-- Grupo Vistas -->
+          <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
+            <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
+            <select id="header-viewgraph" x-model="$store.filtros.viewGraph" name="headerViewGraph"
+              style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
+              <option value="camiones">Camiones</option>
+              <option value="plantas">Asignaciones</option>
+              <option value="colas">Plantas</option>
+              <option value="recursos">Recursos</option>
+            </select>
+
+            <label for="header-viewgantt" style="font-weight: 600; color: #555; margin-left: 6px;">Gantt:</label>
+            <select id="header-viewgantt" x-model="$store.filtros.viewGantt" name="headerViewGantt"
+              style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
+              <option value="pedidos">Pedidos</option>
+              <option value="almuerzo">Almuerzo</option>
+              <option value="despachos">Despachos</option>
+              <option value="despachos_reales">Despachos reales</option>
+              <option value="despachos_mix">Despachos Mix</option>
+              <option value="disponibles">Disponibles</option>
+            </select>
+          </div>
         </div>
 
-        <!-- Grupo Planta -->
-        <div style="display: flex; align-items: center; gap: 4px;">
-          <label for="header-filter-plantagrupo" style="font-weight: 600; color: #555;">Planta:</label>
-          <select id="header-filter-plantagrupo" x-model="$store.filtros.planta" title="Cambiar Planta"
-            :style="`font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; background-color: ${window.getDateStyles($store.filtros.fecha).bg}; color: ${window.getDateStyles($store.filtros.fecha).text};`">
-            <template x-for="planta in $store.filtros.availablePlantas" :key="planta.id">
-              <option :value="planta.id" x-text="planta.label"></option>
-            </template>
-          </select>
+        <!-- Volúmenes (Derecha) -->
+        <div style="font-size: 12px; color: #333; font-weight: 600; font-family: sans-serif;"
+          x-show="$store.filtros.viewGraph !== 'recursos'">
+          Volumen: <span x-text="`${$store.filtros.reportMetrics.volumenT} m3`"></span>
+          <span style="font-size: 10px; color: #000; font-weight: normal;"
+            x-text="`, Confirmado: ${$store.filtros.reportMetrics.volConfirmado}`"></span>
         </div>
 
-        <!-- Grupo Vistas -->
-        <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
-          <label for="header-viewgraph" style="font-weight: 600; color: #555;">Gráfico:</label>
-          <select id="header-viewgraph" x-model="$store.filtros.viewGraph" name="headerViewGraph"
-            style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
-            <option value="camiones">Camiones</option>
-            <option value="plantas">Asignaciones</option>
-            <option value="colas">Plantas</option>
-            <option value="recursos">Recursos</option>
-          </select>
-
-          <label for="header-viewgantt" style="font-weight: 600; color: #555; margin-left: 6px;">Gantt:</label>
-          <select id="header-viewgantt" x-model="$store.filtros.viewGantt" name="headerViewGantt"
-            style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
-            <option value="pedidos">Pedidos</option>
-            <option value="almuerzo">Almuerzo</option>
-            <option value="despachos">Despachos</option>
-            <option value="despachos_reales">Despachos reales</option>
-            <option value="despachos_mix">Despachos Mix</option>
-            <option value="disponibles">Disponibles</option>
-          </select>
-        </div>
       </div>
-      
-      <!-- Volúmenes (Derecha) -->
-      <div style="font-size: 12px; color: #333; font-weight: 600; font-family: sans-serif;" 
-           x-show="$store.filtros.viewGraph !== 'recursos'">
-        Volumen: <span x-text="`${$store.filtros.reportMetrics.volumenT} m3`"></span>
-        <span style="font-size: 10px; color: #000; font-weight: normal;" 
-              x-text="`, Confirmado: ${$store.filtros.reportMetrics.volConfirmado}`"></span>
+      <!-- Área del Gráfico en que actua D3 -->
+      <div id="chart-section" class="layout-section">
+        <svg id="chart-svg" :width="layout.width" :height="layout.height">
+          <g id="chart-main-group" :transform="`translate(${layout.margin.left}, ${layout.margin.top})`">
+            <g id="chart-grid-layer"></g>
+            <g id="chart-axes-layer"></g>
+            <g id="chart-data-layer"></g>
+            <g id="chart-band-layer" class="pedido-band" :transform="`translate(0, ${innerH() + layout.bandOffset})`">
+            </g>
+            <g id="chart-overlay-layer"></g>
+          </g>
+        </svg>
       </div>
 
-    </div>
+      <!-- Panel Flotante de Detalles (Tooltip) gestionado por Alpine -->
+      <div id="panel" x-show="$store.filtros.tooltipData !== null" x-transition.opacity.duration.200ms>
 
-    <div id="chart"></div>
-    
-    <!-- Panel Flotante de Detalles (Tooltip) gestionado por Alpine -->
-    <div id="panel" x-show="$store.filtros.tooltipData !== null" x-transition.opacity.duration.200ms>
-      
-      <!-- Vista: Almuerzo -->
-      <template x-if="$store.filtros.tooltipData?.type === 'almuerzo'">
-        <div class="tooltip-card" style="border-top: 4px solid #f59e0b;">
-          <div class="tooltip-header" style="border-bottom: 1px solid #eee; padding-bottom: 6px; margin-bottom: 8px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <div class="title" style="color: #d97706; display: flex; align-items: center; gap: 6px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path>
-                  <path d="M7 2v20"></path>
-                  <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path>
-                </svg>
-                Turno de Almuerzo
+        <!-- Vista: Almuerzo -->
+        <template x-if="$store.filtros.tooltipData?.type === 'almuerzo'">
+          <div class="tooltip-card" style="border-top: 4px solid #f59e0b;">
+            <div class="tooltip-header" style="border-bottom: 1px solid #eee; padding-bottom: 6px; margin-bottom: 8px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="title" style="color: #d97706; display: flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path>
+                    <path d="M7 2v20"></path>
+                    <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path>
+                  </svg>
+                  Turno de Almuerzo
+                </div>
+                <div
+                  style="font-size: 11px; font-weight: 600; color: #4b5563; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;"
+                  x-text="`${$store.filtros.tooltipData.duration} min`"></div>
               </div>
-              <div style="font-size: 11px; font-weight: 600; color: #4b5563; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;" x-text="`${$store.filtros.tooltipData.duration} min`"></div>
+              <div style="font-size: 18px; font-weight: 800; color: #111827; margin-top: 6px;"
+                x-text="`Camión #${$store.filtros.tooltipData.camion}`"></div>
             </div>
-            <div style="font-size: 18px; font-weight: 800; color: #111827; margin-top: 6px;" x-text="`Camión #${$store.filtros.tooltipData.camion}`"></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="metric">
+                <span class="label">Inicio</span>
+                <span class="value" style="font-size: 15px;" x-text="$store.filtros.tooltipData.startStr"></span>
+              </div>
+              <div class="metric">
+                <span class="label">Fin</span>
+                <span class="value" style="font-size: 15px;" x-text="$store.filtros.tooltipData.endStr"></span>
+              </div>
+            </div>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <div class="metric">
-              <span class="label">Inicio</span>
-              <span class="value" style="font-size: 15px;" x-text="$store.filtros.tooltipData.startStr"></span>
-            </div>
-            <div class="metric">
-              <span class="label">Fin</span>
-              <span class="value" style="font-size: 15px;" x-text="$store.filtros.tooltipData.endStr"></span>
-            </div>
-          </div>
-        </div>
-      </template>
+        </template>
 
-      <!-- Vista: Disponibles -->
-      <template x-if="$store.filtros.tooltipData?.type === 'disponibles'">
-        <div class="tooltip-card">
-          <div class="tooltip-header" style="border-bottom: 1px solid #eee; padding-bottom: 6px;">
-            <div style="font-weight: 700; font-size: 14px;" x-text="`Camión #${$store.filtros.tooltipData.camion}`"></div>
-            <div style="font-size: 11px; color: #666; margin-top: 2px;">Vista Camiones Disponibles</div>
-          </div>
-          <div style="margin-top: 10px; font-size: 12.5px; display: flex; flex-direction: column; gap: 6px;">
-            <div><b>Hora Inicio:</b> <span x-text="$store.filtros.tooltipData.horaInicio"></span></div>
-            <div><b>Fin 8 Hrs:</b> <span x-text="$store.filtros.tooltipData.fin8Hrs"></span></div>
-            <div><b>Hora Fin:</b> <span x-text="$store.filtros.tooltipData.horaFin"></span></div>
-            <div><b>Sobretiempo:</b> <span x-text="$store.filtros.tooltipData.sobretiempo"></span></div>
-          </div>
-          <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 6px;">
-            <span style="font-size: 11px; font-weight: bold; color: #333;" x-text="`Tickets del Día (${$store.filtros.tooltipData.tickets.length}):`"></span>
-            <div style="margin-top: 6px; max-height: 150px; overflow-y: auto; padding-right: 4px; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff;">
-              
-              <template x-if="$store.filtros.tooltipData.tickets.length > 0">
-                <table style="width: 100%; border-collapse: collapse; font-size: 10px; text-align: left; table-layout: fixed;">
-                  <thead>
-                    <tr style="border-bottom: 1.5px solid #d1d5db; font-weight: 700; color: #374151; position: sticky; top: 0; background: #fff;">
-                      <th style="padding: 4px 2px; width: 50px;">ticket</th>
-                      <th style="padding: 4px 2px; width: 35px;">inicio</th>
-                      <th style="padding: 4px 2px; width: 35px;">fin</th>
-                      <th style="padding: 4px 2px; width: 25px; text-align: right;">m3</th>
-                      <th style="padding: 4px 2px; padding-left: 8px;">Obra - Cliente</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <template x-for="tk in $store.filtros.tooltipData.tickets" :key="tk.ticketId">
-                      <tr style="border-bottom: 1px solid #f3f4f6;">
-                        <td style="padding: 4px 2px; font-weight: 500;" x-text="`#${tk.ticketId}`"></td>
-                        <td style="padding: 4px 2px; color: #4b5563;" x-text="tk.startStr"></td>
-                        <td style="padding: 4px 2px; color: #4b5563;" x-text="tk.endStr"></td>
-                        <td style="padding: 4px 2px; text-align: right; font-weight: 600; color: #111827;" x-text="tk.volumen"></td>
-                        <td style="padding: 4px 2px; padding-left: 8px; color: #4b5563; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;" :title="tk.obraCliente" x-text="tk.obraCliente"></td>
+        <!-- Vista: Disponibles -->
+        <template x-if="$store.filtros.tooltipData?.type === 'disponibles'">
+          <div class="tooltip-card">
+            <div class="tooltip-header" style="border-bottom: 1px solid #eee; padding-bottom: 6px;">
+              <div style="font-weight: 700; font-size: 14px;" x-text="`Camión #${$store.filtros.tooltipData.camion}`">
+              </div>
+              <div style="font-size: 11px; color: #666; margin-top: 2px;">Vista Camiones Disponibles</div>
+            </div>
+            <div style="margin-top: 10px; font-size: 12.5px; display: flex; flex-direction: column; gap: 6px;">
+              <div><b>Hora Inicio:</b> <span x-text="$store.filtros.tooltipData.horaInicio"></span></div>
+              <div><b>Fin 8 Hrs:</b> <span x-text="$store.filtros.tooltipData.fin8Hrs"></span></div>
+              <div><b>Hora Fin:</b> <span x-text="$store.filtros.tooltipData.horaFin"></span></div>
+              <div><b>Sobretiempo:</b> <span x-text="$store.filtros.tooltipData.sobretiempo"></span></div>
+            </div>
+            <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 6px;">
+              <span style="font-size: 11px; font-weight: bold; color: #333;"
+                x-text="`Tickets del Día (${$store.filtros.tooltipData.tickets.length}):`"></span>
+              <div
+                style="margin-top: 6px; max-height: 150px; overflow-y: auto; padding-right: 4px; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff;">
+
+                <template x-if="$store.filtros.tooltipData.tickets.length > 0">
+                  <table
+                    style="width: 100%; border-collapse: collapse; font-size: 10px; text-align: left; table-layout: fixed;">
+                    <thead>
+                      <tr
+                        style="border-bottom: 1.5px solid #d1d5db; font-weight: 700; color: #374151; position: sticky; top: 0; background: #fff;">
+                        <th style="padding: 4px 2px; width: 50px;">ticket</th>
+                        <th style="padding: 4px 2px; width: 35px;">inicio</th>
+                        <th style="padding: 4px 2px; width: 35px;">fin</th>
+                        <th style="padding: 4px 2px; width: 25px; text-align: right;">m3</th>
+                        <th style="padding: 4px 2px; padding-left: 8px;">Obra - Cliente</th>
                       </tr>
-                    </template>
-                  </tbody>
-                </table>
-              </template>
-              
-              <template x-if="$store.filtros.tooltipData.tickets.length === 0">
-                <div style="font-size: 11px; color: #999; padding: 4px 0;">Sin tickets registrados</div>
-              </template>
-              
+                    </thead>
+                    <tbody>
+                      <template x-for="tk in $store.filtros.tooltipData.tickets" :key="tk.ticketId">
+                        <tr style="border-bottom: 1px solid #f3f4f6;">
+                          <td style="padding: 4px 2px; font-weight: 500;" x-text="`#${tk.ticketId}`"></td>
+                          <td style="padding: 4px 2px; color: #4b5563;" x-text="tk.startStr"></td>
+                          <td style="padding: 4px 2px; color: #4b5563;" x-text="tk.endStr"></td>
+                          <td style="padding: 4px 2px; text-align: right; font-weight: 600; color: #111827;"
+                            x-text="tk.volumen"></td>
+                          <td
+                            style="padding: 4px 2px; padding-left: 8px; color: #4b5563; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;"
+                            :title="tk.obraCliente" x-text="tk.obraCliente"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </template>
+
+                <template x-if="$store.filtros.tooltipData.tickets.length === 0">
+                  <div style="font-size: 11px; color: #999; padding: 4px 0;">Sin tickets registrados</div>
+                </template>
+
+              </div>
+            </div>
+            <div style="margin-top: 10px; font-size: 10px; color: #888; border-top: 1px solid #eee; padding-top: 6px;">
+              <span x-text="`Cursor: ${$store.filtros.tooltipData.cursor}`"></span>
             </div>
           </div>
-          <div style="margin-top: 10px; font-size: 10px; color: #888; border-top: 1px solid #eee; padding-top: 6px;">
-            <span x-text="`Cursor: ${$store.filtros.tooltipData.cursor}`"></span>
-          </div>
-        </div>
-      </template>
+        </template>
 
-      <!-- Vista: Híbrida (HTML Complejo pre-renderizado para Pedidos y Despachos) -->
-      <template x-if="$store.filtros.tooltipData?.type === 'html'">
-        <div x-html="$store.filtros.tooltipData.content"></div>
-      </template>
+        <!-- Vista: Híbrida (HTML Complejo pre-renderizado para Pedidos y Despachos) -->
+        <template x-if="$store.filtros.tooltipData?.type === 'html'">
+          <div x-html="$store.filtros.tooltipData.content"></div>
+        </template>
 
+      </div>
     </div>
-  </div>
-  <div id="gantt-scroll-container">
-    <div id="gantt-chart"></div>
-  </div>
+    <!--Área para Gantt-->
+    <div id="gantt-section" class="layout-section" x-data="{ layout: window.GANTT_LAYOUT }">
+      <div id="gantt-scroll-container">
+        <div id="gantt-chart">
+          <svg id="gantt-svg" :width="layout.width" :height="layout.height">
+            <g id="gantt-main-group" :transform="`translate(${layout.margin.left}, ${layout.margin.top})`">
+              <g id="gantt-grid-layer"></g>
+              <g id="gantt-axes-layer"></g>
+              <g id="gantt-data-layer"></g>
+            </g>
+          </svg>
+        </div>
+      </div>
+    </div>
 
+    <!-- End of #app-layout -->
+  </div>
 
   <div id="filter-config-panel" x-show="openFilters" x-transition style="display: none;">
     <div id="filter-config-header">
@@ -220,12 +265,11 @@
 
       <div class="filter-group">
         <label for="filter-fecha">Fecha</label>
-        <select id="filter-fecha" x-model="$store.filtros.fecha"
-                :style="$store.filtros.currentStyles">
+        <select id="filter-fecha" x-model="$store.filtros.fecha" :style="$store.filtros.currentStyles">
           <template x-for="date in $store.filtros.availableDates" :key="date">
-            <option :value="date"
-                    :style="$store.filtros.getOptionStyles(date)"
-                    x-text="`${window.formatFecha(date)} ${window.getDateStyles(date, $store.filtros.hoyStr, $store.filtros.tomorrowStr).label}`"></option>
+            <option :value="date" :style="$store.filtros.getOptionStyles(date)"
+              x-text="`${window.formatFecha(date)} ${window.getDateStyles(date, $store.filtros.hoyStr, $store.filtros.tomorrowStr).label}`">
+            </option>
           </template>
         </select>
       </div>
@@ -254,7 +298,8 @@
 
       <div class="filter-group">
         <label for="filter-codobra">Obra</label>
-        <input list="codobras-list" id="filter-codobra" x-model="$store.filtros.codObra" placeholder="-- Buscar --" autocomplete="off">
+        <input list="codobras-list" id="filter-codobra" x-model="$store.filtros.codObra" placeholder="-- Buscar --"
+          autocomplete="off">
         <datalist id="codobras-list">
           <template x-for="obra in $store.filtros.availableObras" :key="obra">
             <option :value="obra"></option>
@@ -264,7 +309,8 @@
 
       <div class="filter-group">
         <label for="filter-camion">Camión</label>
-        <input list="camiones-list" id="filter-camion" x-model="$store.filtros.camion" placeholder="-- Buscar --" autocomplete="off">
+        <input list="camiones-list" id="filter-camion" x-model="$store.filtros.camion" placeholder="-- Buscar --"
+          autocomplete="off">
         <datalist id="camiones-list">
           <template x-for="camion in $store.filtros.availableCamiones" :key="camion">
             <option :value="camion"></option>

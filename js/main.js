@@ -4,7 +4,7 @@
 const { width, height, margin } = window.CHART_LAYOUT;
 
 const panel = d3.select("#panel");
-const { svg, g, innerW, innerH } = createSVG("#chart", width, height, margin);
+const { svg, g, innerW, innerH } = initSVG("#chart-svg", "#chart-main-group", width, height, margin);
 
 // Variables globales
 let pedidos, layers, area, scales, band, ganttPanel;

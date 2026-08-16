@@ -245,11 +245,14 @@ function renderTooltip(panel, activa, t, granularidad) {
   const mm = totalMin % 60;
 
   if (p.isAlmuerzo) {
-    const offsetMin = (p.XG?.offset || 0) * granularidad;
-    const durationMin = (p.XG?.finrel || 0) * granularidad;
+    const offsetMin = p.startMin !== undefined ? p.startMin : ((p.XG?.offset || 0) * granularidad);
+    const durationMin = p.durationMin !== undefined ? p.durationMin : ((p.XG?.finrel || 0) * granularidad);
     const startStr = String(Math.floor(offsetMin / 60)).padStart(2, "0") + ":" + String(offsetMin % 60).padStart(2, "0");
     const endStr = String(Math.floor((offsetMin + durationMin) / 60)).padStart(2, "0") + ":" + String((offsetMin + durationMin) % 60).padStart(2, "0");
     
+    const d3Content = panel.select('#d3-content-tooltip');
+    if (!d3Content.empty()) d3Content.style("display", "none");
+
     if (Alpine && Alpine.store('filtros')) {
       Alpine.store('filtros').setTooltipData({
         type: 'almuerzo',
@@ -277,6 +280,9 @@ function renderTooltip(panel, activa, t, granularidad) {
     const otH = Math.floor(overtimeMin / 60);
     const otM = overtimeMin % 60;
     const overtimeStr = `${String(otH).padStart(2, "0")}:${String(otM).padStart(2, "0")}`;
+
+    const d3Content = panel.select('#d3-content-tooltip');
+    if (!d3Content.empty()) d3Content.style("display", "none");
 
     if (Alpine && Alpine.store('filtros')) {
       Alpine.store('filtros').setTooltipData({
@@ -495,8 +501,9 @@ function renderTooltip(panel, activa, t, granularidad) {
     `;
   }
 
-  panel.html(`
-    <div class="tooltip-card">
+  const colorOrigen = window.pedidoColorsMap ? window.pedidoColorsMap.get(p.ColorPedido) : '#ccc';
+  const htmlString = `
+    <div class="tooltip-card" style="border-top: 4px solid ${colorOrigen};">
       <div class="tooltip-header" style="display: flex; flex-direction: column; gap: 4px; align-items: stretch; width: 100%; border-bottom: 1px solid #eee; padding-bottom: 6px;">
         <div style="display: flex; justify-content: space-between; align-items: baseline;">
           <div class="pedido" style="font-weight: 700; font-size: 14px;">Pedido #${ref.id}</div>
@@ -533,18 +540,21 @@ function renderTooltip(panel, activa, t, granularidad) {
         <div><b>Obra:</b> ${p.Obra}</div>
         <div class="muted" style="display: flex; align-items: center;">
           <span>Cursor: ${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")} &middot; Color: ${p.ColorPedido}</span>
-          <span style="flex-grow: 1; margin-left: 10px; margin-right: 10px; height: 12px; background-color: ${window.pedidoColorsMap ? window.pedidoColorsMap.get(p.ColorPedido) : '#ccc'}; border: 1px solid #ccc; border-radius: 2px;"></span>
+          <span style="flex-grow: 1; margin-left: 10px; margin-right: 10px; height: 12px; background-color: ${colorOrigen}; border: 1px solid #ccc; border-radius: 2px;"></span>
         </div>
         ${rawTicketHtml}
       </div>
     </div>
-  `);
+  `;
     
+    let d3Content = panel.select('#d3-content-tooltip');
+    if (d3Content.empty()) {
+      d3Content = panel.append('div').attr('id', 'd3-content-tooltip');
+    }
+    d3Content.html(htmlString).style("display", "block");
+
     if (Alpine && Alpine.store('filtros')) {
-      Alpine.store('filtros').setTooltipData({
-        type: 'html',
-        content: panel.html()
-      });
+      Alpine.store('filtros').setTooltipData({ type: 'd3' });
     }
 }
 
@@ -572,27 +582,30 @@ function setupInteraction(
   granularidad, panel, innerW, innerH,
   ganttPanel, metrics, margin, getColorSort
 ) {
+  // Limpiar elementos de interacción anteriores
+  g.selectAll(".interaction-element").remove();
+
   // Cursors
   const cursor = g.append("line")
-    .attr("class", "cursor")
+    .attr("class", "cursor interaction-element")
     .attr("y1", 0)
     .attr("y2", innerH)
     .style("opacity", 0);
 
-  const circleCamiones = g.append("circle").attr("class", "cursor-circle camiones").attr("r", 4).attr("fill", "blue").style("opacity", 0).style("pointer-events", "none");
-  const labelCamiones = g.append("text").attr("class", "cursor-label camiones").attr("fill", "blue").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
+  const circleCamiones = g.append("circle").attr("class", "cursor-circle camiones interaction-element").attr("r", 4).attr("fill", "blue").style("opacity", 0).style("pointer-events", "none");
+  const labelCamiones = g.append("text").attr("class", "cursor-label camiones interaction-element").attr("fill", "blue").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
 
-  const circleColas = g.append("circle").attr("class", "cursor-circle colas").attr("r", 4).attr("fill", "#555").style("opacity", 0).style("pointer-events", "none");
-  const labelColas = g.append("text").attr("class", "cursor-label colas").attr("fill", "#555").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
+  const circleColas = g.append("circle").attr("class", "cursor-circle colas interaction-element").attr("r", 4).attr("fill", "#555").style("opacity", 0).style("pointer-events", "none");
+  const labelColas = g.append("text").attr("class", "cursor-label colas interaction-element").attr("fill", "#555").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
 
-  const circleAsignaciones = g.append("circle").attr("class", "cursor-circle asignaciones").attr("r", 4).attr("fill", "#777").style("opacity", 0).style("pointer-events", "none");
-  const labelAsignaciones = g.append("text").attr("class", "cursor-label asignaciones").attr("fill", "#777").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
+  const circleAsignaciones = g.append("circle").attr("class", "cursor-circle asignaciones interaction-element").attr("r", 4).attr("fill", "#777").style("opacity", 0).style("pointer-events", "none");
+  const labelAsignaciones = g.append("text").attr("class", "cursor-label asignaciones interaction-element").attr("fill", "#777").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
 
-  const circleDelay = g.append("circle").attr("class", "cursor-circle delay").attr("r", 4).attr("fill", "red").style("opacity", 0).style("pointer-events", "none");
-  const labelDelay = g.append("text").attr("class", "cursor-label delay").attr("fill", "red").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
+  const circleDelay = g.append("circle").attr("class", "cursor-circle delay interaction-element").attr("r", 4).attr("fill", "red").style("opacity", 0).style("pointer-events", "none");
+  const labelDelay = g.append("text").attr("class", "cursor-label delay interaction-element").attr("fill", "red").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
 
-  const circleWaitCarga = g.append("circle").attr("class", "cursor-circle wait-carga").attr("r", 4).attr("fill", "blue").style("opacity", 0).style("pointer-events", "none");
-  const labelWaitCarga = g.append("text").attr("class", "cursor-label wait-carga").attr("fill", "blue").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
+  const circleWaitCarga = g.append("circle").attr("class", "cursor-circle wait-carga interaction-element").attr("r", 4).attr("fill", "blue").style("opacity", 0).style("pointer-events", "none");
+  const labelWaitCarga = g.append("text").attr("class", "cursor-label wait-carga interaction-element").attr("fill", "blue").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
 
   function syncCursor(t) {
     const currentGraphView = getCurrentGraphView();
@@ -979,7 +992,11 @@ function setupInteraction(
 
       overlay.selectAll("*").remove();
       if (band) band.clear();
-      panel.html(`<div class="tooltip-card"></div>`);
+      if (Alpine && Alpine.store('filtros')) {
+        Alpine.store('filtros').setTooltipData(null);
+      }
+      const d3Content = panel.select('#d3-content-tooltip');
+      if (!d3Content.empty()) d3Content.style("display", "none");
 
       d3.selectAll(".gantt-row").style("opacity", 1);
       return;
@@ -989,7 +1006,7 @@ function setupInteraction(
     if (isFocusChange) {
       const isHover = !!activa;
       const parentId = focus.parentPedidoId || focus.id;
-      const codObra = focus.CodObra;
+      const codObra = focus.isAlmuerzo ? null : focus.CodObra;
       const colorOrigen = getColorOrigen(focus);
       const colorObra = "red";
 
@@ -1066,7 +1083,16 @@ function setupInteraction(
 
       if (isCamionFilter) {
         if (band) band.clear();
-        panel.html(`<div class="tooltip-card" style="padding: 10px; font-size: 12px; font-weight: 500; border-left: 4px solid #3b82f6;">Buscando Camión: <b>#${getBaseCamion(targetCamion)}</b></div>`);
+        const htmlString = `<div class="tooltip-card" style="padding: 10px; font-size: 12px; font-weight: 500; border-left: 4px solid #3b82f6;">Buscando Camión: <b>#${getBaseCamion(targetCamion)}</b></div>`;
+        let d3Content = panel.select('#d3-content-tooltip');
+        if (d3Content.empty()) {
+          d3Content = panel.append('div').attr('id', 'd3-content-tooltip');
+        }
+        d3Content.html(htmlString).style("display", "block");
+
+        if (Alpine && Alpine.store('filtros')) {
+          Alpine.store('filtros').setTooltipData({ type: 'd3' });
+        }
       } else {
         drawActiveArea({ overlay, layers, getCapas, activa: focus, scales, colorOrigen, colorSort: getColorSort(focus) });
         band.show(focus, getColorSort(focus));
@@ -1118,6 +1144,8 @@ function setupInteraction(
     positionTooltip(panel, margin, refMX, refMY, innerW, innerH);
   }
 
+  window.highlightPedidoGlobal = highlightPedido;
+
   window.selectPedido = (p, fromGantt = false, forceSelect = false) => {
     if (forceSelect && p) {
       selectedPedido.current = p;
@@ -1150,16 +1178,17 @@ function setupInteraction(
   window.highlightPedido = highlightPedido;
 
   const overlay = g.append("g")
-    .attr("class", "overlay");
+    .attr("class", "overlay interaction-element");
 
   const interactionRect = g.append("rect")
+    .attr("class", "interaction-element")
     .attr("width", innerW)
     .attr("height", innerH)
     .style("fill", "none")
     .style("pointer-events", "all");
 
   const envG = g.append("g")
-    .attr("class", "envolvente-cursor")
+    .attr("class", "envolvente-cursor interaction-element")
     .style("pointer-events", "none");
 
   const envCircle = envG.append("circle")

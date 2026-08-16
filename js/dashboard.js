@@ -150,24 +150,30 @@ const handleObraInput = (e) => {
   }
 
   if (val === "") {
-    layers.style("opacity", CFG.opacity || 0.7);
-    layers.each(function (d) {
-      const group = d3.select(this);
-      group.selectAll("path.area, path.carga").style("fill", getAreaColor(d));
-      group.selectAll("path.line-top, path.carga")
-        .attr("stroke", getColorSort(d))
-        .attr("stroke-width", scales.yCamiones ? CFG.lineStrokeWidth : 1);
-    });
+    if (layers) {
+      layers.style("opacity", CFG.opacity || 0.7);
+      layers.each(function (d) {
+        const group = d3.select(this);
+        group.selectAll("path.area, path.carga").style("fill", getAreaColor(d));
+        group.selectAll("path.line-top, path.carga")
+          .attr("stroke", getColorSort(d))
+          .attr("stroke-width", scales.yCamiones ? CFG.lineStrokeWidth : 1);
+      });
+    }
     d3.selectAll("path.line-parent-envelope")
       .style("opacity", 1.0)
       .attr("stroke-width", CFG.lineStrokeWidth);
 
     if (window.currentBand) window.currentBand.clear();
-    panel.html(`<div class="tooltip-card"></div>`);
+    if (Alpine && Alpine.store('filtros')) Alpine.store('filtros').setTooltipData(null);
+    const d3Content = panel.select('#d3-content-tooltip');
+    if (!d3Content.empty()) d3Content.style("display", "none");
     d3.selectAll(".gantt-row").style("opacity", 1);
     selectedPedido.current = null;
     return;
   }
+
+  if (!layers) return;
 
   const matches = pedidos.filter(p => String(p.CodObra) === val);
   if (matches.length > 0) {
@@ -455,13 +461,32 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
 }
 
 function renderDashboard() {
-  svg.selectAll(".chart-header").remove();
-  g.selectAll("*").remove();
-  if (window.currentGanttPanel) {
-    d3.select("#gantt-chart").selectAll("*").remove();
+  const store = Alpine?.store('filtros');
+  if (store) {
+    store.resetFilters();
+    store.setTooltipData(null);
+  }
+  if (window.selectedPedido) window.selectedPedido.current = null;
+  if (window.selectedCamion) window.selectedCamion.current = null;
+  if (window.lastActivePedido) window.lastActivePedido.current = null;
+  if (window.highlightFromGantt) window.highlightFromGantt(null);
+  if (window.highlightPedidoGlobal) window.highlightPedidoGlobal(null);
+  if (window.handleObraInput && typeof window.handleObraInput === 'function') {
+    window.handleObraInput({ target: { value: "" } });
   }
 
-  const store = Alpine?.store('filtros');
+  svg.selectAll(".chart-header").remove();
+  
+  // Limpiar capas específicas en lugar de borrar la estructura estática
+  d3.select("#chart-grid-layer").selectAll("*").remove();
+  d3.select("#chart-axes-layer").selectAll("*").remove();
+  d3.select("#chart-data-layer").selectAll("*").remove();
+  d3.select("#chart-overlay-layer").selectAll("*").remove();
+  
+  if (window.currentGanttPanel) {
+    window.currentGanttPanel.clear();
+  }
+
   const filterKey = store?.planta || "Grupo:RM";
   renderDateOptionsForFilter(filterKey);
 
@@ -520,8 +545,8 @@ function renderDashboard() {
   const isSplitGraph = currentGraphView === 'recursos' ||
     (currentGraphView === 'plantas' && stackResult.isSplit) ||
     (currentGraphView === 'colas' && stackResult.isSplit);
-  drawGrids(g, scales, curHoraMax, CFG.granularidadMin, innerW, innerH, yMax);
-  drawAxes(g, scales, curHoraMax, CFG.granularidadMin, innerH, isSplitGraph);
+  drawGrids(d3.select("#chart-grid-layer"), scales, curHoraMax, CFG.granularidadMin, innerW, innerH, yMax);
+  drawAxes(d3.select("#chart-axes-layer"), scales, curHoraMax, CFG.granularidadMin, innerH, isSplitGraph);
   if (Alpine && Alpine.store('filtros')) {
     Alpine.store('filtros').setReportData(
       { DiaReporte: meta.DiaReporte, HoraReporte: meta.HoraReporte },
@@ -532,7 +557,7 @@ function renderDashboard() {
     );
   }
 
-  drawTopOverlay(svg, g, meta, scales, currentMetrics, width, filterKey);
+  drawTopOverlay(svg, d3.select("#chart-overlay-layer"), meta, scales, currentMetrics, width, filterKey);
 
   band = drawBand(g, scales, innerH, CFG.granularidadMin);
   ganttPanel = drawGanttPanel({ container: "#gantt-chart", scales, margin, rowHeight: 10 });
@@ -578,6 +603,13 @@ function renderDashboard() {
     svg, g, layers, () => pedidos, scales, band, CFG.granularidadMin,
     panel, innerW, innerH, ganttPanel, currentMetrics, margin, getColorSort
   );
+
+  // Forzar limpieza final del estado del gráfico recién creado
+  if (window.highlightFromGantt) window.highlightFromGantt(null);
+  if (window.highlightPedidoGlobal) window.highlightPedidoGlobal(null);
+  if (window.handleObraInput && typeof window.handleObraInput === 'function') {
+    window.handleObraInput({ target: { value: "" } });
+  }
 
   const codObraMap = new Map();
   subsetPedidos.forEach(p => { if (p.CodObra) codObraMap.set(p.CodObra, p.Obra || ""); });
