@@ -15,17 +15,21 @@ function actualizarOpcionesGantt() {
     const optAlmuerzo = selectEl.querySelector('option[value="almuerzo"]');
     
     if (currentGraphVal === "camiones") {
-      // Si no existe la opción "disponibles", la agregamos al final
-      if (!optDisponibles) {
-        const newOpt = document.createElement("option");
-        newOpt.value = "disponibles";
-        newOpt.textContent = "Disponibles";
-        selectEl.appendChild(newOpt);
-      }
       if (!optAlmuerzo) {
         const newOpt = document.createElement("option");
         newOpt.value = "almuerzo";
         newOpt.textContent = "Almuerzo";
+        const refOpt = selectEl.querySelector('option[value="despachos_reales"]');
+        if (refOpt) {
+          selectEl.insertBefore(newOpt, refOpt);
+        } else {
+          selectEl.appendChild(newOpt);
+        }
+      }
+      if (!optDisponibles) {
+        const newOpt = document.createElement("option");
+        newOpt.value = "disponibles";
+        newOpt.textContent = "Disponibles";
         selectEl.appendChild(newOpt);
       }
     } else {
@@ -565,7 +569,7 @@ function renderDashboard() {
   window.currentGanttPanel = ganttPanel;
 
   layers = drawGraphLayers(
-    currentGraphView, currentGanttView, subsetPedidos, scales, currentMetrics, stackResult, yMax
+    currentGraphView, currentGanttView, subsetPedidos, scales, currentMetrics, stackResult, yMax, innerW, innerH
   );
 
   let filteredForGantt = (Alpine && Alpine.store('filtros').soloVerde)

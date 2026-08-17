@@ -89,25 +89,24 @@ function drawCapacityLine(g, capacity, scales, innerW, yScale) {
   const y = yScale || scales.y;
   const yPos = y(capacity);
   
-  g.append("line")
+  g.append("path")
     .attr("class", "capacity-line")
-    .attr("x1", 0)
-    .attr("x2", innerW)
-    .attr("y1", yPos)
-    .attr("y2", yPos)
-    .attr("stroke", capacity === 0 ? "#ccc" : "#333")
-    .attr("stroke-width", capacity === 0 ? 1 : 2)
-    .attr("stroke-dasharray", capacity === 0 ? "none" : "5,5")
+    .attr("d", `M0,${yPos} L${innerW},${yPos}`)
+    .style("stroke", capacity === 0 ? "#ccc" : "red")
+    .style("stroke-width", capacity === 0 ? "1px" : "2px")
+    .style("stroke-dasharray", capacity === 0 ? "none" : "5,5")
+    .style("fill", "none")
     .style("pointer-events", "none");
 
   if (capacity > 0) {
     g.append("text")
       .attr("class", "capacity-label")
-      .attr("x", innerW - 5)
+      .attr("x", 5)
       .attr("y", yPos - 5)
-      .attr("text-anchor", "end")
-      .attr("fill", "#333")
-      .attr("font-size", "10px")
+      .attr("text-anchor", "start")
+      .style("fill", "red")
+      .style("font-size", "10px")
+      .style("font-weight", "bold")
       .text(`Capacidad: ${capacity} bocas`);
   }
 }
@@ -1239,7 +1238,7 @@ function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scal
     drawLayers(gCamiones, subsetPedidos, areaCamiones, scales, scales.yCamiones);
     drawLeftAxis(gCamiones, scales.yCamiones, "Camiones");
     
-    if (currentGanttView === 'despachos_mix') {
+    if (currentGanttView === 'despachos_mix' || currentGanttView === 'almuerzo') {
       drawOrangeCurve(gCamiones, subsetPedidos, scales, scales.yCamiones);
     }
 
@@ -1268,20 +1267,27 @@ function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scal
 
     const gDelay = g.append("g").attr("class", "zona-delay");
     drawDelayCurve(gDelay, currentMetrics.delay2ByTime, scales, CFG.granularidadMin);
-    drawRightAxis(gDelay, scales.yDelay, innerW, "Delay Max [min]", "red");
-    if (currentMetrics.waitCargaByTime && d3.max(currentMetrics.waitCargaByTime) > 0) {
+    const rightAxisG = drawRightAxis(gDelay, scales.yDelay, innerW, "Delay Max [min]", "red");
+    if ((currentGanttView === 'despachos_reales' || currentGanttView === 'despachos_mix') && currentMetrics.waitCargaByTime && d3.max(currentMetrics.waitCargaByTime) > 0) {
       drawDelayCurve(gDelay, currentMetrics.waitCargaByTime, scales, CFG.granularidadMin, null, "blue", "wait-carga-curve", true);
-      drawLeftAxis(gDelay, scales.yDelay, "Espera Carga [min]", null, "blue", -30);
+      rightAxisG.append("text")
+        .attr("x", -10)
+        .attr("y", scales.yDelay.range()[1] + 27)
+        .attr("fill", "blue")
+        .attr("text-anchor", "end")
+        .attr("font-size", "10px")
+        .attr("font-weight", "bold")
+        .text("Espera Carga [min]");
     }
 
-    drawLeftAxis(gColas, scales.yColas, "Plantas", [scales.yColas.range()[0], scales.yDelay.range()[1]]);
+    drawLeftAxis(gColas, scales.yColas, "Cargas", [scales.yColas.range()[0], scales.yDelay.range()[1]]);
 
     layers = g.selectAll(".pedido"); 
   } else {
     const area = createArea(scales);
     layers = drawLayers(g, subsetPedidos, area, scales);
     
-    if (currentGanttView === 'despachos_mix') {
+    if (currentGanttView === 'despachos_mix' || currentGanttView === 'almuerzo') {
       drawOrangeCurve(g, subsetPedidos, scales, scales.y);
     }
   }
