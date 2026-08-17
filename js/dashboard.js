@@ -13,6 +13,7 @@ function actualizarOpcionesGantt() {
     if (!selectEl) return;
     const optDisponibles = selectEl.querySelector('option[value="disponibles"]');
     const optAlmuerzo = selectEl.querySelector('option[value="almuerzo"]');
+    const optSlots = selectEl.querySelector('option[value="slots"]');
     
     if (currentGraphVal === "camiones") {
       if (!optAlmuerzo) {
@@ -20,6 +21,17 @@ function actualizarOpcionesGantt() {
         newOpt.value = "almuerzo";
         newOpt.textContent = "Almuerzo";
         const refOpt = selectEl.querySelector('option[value="despachos_reales"]');
+        if (refOpt) {
+          selectEl.insertBefore(newOpt, refOpt);
+        } else {
+          selectEl.appendChild(newOpt);
+        }
+      }
+      if (!optSlots) {
+        const newOpt = document.createElement("option");
+        newOpt.value = "slots";
+        newOpt.textContent = "Slots";
+        const refOpt = selectEl.querySelector('option[value="disponibles"]');
         if (refOpt) {
           selectEl.insertBefore(newOpt, refOpt);
         } else {
@@ -36,7 +48,7 @@ function actualizarOpcionesGantt() {
       // Si existe la opción "disponibles", la eliminamos
       if (optDisponibles) {
         // Si estaba seleccionada la opción "disponibles" o "almuerzo", cambiamos la selección a "pedidos"
-        if (selectEl.value === "disponibles" || selectEl.value === "almuerzo") {
+        if (selectEl.value === "disponibles" || selectEl.value === "almuerzo" || selectEl.value === "slots") {
           selectEl.value = "pedidos";
           setCookie("viewGantt", "pedidos");
         }
@@ -44,6 +56,9 @@ function actualizarOpcionesGantt() {
       }
       if (optAlmuerzo) {
         optAlmuerzo.remove();
+      }
+      if (optSlots) {
+        optSlots.remove();
       }
     }
   };
@@ -315,12 +330,12 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
   );
 
   let tempPedidos = [...subsetPedidos];
-  if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales' || currentGanttView === 'despachos_mix' || currentGanttView === 'almuerzo' || currentGanttView === 'disponibles') {
+  if (currentGanttView === 'despachos' || currentGanttView === 'despachos_reales' || currentGanttView === 'despachos_mix' || currentGanttView === 'almuerzo' || currentGanttView === 'disponibles' || currentGanttView === 'slots') {
     if (currentGanttView === 'despachos_reales') {
       tempPedidos = tempPedidos.flatMap(p => (p.realDespachos || []).map(d => ({ ...d, parentPedido: p })));
     } else if (currentGanttView === 'despachos_mix') {
       tempPedidos = tempPedidos.flatMap(p => calculateMixedDespachosForPedido(p, p.realDespachos || [], CFG.granularidadMin));
-    } else if (currentGanttView === 'almuerzo') {
+    } else if (currentGanttView === 'almuerzo' || currentGanttView === 'slots') {
       const pedidosDespachos = tempPedidos.flatMap(p => (p.despachos || []).map(d => ({ ...d, parentPedido: p })));
       const almuerzos = calculateAlmuerzoDespachos(fullPedidos, selectedDate, permitidas, CFG.granularidadMin, pedidosDespachos);
       tempPedidos = [...pedidosDespachos, ...almuerzos];

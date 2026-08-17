@@ -607,6 +607,12 @@ function setupInteraction(
   const circleWaitCarga = g.append("circle").attr("class", "cursor-circle wait-carga interaction-element").attr("r", 4).attr("fill", "blue").style("opacity", 0).style("pointer-events", "none");
   const labelWaitCarga = g.append("text").attr("class", "cursor-label wait-carga interaction-element").attr("fill", "blue").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
 
+  const circleOrangeSlots = g.append("circle").attr("class", "cursor-circle orange-slots interaction-element").attr("r", 4).attr("fill", "orange").style("opacity", 0).style("pointer-events", "none");
+  const labelOrangeSlots = g.append("text").attr("class", "cursor-label orange-slots interaction-element").attr("fill", "orange").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
+
+  const circleDiffSlots = g.append("circle").attr("class", "cursor-circle diff-slots interaction-element").attr("r", 4).style("opacity", 0).style("pointer-events", "none");
+  const labelDiffSlots = g.append("text").attr("class", "cursor-label diff-slots interaction-element").attr("font-size", "11px").attr("font-weight", "bold").style("opacity", 0).style("pointer-events", "none");
+
   function syncCursor(t) {
     const currentGraphView = getCurrentGraphView();
     if (t === null) {
@@ -616,6 +622,8 @@ function setupInteraction(
       circleAsignaciones.style("opacity", 0); labelAsignaciones.style("opacity", 0);
       circleDelay.style("opacity", 0); labelDelay.style("opacity", 0);
       circleWaitCarga.style("opacity", 0); labelWaitCarga.style("opacity", 0);
+      circleOrangeSlots.style("opacity", 0); labelOrangeSlots.style("opacity", 0);
+      circleDiffSlots.style("opacity", 0); labelDiffSlots.style("opacity", 0);
       d3.select("#gantt-chart svg line.cursor").style("opacity", 0);
       g.selectAll("circle.cursor-circle-plant").style("opacity", 0);
       g.selectAll("text.cursor-label-plant").style("opacity", 0);
@@ -637,6 +645,29 @@ function setupInteraction(
       labelCamiones.attr("x", xPos + 8).attr("y", yCam(envCamiones) - 5).text(envCamiones).style("opacity", 1);
     } else {
       circleCamiones.style("opacity", 0); labelCamiones.style("opacity", 0);
+    }
+
+    // Slots extra curves
+    if (window.currentOrangeData && yCam) {
+      const orangeVal = window.currentOrangeData.find(d => d.slot === t)?.value || 0;
+      if (orangeVal > 0 || envCamiones > 0) {
+        circleOrangeSlots.attr("cx", xPos).attr("cy", yCam(orangeVal)).style("opacity", 1);
+        labelOrangeSlots.attr("x", xPos + 8).attr("y", yCam(orangeVal) - 20).text(orangeVal).style("opacity", 1);
+        
+        const rawDiff = orangeVal - envCamiones;
+        const diffAbs = Math.abs(rawDiff);
+        const diffColor = rawDiff < 0 ? "red" : "green";
+        const diffSign = rawDiff < 0 ? "-" : "+";
+        
+        circleDiffSlots.attr("cx", xPos).attr("cy", yCam(diffAbs)).attr("fill", diffColor).style("opacity", 1);
+        labelDiffSlots.attr("x", xPos + 8).attr("y", yCam(diffAbs) + 12).attr("fill", diffColor).text(`${diffSign}${diffAbs}`).style("opacity", 1);
+      } else {
+        circleOrangeSlots.style("opacity", 0); labelOrangeSlots.style("opacity", 0);
+        circleDiffSlots.style("opacity", 0); labelDiffSlots.style("opacity", 0);
+      }
+    } else {
+      circleOrangeSlots.style("opacity", 0); labelOrangeSlots.style("opacity", 0);
+      circleDiffSlots.style("opacity", 0); labelDiffSlots.style("opacity", 0);
     }
 
     // 2. Colas (solo en recursos o colas sin dividir)
@@ -936,6 +967,16 @@ function setupInteraction(
     const t = Math.round(scales.x.invert(mx));
 
     syncCursor(t);
+
+    const store = typeof Alpine !== 'undefined' ? Alpine.store('filtros') : null;
+    const currentGanttView = store?.viewGantt || getCookie("viewGantt") || 'pedidos';
+
+    if (currentGanttView === 'slots') {
+      if (!selectedPedido.current) {
+        highlightPedido(null, mx, my, t);
+      }
+      return null;
+    }
 
     const capasReversa = [...getCapas()].reverse();
     const activa = findActiveLayer(capasReversa, t, my, scales);

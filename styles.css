@@ -546,3 +546,11 @@ body {
   background-color: #fff;
   color: #333;
 }
+/* Etiquetas del cursor interactivo */
+.cursor-label {
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+}
+

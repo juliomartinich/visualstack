@@ -1284,11 +1284,182 @@ function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scal
 
     layers = g.selectAll(".pedido"); 
   } else {
-    const area = createArea(scales);
-    layers = drawLayers(g, subsetPedidos, area, scales);
-    
-    if (currentGanttView === 'despachos_mix' || currentGanttView === 'almuerzo') {
-      drawOrangeCurve(g, subsetPedidos, scales, scales.y);
+    if (currentGanttView === 'slots') {
+      layers = g.selectAll(".pedido"); // No dibujamos los polígonos
+      
+      const orangeData = getAvailableTrucksCurveData(subsetPedidos);
+      window.currentOrangeData = orangeData; // Expose for interaction tooltip
+      if (orangeData && orangeData.length > 0) {
+        const blueData = orangeData.map(d => ({
+          slot: d.slot,
+          value: (currentMetrics.envolvente && currentMetrics.envolvente[d.slot]) ? currentMetrics.envolvente[d.slot] : 0
+        }));
+        
+        const diffData = orangeData.map(d => {
+          const rawValue = d.value - ((currentMetrics.envolvente && currentMetrics.envolvente[d.slot]) ? currentMetrics.envolvente[d.slot] : 0);
+          return {
+            slot: d.slot,
+            value: Math.abs(rawValue),
+            isNegative: rawValue < 0
+          };
+        });
+        
+        const lineGen = d3.line()
+          .x(d => scales.x(d.slot))
+          .y(d => scales.y(d.value))
+          .curve(d3.curveMonotoneX);
+          
+        // Línea Naranja (Disponibles)
+        g.append("path")
+          .datum(orangeData)
+          .attr("class", "slots-orange-curve")
+          .attr("d", lineGen)
+          .attr("fill", "none")
+          .attr("stroke", "orange")
+          .attr("stroke-width", 3.5)
+          .style("pointer-events", "none");
+          
+        // Línea Azul (Demanda + Almuerzos)
+        g.append("path")
+          .datum(blueData)
+          .attr("class", "slots-blue-curve")
+          .attr("d", lineGen)
+          .attr("fill", "none")
+          .attr("stroke", "blue")
+          .attr("stroke-width", 2.5)
+          .style("pointer-events", "none");
+          
+        // Línea Verde/Roja (Diferencia Absoluta segmentada)
+        const segments = [];
+        let currentSeg = [];
+        let currentIsNegative = diffData.length > 0 ? diffData[0].isNegative : false;
+
+        diffData.forEach(d => {
+          if (d.isNegative !== currentIsNegative) {
+            currentSeg.push(d); // Agregar punto actual al tramo anterior para conectarlos visualmente sin cortes
+            segments.push({ isNegative: currentIsNegative, data: currentSeg });
+            currentSeg = [d];
+            currentIsNegative = d.isNegative;
+          } else {
+            currentSeg.push(d);
+          }
+        });
+        if (currentSeg.length > 0) {
+          segments.push({ isNegative: currentIsNegative, data: currentSeg });
+        }
+
+        // Definir patrón de achurado rojo para el área
+        let defs = g.select("defs");
+        if (defs.empty()) {
+          defs = g.append("defs");
+        }
+        if (defs.select("#red-hatch").empty()) {
+          const pattern = defs.append("pattern")
+            .attr("id", "red-hatch")
+            .attr("patternUnits", "userSpaceOnUse")
+            .attr("width", 8)
+            .attr("height", 8);
+            
+          pattern.append("rect")
+            .attr("width", 8)
+            .attr("height", 8)
+            .attr("fill", "rgba(255, 0, 0, 0.15)"); // Fondo rojo claro
+            
+          pattern.append("path")
+            .attr("d", "M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4") // Líneas diagonales
+            .attr("stroke", "rgba(255, 0, 0, 0.4)")
+            .attr("stroke-width", 1);
+        }
+
+        const areaGen = d3.area()
+          .x(d => scales.x(d.slot))
+          .y0(scales.y(0)) // La base es 0
+          .y1(d => scales.y(d.value))
+          .curve(d3.curveMonotoneX);
+
+        segments.forEach((seg, i) => {
+          // Dibujar sombreado achurado si es negativo
+          if (seg.isNegative) {
+            g.append("path")
+              .datum(seg.data)
+              .attr("class", `slots-diff-area-${i}`)
+              .attr("d", areaGen)
+              .attr("fill", "url(#red-hatch)")
+              .style("pointer-events", "none");
+          }
+
+          // Dibujar la línea encima
+          g.append("path")
+            .datum(seg.data)
+            .attr("class", `slots-diff-curve-${i}`)
+            .attr("d", lineGen)
+            .attr("fill", "none")
+            .attr("stroke", seg.isNegative ? "red" : "green")
+            .attr("stroke-width", 4.5)
+            .style("pointer-events", "none");
+        });
+
+        // Leyenda
+        const legendG = g.append("g")
+          .attr("class", "slots-legend")
+          .attr("transform", "translate(20, 20)"); 
+          
+        legendG.append("rect")
+          .attr("fill", "rgba(255, 255, 255, 0.95)")
+          .attr("stroke", "#ccc")
+          .attr("stroke-width", 1)
+          .attr("rx", 6)
+          .attr("x", 0)
+          .attr("y", 0)
+          .attr("width", 190)
+          .attr("height", 90);
+          
+        const legendItems = [
+          { color: "orange", label: "Camiones", isLine: true },
+          { color: "blue", label: "Pedidos incluye Almuerzos", isLine: true },
+          { color: "green", label: "Disponibilidad", isLine: true },
+          { color: "url(#red-hatch)", stroke: "red", label: "Sobreprogramación", isLine: false }
+        ];
+        
+        let yOffset = 18;
+        legendItems.forEach(item => {
+          if (!item.isLine) {
+            legendG.append("rect")
+              .attr("x", 10)
+              .attr("y", yOffset - 7)
+              .attr("width", 16)
+              .attr("height", 8)
+              .attr("fill", item.color)
+              .attr("stroke", item.stroke)
+              .attr("stroke-width", 2);
+          } else {
+            legendG.append("line")
+              .attr("x1", 10)
+              .attr("x2", 26)
+              .attr("y1", yOffset - 3)
+              .attr("y2", yOffset - 3)
+              .attr("stroke", item.color)
+              .attr("stroke-width", 3.5);
+          }
+          
+          legendG.append("text")
+            .attr("x", 34)
+            .attr("y", yOffset)
+            .attr("font-size", "11px")
+            .attr("fill", "#333")
+            .text(item.label);
+            
+          yOffset += 20;
+        });
+      }
+    } else {
+      window.currentOrangeData = null;
+      const area = createArea(scales);
+      layers = drawLayers(g, subsetPedidos, area, scales);
+      
+      if (currentGanttView === 'despachos_mix' || currentGanttView === 'almuerzo') {
+        drawOrangeCurve(g, subsetPedidos, scales, scales.y);
+      }
     }
   }
 
@@ -1325,10 +1496,9 @@ function drawTopOverlay(svg, g, meta, scales, metrics, width, filterKey = "") {
     .attr("font-weight", 700).attr("fill", d => d.color).text(d => d.value);
 } 
 
-function drawOrangeCurve(gElement, subsetPedidos, scales, yScale) {
-  const y = yScale || scales.y;
+function getAvailableTrucksCurveData(subsetPedidos) {
   const selectedDate = window.selectedDate;
-  if (!selectedDate) return;
+  if (!selectedDate) return [];
   
   // Obtener las plantas permitidas en base a los pedidos de la vista
   const permitidas = Array.from(new Set(subsetPedidos.map(p => p.Planta)));
@@ -1414,6 +1584,14 @@ function drawOrangeCurve(gElement, subsetPedidos, scales, yScale) {
     });
     curveData.push({ slot: s, value: activeCount });
   }
+  return curveData;
+}
+
+function drawOrangeCurve(gElement, subsetPedidos, scales, yScale) {
+  const y = yScale || scales.y;
+  const curveData = getAvailableTrucksCurveData(subsetPedidos);
+  if (!curveData || curveData.length === 0) return;
+
   
   // Dibujar la curva naranja gruesa
   const lineGen = d3.line()
