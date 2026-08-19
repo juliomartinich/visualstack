@@ -1,4 +1,4 @@
-function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, activeSuffixes, granularidadMin, colorTheme, globalYMax) {
+function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, activeSuffixes, formattedLabels, granularidadMin, colorTheme, globalYMax) {
   const container = d3.select(containerSelector);
   const svg = d3.select(svgSelector);
   svg.selectAll("*").remove(); // Limpiar gráfico anterior
@@ -132,7 +132,63 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
       .attr("stroke-dasharray", dashArrays[index] || null)
       .attr("d", envelopeLine);
   }
+  // 5.5. Dibujar Leyenda dentro del Gráfico (Superior Derecha)
+  const legendG = g.append("g")
+    .attr("class", "chart-legend")
+    .attr("transform", `translate(${innerW - 215}, 10)`);
 
+  // Filtro de Sombra para el cuadro de leyenda
+  const defs = svg.append("defs");
+  const filter = defs.append("filter")
+    .attr("id", "legend-shadow")
+    .attr("x", "-15%")
+    .attr("y", "-15%")
+    .attr("width", "130%")
+    .attr("height", "130%");
+
+  filter.append("feDropShadow")
+    .attr("dx", 1.5)
+    .attr("dy", 1.5)
+    .attr("stdDeviation", 2)
+    .attr("flood-opacity", 0.15)
+    .attr("flood-color", "#000000");
+
+  legendG.append("rect")
+    .attr("width", 200)
+    .attr("height", 85)
+    .attr("fill", "rgba(255, 255, 255, 0.90)")
+    .attr("stroke", "#e2e8f0") // gris suave
+    .attr("stroke-width", 1)
+    .attr("rx", 4)
+    .attr("filter", "url(#legend-shadow)");
+
+  activeSuffixes.forEach((suffix, index) => {
+    const yPos = 16 + index * 18;
+    const label = formattedLabels[index] || "";
+
+    // Muestra de línea
+    legendG.append("line")
+      .attr("x1", 12)
+      .attr("x2", 37)
+      .attr("y1", yPos)
+      .attr("y2", yPos)
+      .attr("stroke", colors[index] || "#999")
+      .attr("stroke-width", strokeWidths[index] || 1)
+      .attr("stroke-dasharray", dashArrays[index] || null);
+
+    // Texto de leyenda
+    const textNode = legendG.append("text")
+      .attr("x", 44)
+      .attr("y", yPos + 3.5)
+      .attr("fill", label.includes("(No disp.)") ? "#ef4444" : "#334155")
+      .attr("font-family", "sans-serif")
+      .attr("font-size", "10px")
+      .text(label);
+
+    if (index === 0) {
+      textNode.attr("font-weight", "bold");
+    }
+  });
   // 6. Capa de Interacción y Cursor Multicapa
   const interactionG = g.append("g").attr("class", "interaction-layer");
 

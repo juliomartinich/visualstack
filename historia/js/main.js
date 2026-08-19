@@ -382,7 +382,13 @@ document.addEventListener('alpine:init', () => {
         // 5. Redibujar D3 en el único gráfico global superpuesto
         this.$nextTick(() => {
           const colorTheme = this.activeMode === 'pedidos' ? 'blue' : 'green';
-          drawMultiTruckChart("#chart-global", "#chart-container-global", resultsBySuffix, this.activeSuffixes, granularidadMin, colorTheme, globalYMax);
+          const formattedLabels = this.activeSuffixes.map((suffix, index) => {
+            const formatted = this.formatToDddDdMmm(suffix);
+            const label = index === 0 ? " (Mismo día)" : ` (-${index} día/s)`;
+            const disp = this.hasDataForSuffix(suffix) ? "" : " (No disp.)";
+            return `${formatted}${label}${disp}`;
+          });
+          drawMultiTruckChart("#chart-global", "#chart-container-global", resultsBySuffix, this.activeSuffixes, formattedLabels, granularidadMin, colorTheme, globalYMax);
         });
 
         this.loading = false;
