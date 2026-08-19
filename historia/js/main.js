@@ -13,18 +13,22 @@ document.addEventListener('alpine:init', () => {
     activeMode: 'pedidos', // 'pedidos' o 'tickets'
     
     // Selectores
-    selectedCaptura: '',
     selectedPedidosDate: '',
     selectedTicketsDate: '',
+    selectedCaptura: '',
     selectedPlanta: '',
 
     // Colecciones de datos
-    capturaDates: [],
-    orderDates: [],
-    ticketDates: [],
+    capturaDates: [],      // Todos los sufijos disponibles en index.json
+    orderDates: [],        // Todas las fechas únicas de Pedidos a nivel global
+    ticketDates: [],       // Todas las fechas únicas de Tickets a nivel global
+    availableCapturas: [], // Sufijos válidos para la fecha seleccionada y modo activo
     plantasOptions: [],
     activePlants: [],
     isSplit: false,
+    
+    // Memoria caché de datos en bruto cargados al inicio
+    rawCapturas: {}, // { suffix: { pedidosRaw, ticketsRaw, orderDates, ticketDates } }
     
     fullPedidos: [],
     metrics: {
@@ -32,20 +36,20 @@ document.addEventListener('alpine:init', () => {
       volConfirmado: 0
     },
 
-    // Formateadores
     formatToDddDdMmm(dateStr) {
       if (!dateStr) return '';
+      const dateVal = String(dateStr);
       let y, m, d;
-      if (dateStr.length === 8) { // YYYYMMDD
-        y = Number(dateStr.slice(0, 4));
-        m = Number(dateStr.slice(4, 6)) - 1;
-        d = Number(dateStr.slice(6, 8));
-      } else if (dateStr.length === 6) { // YYMMDD
-        y = 2000 + Number(dateStr.slice(0, 2));
-        m = Number(dateStr.slice(2, 4)) - 1;
-        d = Number(dateStr.slice(4, 6));
+      if (dateVal.length === 8) { // YYYYMMDD
+        y = Number(dateVal.slice(0, 4));
+        m = Number(dateVal.slice(4, 6)) - 1;
+        d = Number(dateVal.slice(6, 8));
+      } else if (dateVal.length === 6) { // YYMMDD
+        y = 2000 + Number(dateVal.slice(0, 2));
+        m = Number(dateVal.slice(2, 4)) - 1;
+        d = Number(dateVal.slice(4, 6));
       } else {
-        return dateStr;
+        return dateVal;
       }
       const date = new Date(y, m, d);
       const dias = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -68,145 +72,138 @@ document.addEventListener('alpine:init', () => {
     async init() {
       this.loading = true;
       try {
-        // 1. Cargar el index de archivos json disponibles
+        // 1. Cargar configuración de plantas compartida
+        window.plantasData = await fetchSafeJson(`../data/plantas.json?v=${Date.now()}`).catch(() => ({}));
+
+        // 2. Cargar el index de capturas disponibles
         const index = await fetchSafeJson(`data/index.json?v=${Date.now()}`);
-        this.capturaDates = index.sort().reverse(); // De más reciente a más antiguo
-        
-        if (this.capturaDates.length > 0) {
-          this.selectedCaptura = this.capturaDates[0];
-          await this.cambiarCaptura();
-        } else {
+        this.capturaDates = index.sort().reverse();
+
+        if (this.capturaDates.length === 0) {
           this.loading = false;
+          return;
         }
-      } catch (err) {
-        console.error('Error al cargar index.json:', err);
-        this.loading = false;
-      }
-    },
 
-    async cambiarCaptura() {
-      this.loading = true;
-      try {
-        // 2. Cargar Pedidos, Tickets y Plantas correspondientes
-        const suffix = this.selectedCaptura;
-        const [pedidosData, ticketsData, plantasData] = await Promise.all([
-          fetchSafeJson(`data/Pedidos_${suffix}.json?v=${Date.now()}`).catch(err => { console.error("Error cargando Pedidos:", err); return { pedidos: {} }; }),
-          fetchSafeJson(`data/Tickets_${suffix}.json?v=${Date.now()}`).catch(err => { console.error("Error cargando Tickets:", err); return { Ticket: {} }; }),
-          fetchSafeJson(`../data/plantas.json?v=${Date.now()}`).catch(err => { console.error("Error cargando Plantas:", err); return {}; })
-        ]);
-
-        console.log("--- Depuración de carga ---");
-        console.log("Sufijo captura:", suffix);
-        console.log("Pedidos cargados:", Object.keys(pedidosData.pedidos || {}).length);
-        console.log("Tickets cargados:", Object.keys(ticketsData.Ticket || {}).length);
-        console.log("Plantas cargadas:", Object.keys(plantasData).length);
-
-        window.ticketsData = ticketsData.Ticket || {};
-        window.plantasData = plantasData;
-
-        // Configuración de granularidad por defecto
-        const granularidadMin = 5;
-
-        // 3. Procesar y enriquecer Pedidos con la lógica core de dataUtils.js
-        this.fullPedidos = Object.entries(pedidosData.pedidos || {})
-          .filter(([id]) => id !== "dummy")
-          .map(([id, p]) => {
-            const pedidoNeg = extendPedidoNegocio(p, id, plantasData);
-            const XG = extendPedidoXG(pedidoNeg, granularidadMin);
-            const MaxCamiones = XG.demanda.length ? Math.max(...XG.demanda) : 0;
-            const result = { ...pedidoNeg, id, XG, MaxCamiones };
+        // 3. Cargar TODOS los archivos de Pedidos y Tickets en paralelo
+        const loadPromises = this.capturaDates.map(async (suffix) => {
+          try {
+            const [pedRaw, tickRaw] = await Promise.all([
+              fetchSafeJson(`data/Pedidos_${suffix}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
+              fetchSafeJson(`data/Tickets_${suffix}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
+            ]);
             
-            // Despachos teóricos
-            result.despachos = calculateDespachosForPedido(result, granularidadMin);
+            // Extraer fechas únicas para esta captura
+            const pDates = [...new Set(
+              Object.values(pedRaw.pedidos || {})
+                .filter(p => p !== "dummy" && p["Fecha Pedido"])
+                .map(p => String(p["Fecha Pedido"]))
+            )];
 
-            // Despachos reales
-            const orderTickets = Object.entries(window.ticketsData)
-              .filter(([tId, t]) => String(t.Pedido) === id)
-              .map(([tId, t]) => ({ ...t, ticketId: tId }));
-            
-            result.realDespachos = calculateRealDespachosForPedido(result, orderTickets, granularidadMin);
-            result.CantRealDespachos = result.realDespachos.filter(d => !d.isAnulado).length;
-            
-            return result;
-          });
+            // Extraer fechas únicas de tickets para esta captura
+            const tDatesSet = new Set();
+            Object.values(tickRaw.Ticket || {}).forEach(t => {
+              const ped = pedRaw.pedidos && pedRaw.pedidos[t.Pedido];
+              if (ped && ped["Fecha Pedido"]) {
+                tDatesSet.add(String(ped["Fecha Pedido"]));
+              } else {
+                tDatesSet.add(`20${suffix}`);
+              }
+            });
 
-        // Enriquecimiento para la fecha
-        enrichPedidosForDate(this.fullPedidos);
-
-        // Agrupar plantas por grupo de despacho (window.grupos)
-        window.grupos = {};
-        Object.entries(plantasData).forEach(([code, p]) => {
-          const g = p.grupo_despacho;
-          if (g) {
-            if (!window.grupos[g]) window.grupos[g] = [];
-            window.grupos[g].push(code);
+            return {
+              suffix,
+              pedidosRaw: pedRaw,
+              ticketsRaw: tickRaw,
+              orderDates: pDates,
+              ticketDates: [...tDatesSet]
+            };
+          } catch (err) {
+            console.error(`Error al cargar datos del sufijo ${suffix}:`, err);
+            return null;
           }
         });
 
-        // 4. Extraer fechas únicas de Pedidos
-        this.orderDates = [...new Set(this.fullPedidos.map(p => p["Fecha Pedido"]))].sort().reverse();
-        console.log("Fechas de Pedidos extraídas:", this.orderDates);
-
-        // 5. Extraer fechas únicas de Tickets/Despachos
-        const ticketDatesSet = new Set();
-        Object.values(window.ticketsData).forEach(t => {
-          const ped = this.fullPedidos.find(p => String(p.id) === String(t.Pedido));
-          if (ped && ped["Fecha Pedido"]) {
-            ticketDatesSet.add(ped["Fecha Pedido"]);
-          } else {
-            // Fallback: usar fecha de captura
-            const captureYYYYMMDD = `20${suffix.slice(0,2)}${suffix.slice(2,4)}${suffix.slice(4,6)}`;
-            ticketDatesSet.add(captureYYYYMMDD);
-          }
-        });
-        this.ticketDates = [...ticketDatesSet].sort().reverse();
-        console.log("Fechas de Tickets extraídas:", this.ticketDates);
-
-        // Definir valores por defecto para fechas
-        const expectedDate = `20${suffix.slice(0,2)}${suffix.slice(2,4)}${suffix.slice(4,6)}`;
+        const loaded = await Promise.all(loadPromises);
         
-        this.selectedPedidosDate = this.orderDates.includes(expectedDate) 
-          ? expectedDate 
-          : (this.orderDates[0] || '');
+        // Almacenar en caché y extraer colecciones globales
+        const globalOrderDatesSet = new Set();
+        const globalTicketDatesSet = new Set();
 
-        this.selectedTicketsDate = this.ticketDates.includes(expectedDate) 
-          ? expectedDate 
-          : (this.ticketDates[0] || '');
+        loaded.forEach(item => {
+          if (item) {
+            this.rawCapturas[item.suffix] = item;
+            item.orderDates.forEach(d => globalOrderDatesSet.add(d));
+            item.ticketDates.forEach(d => globalTicketDatesSet.add(d));
+          }
+        });
 
-        // Seleccionar modo por defecto
-        if (this.activeMode === 'pedidos') {
-          await this.selectPedidosMode();
-        } else {
-          await this.selectTicketsMode();
-        }
+        this.orderDates = [...globalOrderDatesSet].sort().reverse();
+        this.ticketDates = [...globalTicketDatesSet].sort().reverse();
+
+        // Valores por defecto
+        if (this.orderDates.length > 0) this.selectedPedidosDate = this.orderDates[0];
+        if (this.ticketDates.length > 0) this.selectedTicketsDate = this.ticketDates[0];
+
+        // Inicializar en modo pedidos
+        await this.selectPedidosMode();
+
       } catch (err) {
-        console.error('Error al procesar los datos de captura:', err);
+        console.error('Error al inicializar la aplicación:', err);
         this.loading = false;
       }
     },
 
     async selectPedidosMode() {
       this.activeMode = 'pedidos';
-      if (!this.selectedPedidosDate && this.orderDates.length > 0) {
-        this.selectedPedidosDate = this.orderDates[0];
+      
+      // Filtrar capturas disponibles que contienen la fecha de pedidos elegida
+      const targetDate = this.selectedPedidosDate;
+      this.availableCapturas = this.capturaDates.filter(suffix => {
+        const item = this.rawCapturas[suffix];
+        return item && item.orderDates.includes(targetDate);
+      });
+
+      // Seleccionar captura más reciente por defecto
+      if (this.availableCapturas.length > 0) {
+        if (!this.availableCapturas.includes(this.selectedCaptura)) {
+          this.selectedCaptura = this.availableCapturas[0];
+        }
+      } else {
+        this.selectedCaptura = '';
       }
-      this.updatePlantasOptions(this.selectedPedidosDate);
+
       await this.filtrarYRedibujar();
     },
 
     async selectTicketsMode() {
       this.activeMode = 'tickets';
-      if (!this.selectedTicketsDate && this.ticketDates.length > 0) {
-        this.selectedTicketsDate = this.ticketDates[0];
+      
+      // Filtrar capturas disponibles que contienen la fecha de tickets elegida
+      const targetDate = this.selectedTicketsDate;
+      this.availableCapturas = this.capturaDates.filter(suffix => {
+        const item = this.rawCapturas[suffix];
+        return item && item.ticketDates.includes(targetDate);
+      });
+
+      // Seleccionar captura más reciente por defecto
+      if (this.availableCapturas.length > 0) {
+        if (!this.availableCapturas.includes(this.selectedCaptura)) {
+          this.selectedCaptura = this.availableCapturas[0];
+        }
+      } else {
+        this.selectedCaptura = '';
       }
-      this.updatePlantasOptions(this.selectedTicketsDate);
+
+      await this.filtrarYRedibujar();
+    },
+
+    async cambiarCaptura() {
       await this.filtrarYRedibujar();
     },
 
     updatePlantasOptions(date) {
       if (!date) return;
       
-      // Calcular volumen por planta para esta fecha
       const plantVolumes = {};
       this.fullPedidos
         .filter(p => p["Fecha Pedido"] === date)
@@ -224,7 +221,6 @@ document.addEventListener('alpine:init', () => {
 
       const options = [];
       
-      // Agregar Grupos y sus Plantas
       Array.from(groups).sort().forEach(g => {
         const gPlants = window.grupos[g] || [];
         const activeGPlants = gPlants.filter(p => activePlants.includes(p)).sort();
@@ -239,7 +235,6 @@ document.addEventListener('alpine:init', () => {
         });
       });
 
-      // Plantas sin grupo
       activePlants.forEach(pCode => {
         const g = window.plantasData[pCode]?.grupo_despacho;
         if (!g) {
@@ -251,7 +246,6 @@ document.addEventListener('alpine:init', () => {
 
       this.plantasOptions = options;
 
-      // Seleccionar opción por defecto si la actual no es válida
       if (options.length > 0) {
         const exists = options.some(o => o.id === this.selectedPlanta);
         if (!exists) {
@@ -264,42 +258,88 @@ document.addEventListener('alpine:init', () => {
 
     async filtrarYRedibujar() {
       this.loading = true;
-      await new Promise(r => setTimeout(r, 100)); // animación de carga
+      
+      const date = this.activeMode === 'pedidos' ? this.selectedPedidosDate : this.selectedTicketsDate;
+      const suffix = this.selectedCaptura;
+
+      if (!date || !suffix || !this.rawCapturas[suffix]) {
+        this.fullPedidos = [];
+        this.metrics = { volumenT: 0, volConfirmado: 0 };
+        this.isSplit = false;
+        this.loading = false;
+        return;
+      }
 
       try {
-        const date = this.activeMode === 'pedidos' ? this.selectedPedidosDate : this.selectedTicketsDate;
-        if (!date || !this.selectedPlanta) {
-          this.loading = false;
-          return;
-        }
+        const cacheItem = this.rawCapturas[suffix];
+        const pedidosData = cacheItem.pedidosRaw;
+        window.ticketsData = cacheItem.ticketsRaw.Ticket || {};
+
+        const granularidadMin = 5;
+
+        // Procesar y enriquecer la captura seleccionada en memoria
+        this.fullPedidos = Object.entries(pedidosData.pedidos || {})
+          .filter(([id]) => id !== "dummy")
+          .map(([id, p]) => {
+            const pedidoNeg = extendPedidoNegocio(p, id, window.plantasData);
+            const XG = extendPedidoXG(pedidoNeg, granularidadMin);
+            const MaxCamiones = XG.demanda.length ? Math.max(...XG.demanda) : 0;
+            const result = { ...pedidoNeg, id, XG, MaxCamiones };
+            
+            result.despachos = calculateDespachosForPedido(result, granularidadMin);
+
+            const orderTickets = Object.entries(window.ticketsData)
+              .filter(([tId, t]) => String(t.Pedido) === id)
+              .map(([tId, t]) => ({ ...t, ticketId: tId }));
+            
+            result.realDespachos = calculateRealDespachosForPedido(result, orderTickets, granularidadMin);
+            result.CantRealDespachos = result.realDespachos.filter(d => !d.isAnulado).length;
+            
+            return result;
+          });
+
+        enrichPedidosForDate(this.fullPedidos);
+
+        // Actualizar window.grupos
+        window.grupos = {};
+        Object.entries(window.plantasData).forEach(([code, p]) => {
+          const g = p.grupo_despacho;
+          if (g) {
+            if (!window.grupos[g]) window.grupos[g] = [];
+            window.grupos[g].push(code);
+          }
+        });
+
+        // Actualizar plantas dropdown
+        this.updatePlantasOptions(date);
 
         // Obtener plantas permitidas
         let permitidas = [];
-        const filterParts = this.selectedPlanta.split(':');
-        const filterType = filterParts[0];
-        const filterVal = filterParts[1];
-
-        if (filterType === 'Grupo') {
-          permitidas = window.grupos[filterVal] || [];
-        } else {
-          permitidas = [filterVal];
+        if (this.selectedPlanta) {
+          const filterParts = this.selectedPlanta.split(':');
+          const filterType = filterParts[0];
+          const filterVal = filterParts[1];
+          if (filterType === 'Grupo') {
+            permitidas = window.grupos[filterVal] || [];
+          } else {
+            permitidas = [filterVal];
+          }
         }
 
-        // Filtrar pedidos base
         const baseOrders = this.fullPedidos.filter(p => p["Fecha Pedido"] === date && permitidas.includes(p.Planta));
 
-        // Calcular volumen total y volumen confirmado en base a los pedidos
+        // Calcular volumenes
         this.metrics = {
           volumenT: Math.round(d3.sum(baseOrders, p => p.CantProgramada || 0)),
           volConfirmado: Math.round(d3.sum(baseOrders.filter(p => p.Confirmado === "SI"), p => p.CantProgramada || 0))
         };
 
-        // Identificar si debemos usar Split (Grupo con más de 1 planta con pedidos/tickets activos)
         const activePlantsWithData = permitidas.filter(pCode => 
           baseOrders.some(p => p.Planta === pCode)
         );
 
-        if (filterType === 'Grupo' && activePlantsWithData.length > 1) {
+        const isGroup = this.selectedPlanta && this.selectedPlanta.startsWith("Grupo:");
+        if (isGroup && activePlantsWithData.length > 1) {
           this.isSplit = true;
           this.activePlants = activePlantsWithData;
         } else {
@@ -307,9 +347,8 @@ document.addEventListener('alpine:init', () => {
           this.activePlants = [];
         }
 
-        // Dibujar en el próximo ciclo de render de Alpine
+        // Redibujar D3
         this.$nextTick(() => {
-          const granularidadMin = 5;
           const colorTheme = this.activeMode === 'pedidos' ? 'blue' : 'green';
 
           if (this.isSplit) {
@@ -323,10 +362,7 @@ document.addEventListener('alpine:init', () => {
                 dataToStack = plantOrders.flatMap(p => (p.realDespachos || []).map(d => ({ ...d, parentPedido: p })));
               }
 
-              // Calcular la simulación de camiones
               const stackResult = buildStack(dataToStack);
-
-              // Dibujar gráfico individual por planta
               drawTruckChart(`#chart-${pCode}`, `#chart-container-${pCode}`, stackResult, dataToStack, granularidadMin, colorTheme);
             });
           } else {
@@ -337,10 +373,7 @@ document.addEventListener('alpine:init', () => {
               dataToStack = baseOrders.flatMap(p => (p.realDespachos || []).map(d => ({ ...d, parentPedido: p })));
             }
 
-            // Calcular simulación global
             const stackResult = buildStack(dataToStack);
-
-            // Dibujar gráfico global
             drawTruckChart("#chart-global", "#chart-container-global", stackResult, dataToStack, granularidadMin, colorTheme);
           }
         });
