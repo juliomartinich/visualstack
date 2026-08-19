@@ -21,26 +21,13 @@
         style="display: flex; justify-content: space-between; align-items: center; width: 1260px; padding-left: 50px; padding-right: 20px; box-sizing: border-box; height: 35px; font-family: sans-serif; font-size: 11px;">
         
         <div style="display: flex; align-items: center; gap: 10px;">
-          <!-- Combo 2: Pedidos -->
+          <!-- Combo 2: Día (Pedidos o Despachos) -->
           <div style="display: flex; align-items: center; gap: 4px;">
-            <select x-model="selectedPedidosDate" @change="selectPedidosMode()"
-              style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer;"
-              :style="activeMode === 'pedidos' ? 'border-color: #0066cc; background-color: #e1f5fe;' : 'background: white;'">
-              <option value="">Seleccionar Pedidos...</option>
-              <template x-for="date in orderDates" :key="date">
-                <option :value="date" x-text="'Pedidos: ' + formatToDddDdMmm(date)"></option>
-              </template>
-            </select>
-          </div>
-
-          <!-- Combo 3: Despachos -->
-          <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
-            <select x-model="selectedTicketsDate" @change="selectTicketsMode()"
-              style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer;"
-              :style="activeMode === 'tickets' ? 'border-color: #2e7d32; background-color: #e8f5e9;' : 'background: white;'">
-              <option value="">Seleccionar Despachos...</option>
-              <template x-for="date in ticketDates" :key="date">
-                <option :value="date" x-text="'Despachos: ' + formatToDddDdMmm(date)"></option>
+            <select x-model="selectedPedidosDate" @change="cambiarDia()"
+              style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; background: white;">
+              <option value="">Seleccionar Día...</option>
+              <template x-for="date in (activeMode === 'pedidos' ? orderDates : ticketDates)" :key="date">
+                <option :value="date" x-text="'Día: ' + formatToDddDdMmm(date)"></option>
               </template>
             </select>
           </div>
@@ -52,6 +39,16 @@
               <template x-for="date in availableCapturas" :key="date">
                 <option :value="date" x-text="'Archivo: ' + formatToDddDdMmm(date)"></option>
               </template>
+            </select>
+          </div>
+
+          <!-- Combo 3: Modo -->
+          <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
+            <select x-model="activeMode" @change="cambiarModo()"
+              style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer;"
+              :style="activeMode === 'pedidos' ? 'border-color: #0066cc; background-color: #e1f5fe;' : 'border-color: #2e7d32; background-color: #e8f5e9;'">
+              <option value="pedidos">Modo: Pedidos</option>
+              <option value="tickets">Modo: Despachos</option>
             </select>
           </div>
 

@@ -141,11 +141,14 @@ document.addEventListener('alpine:init', () => {
         this.ticketDates = [...globalTicketDatesSet].sort().reverse();
 
         // Valores por defecto
-        if (this.orderDates.length > 0) this.selectedPedidosDate = this.orderDates[0];
-        if (this.ticketDates.length > 0) this.selectedTicketsDate = this.ticketDates[0];
+        if (this.orderDates.length > 0) {
+          this.selectedPedidosDate = this.orderDates[0];
+        }
 
         // Inicializar en modo pedidos
-        await this.selectPedidosMode();
+        this.activeMode = 'pedidos';
+        this.actualizarCapturasDisponibles();
+        await this.filtrarYRedibujar();
 
       } catch (err) {
         console.error('Error al inicializar la aplicación:', err);
@@ -153,17 +156,16 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    async selectPedidosMode() {
-      this.activeMode = 'pedidos';
-      
-      // Filtrar capturas disponibles que contienen la fecha de pedidos elegida
+    actualizarCapturasDisponibles() {
       const targetDate = this.selectedPedidosDate;
       this.availableCapturas = this.capturaDates.filter(suffix => {
         const item = this.rawCapturas[suffix];
-        return item && item.orderDates.includes(targetDate);
+        if (!item) return false;
+        return this.activeMode === 'pedidos' 
+          ? item.orderDates.includes(targetDate)
+          : item.ticketDates.includes(targetDate);
       });
 
-      // Seleccionar captura más reciente por defecto
       if (this.availableCapturas.length > 0) {
         if (!this.availableCapturas.includes(this.selectedCaptura)) {
           this.selectedCaptura = this.availableCapturas[0];
@@ -171,29 +173,22 @@ document.addEventListener('alpine:init', () => {
       } else {
         this.selectedCaptura = '';
       }
+    },
 
+    async cambiarDia() {
+      this.actualizarCapturasDisponibles();
       await this.filtrarYRedibujar();
     },
 
-    async selectTicketsMode() {
-      this.activeMode = 'tickets';
+    async cambiarModo() {
+      const targetDate = this.selectedPedidosDate;
+      const validDates = this.activeMode === 'pedidos' ? this.orderDates : this.ticketDates;
       
-      // Filtrar capturas disponibles que contienen la fecha de tickets elegida
-      const targetDate = this.selectedTicketsDate;
-      this.availableCapturas = this.capturaDates.filter(suffix => {
-        const item = this.rawCapturas[suffix];
-        return item && item.ticketDates.includes(targetDate);
-      });
-
-      // Seleccionar captura más reciente por defecto
-      if (this.availableCapturas.length > 0) {
-        if (!this.availableCapturas.includes(this.selectedCaptura)) {
-          this.selectedCaptura = this.availableCapturas[0];
-        }
-      } else {
-        this.selectedCaptura = '';
+      if (!validDates.includes(targetDate)) {
+        this.selectedPedidosDate = validDates[0] || '';
       }
-
+      
+      this.actualizarCapturasDisponibles();
       await this.filtrarYRedibujar();
     },
 
@@ -259,7 +254,7 @@ document.addEventListener('alpine:init', () => {
     async filtrarYRedibujar() {
       this.loading = true;
       
-      const date = this.activeMode === 'pedidos' ? this.selectedPedidosDate : this.selectedTicketsDate;
+      const date = this.selectedPedidosDate;
       const suffix = this.selectedCaptura;
 
       if (!date || !suffix || !this.rawCapturas[suffix]) {
