@@ -32,15 +32,6 @@
             </select>
           </div>
 
-          <!-- Combo 1: Captura -->
-          <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
-            <select x-model="selectedCaptura" @change="cambiarCaptura()"
-              style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; background: white;">
-              <template x-for="date in availableCapturas" :key="date">
-                <option :value="date" x-text="'Archivo: ' + formatToDddDdMmm(date)"></option>
-              </template>
-            </select>
-          </div>
 
           <!-- Combo 3: Modo -->
           <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
@@ -80,31 +71,25 @@
         Cargando datos...
       </div>
 
-      <!-- Contenedor de Gráficos -->
-      <div x-show="!loading" style="width: 1260px; position: relative;">
+      <!-- Contenedor de Gráficos (4 versiones comparadas) -->
+      <!-- Contenedor del Gráfico Único Superpuesto -->
+      <div x-show="!loading" style="width: 1260px; position: relative; background: white; padding: 15px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+        <!-- Leyenda de las Curvas -->
+        <div style="display: flex; gap: 20px; font-family: sans-serif; font-size: 11px; padding-left: 50px; margin-bottom: 15px;">
+          <template x-for="(suffix, index) in activeSuffixes" :key="suffix">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <!-- Línea de muestra de leyenda estilizada por JS -->
+              <span :style="getLegendLineStyle(index)"></span>
+              <span style="font-weight: bold; color: #333;" x-text="formatToDddDdMmm(suffix)"></span>
+              <span style="color: #666;" x-text="index === 0 ? '(Mismo día)' : `(-${index} día/s)`"></span>
+              <span x-show="!hasDataForSuffix(suffix)" style="color: #ef4444; font-size: 10px; font-weight: normal;">(No disp.)</span>
+            </div>
+          </template>
+        </div>
         
-        <!-- Modo Split -->
-        <template x-if="isSplit">
-          <div style="display: flex; flex-direction: column;">
-            <template x-for="plant in activePlants" :key="plant">
-              <div style="border-bottom: 1px solid #eee; padding: 10px 0; background: white;">
-                <div style="font-family: sans-serif; font-size: 11px; font-weight: bold; color: #333; padding-left: 50px; margin-bottom: 5px;">
-                  Planta: <span x-text="getPlantName(plant)" style="color: #0066cc;"></span>
-                </div>
-                <div :id="'chart-container-' + plant" style="position: relative; width: 1260px; height: 280px;">
-                  <svg :id="'chart-' + plant" width="1260" height="280"></svg>
-                </div>
-              </div>
-            </template>
-          </div>
-        </template>
-
-        <!-- Modo Single (Global) -->
-        <template x-if="!isSplit">
-          <div style="position: relative; width: 1260px; height: 490px;" id="chart-container-global">
-            <svg id="chart-global" width="1260" height="490"></svg>
-          </div>
-        </template>
+        <div id="chart-container-global" style="position: relative; width: 1260px; height: 450px;">
+          <svg id="chart-global" width="1260" height="450"></svg>
+        </div>
         
         <!-- Tooltip flotante -->
         <div id="chart-tooltip" class="tooltip" style="display: none;"></div>
