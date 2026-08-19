@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Stack de Demanda de Camiones - Nueva App</title>
+  
+  <!-- D3.js -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  
+  <!-- CSS (importa versiondesa) -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body x-data="appState">
+  <div id="app-layout">
+    <div id="chart-container" style="position: relative; border-bottom: 2px solid #eee; width: 1260px;">
+      
+      <!-- Fila de Controles Superior (Idéntica a versiondesa) -->
+      <div id="header-date-container"
+        style="display: flex; justify-content: space-between; align-items: center; width: 1260px; padding-left: 50px; padding-right: 20px; box-sizing: border-box; height: 35px; font-family: sans-serif; font-size: 11px;">
+        
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <!-- Combo 1: Captura -->
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <select x-model="selectedCaptura" @change="cambiarCaptura()"
+              style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; background: white;">
+              <template x-for="date in capturaDates" :key="date">
+                <option :value="date" x-text="'Archivo: ' + formatToDddDdMmm(date)"></option>
+              </template>
+            </select>
+          </div>
+
+          <!-- Combo 2: Pedidos -->
+          <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
+            <select x-model="selectedPedidosDate" @change="selectPedidosMode()"
+              style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer;"
+              :style="activeMode === 'pedidos' ? 'border-color: #0066cc; background-color: #e1f5fe;' : 'background: white;'">
+              <option value="">Seleccionar Pedidos...</option>
+              <template x-for="date in orderDates" :key="date">
+                <option :value="date" x-text="'Pedidos: ' + formatToDddDdMmm(date)"></option>
+              </template>
+            </select>
+          </div>
+
+          <!-- Combo 3: Despachos -->
+          <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
+            <select x-model="selectedTicketsDate" @change="selectTicketsMode()"
+              style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer;"
+              :style="activeMode === 'tickets' ? 'border-color: #2e7d32; background-color: #e8f5e9;' : 'background: white;'">
+              <option value="">Seleccionar Despachos...</option>
+              <template x-for="date in ticketDates" :key="date">
+                <option :value="date" x-text="'Despachos: ' + formatToDddDdMmm(date)"></option>
+              </template>
+            </select>
+          </div>
+
+          <!-- Combo 4: Planta -->
+          <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
+            <label style="font-weight: 600; color: #555;">Planta:</label>
+            <select x-model="selectedPlanta" @change="filtrarYRedibujar()"
+              style="font-size: 11px; padding: 1px 3px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; background: white;">
+              <template x-for="p in plantasOptions" :key="p.id">
+                <option :value="p.id" x-text="p.label"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+
+        <!-- Volúmenes y Modo (Derecha) -->
+        <div style="font-size: 11px; color: #333; font-weight: 600; font-family: sans-serif;">
+          Volumen: <span x-text="`${metrics.volumenT} m3`"></span>
+          <span style="font-size: 10px; color: #555; font-weight: normal;"
+            x-text="`, Confirmado: ${metrics.volConfirmado} m3`"></span>
+          <span class="badge" :class="activeMode" x-text="activeMode === 'pedidos' ? 'Pedidos' : 'Despachos'"
+            style="font-size: 9px; font-weight: bold; padding: 1px 5px; border-radius: 3px; margin-left: 8px; text-transform: uppercase;"></span>
+        </div>
+
+      </div>
+
+      <!-- Spinner de Carga -->
+      <div x-show="loading" style="display: flex; justify-content: center; align-items: center; height: 350px; font-family: sans-serif; font-size: 13px; color: #666;">
+        Cargando datos...
+      </div>
+
+      <!-- Contenedor de Gráficos -->
+      <div x-show="!loading" style="width: 1260px; position: relative;">
+        
+        <!-- Modo Split -->
+        <template x-if="isSplit">
+          <div style="display: flex; flex-direction: column;">
+            <template x-for="plant in activePlants" :key="plant">
+              <div style="border-bottom: 1px solid #eee; padding: 10px 0; background: white;">
+                <div style="font-family: sans-serif; font-size: 11px; font-weight: bold; color: #333; padding-left: 50px; margin-bottom: 5px;">
+                  Planta: <span x-text="getPlantName(plant)" style="color: #0066cc;"></span>
+                </div>
+                <div :id="'chart-container-' + plant" style="position: relative; width: 1260px; height: 280px;">
+                  <svg :id="'chart-' + plant" width="1260" height="280"></svg>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Modo Single (Global) -->
+        <template x-if="!isSplit">
+          <div style="position: relative; width: 1260px; height: 490px;" id="chart-container-global">
+            <svg id="chart-global" width="1260" height="490"></svg>
+          </div>
+        </template>
+        
+        <!-- Tooltip flotante -->
+        <div id="chart-tooltip" class="tooltip" style="display: none;"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CONFIG Y CORE REUTILIZADO (Rutas relativas a la carpeta raíz) -->
+  <script src="../js/config.js"></script>
+  <script src="../js/dataUtils.js"></script>
+  <script src="../js/stackUtils.js"></script>
+
+  <!-- LÓGICA DE LA NUEVA APP -->
+  <script src="js/main.js"></script>
+  <script src="js/chart.js"></script>
+</body>
+</html>
