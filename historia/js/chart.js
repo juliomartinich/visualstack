@@ -70,15 +70,7 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
     .style("fill", "#555")
     .style("font-size", "11px");
 
-  // Título del Eje Y
-  g.append("text")
-    .attr("x", 10)
-    .attr("y", -10)
-    .attr("fill", "#333")
-    .attr("font-family", "sans-serif")
-    .attr("font-size", "10px")
-    .attr("font-weight", "bold")
-    .text("Camiones Activos");
+
 
   // 5. Dibujar cada una de las 4 curvas envolventes superpuestas
   const colors = colorTheme === 'blue'
