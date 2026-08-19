@@ -444,6 +444,9 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
   }
 
   const currentMetrics = stackResult.metrics;
+  if (currentMetrics && stackResult.plantStacks) {
+    currentMetrics.plantStacks = stackResult.plantStacks;
+  }
   const curHoraMax = stackResult.horaMax || 0;
   const curOcupacionMax = stackResult.ocupacionMax || 0;
   const curOcupacionMaxCamiones = stackResult.ocupacionMaxCamiones || 0;

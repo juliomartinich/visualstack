@@ -202,6 +202,8 @@ function drawLeftAxis(g, scale, label, customRange, color = "#333", offset = 0) 
 function drawRightAxis(g, scale, innerW, label, color = "#666") {
   if (!scale) return;
   const axis = d3.axisRight(scale).ticks(5);
+  axis.tickSize(-6).tickPadding(-9);
+
   const axisG = g.append("g")
     .attr("class", "y-axis-right")
     .attr("transform", `translate(${innerW}, 0)`)
@@ -213,8 +215,11 @@ function drawRightAxis(g, scale, innerW, label, color = "#666") {
     axisG.selectAll("text").attr("fill", color);
   }
 
+  axisG.selectAll(".tick text")
+    .attr("text-anchor", "end");
+
   axisG.append("text")
-    .attr("x", -10) // Hacia el interior
+    .attr("x", -35) // Ajustado hacia la izquierda para no superponer a los números
     .attr("y", scale.range()[1] + 15) // Bajamos un poco más (15px) del tope del sector
     .attr("fill", color)
     .attr("text-anchor", "end") // Alineado al eje pero desde adentro
@@ -1160,7 +1165,7 @@ function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scal
           const rightAxisG = drawRightAxis(gPlant, yDelayScale, innerW, "Delay Max [min]", "red");
           if (isColasAndMix) {
             rightAxisG.append("text")
-              .attr("x", -10)
+              .attr("x", -35) // Ajustado hacia la izquierda
               .attr("y", yDelayScale.range()[1] + 27)
               .attr("fill", "blue")
               .attr("text-anchor", "end")
@@ -1212,7 +1217,7 @@ function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scal
           const rightAxisG = drawRightAxis(g, scales.yDelay, innerW, "Delay Max [min]", "red");
           if (isColasAndMix) {
             rightAxisG.append("text")
-              .attr("x", -10)
+              .attr("x", -35) // Ajustado hacia la izquierda
               .attr("y", scales.yDelay.range()[1] + 27)
               .attr("fill", "blue")
               .attr("text-anchor", "end")
@@ -1271,7 +1276,7 @@ function drawGraphLayers(currentGraphView, currentGanttView, subsetPedidos, scal
     if ((currentGanttView === 'despachos_reales' || currentGanttView === 'despachos_mix') && currentMetrics.waitCargaByTime && d3.max(currentMetrics.waitCargaByTime) > 0) {
       drawDelayCurve(gDelay, currentMetrics.waitCargaByTime, scales, CFG.granularidadMin, null, "blue", "wait-carga-curve", true);
       rightAxisG.append("text")
-        .attr("x", -10)
+        .attr("x", -35) // Ajustado hacia la izquierda
         .attr("y", scales.yDelay.range()[1] + 27)
         .attr("fill", "blue")
         .attr("text-anchor", "end")

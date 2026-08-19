@@ -484,6 +484,15 @@ function buildColasStack(pedidos, totalBocas, granularidadMin) {
       }
       pedido.STK_PLANTAS = { bloquesXY };
     });
+
+    // Si la vista es despachos reales, sincronizar el envolvente
+    const store = typeof Alpine !== 'undefined' ? Alpine.store('filtros') : null;
+    const currentGanttView = store?.viewGantt || (typeof getCookie === 'function' ? getCookie("viewGantt") : null) || 'pedidos';
+    if (currentGanttView === 'despachos_reales') {
+      for (let t = 0; t <= horaMax; t++) {
+        arrEnvolvente[t] = ocupacionCargas[t] || 0;
+      }
+    }
   }
 
   const metrics = {

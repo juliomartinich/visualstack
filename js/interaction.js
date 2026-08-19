@@ -852,9 +852,11 @@ function setupInteraction(
     if (currentGraphView === 'colas' && scales.yColasPlants) {
       const isColasAndReal = currentGraphView === 'colas' && getCurrentGanttView() === 'despachos_reales';
       activeDelayCircles.each(function(pCode) {
-        const delayVal = metrics.plantStacks?.[pCode]?.metrics?.delay2ByTime?.[t] || 0;
+        const plantMetrics = metrics.plantStacks?.[pCode]?.metrics;
+        const hasWaitCargaPlant = plantMetrics?.waitCargaByTime && d3.max(plantMetrics.waitCargaByTime) > 0;
+        const delayVal = plantMetrics?.delay2ByTime?.[t] || 0;
         const yDelay = scales.yDelayPlants?.[pCode];
-        if (yDelay && delayVal > 0 && !isColasAndReal) {
+        if (yDelay && delayVal > 0 && !isColasAndReal && !hasWaitCargaPlant) {
           const delayMin = delayVal * granularidad;
           d3.select(this)
             .attr("cx", xPos)
@@ -866,9 +868,11 @@ function setupInteraction(
       });
 
       activeDelayLabels.each(function(pCode) {
-        const delayVal = metrics.plantStacks?.[pCode]?.metrics?.delay2ByTime?.[t] || 0;
+        const plantMetrics = metrics.plantStacks?.[pCode]?.metrics;
+        const hasWaitCargaPlant = plantMetrics?.waitCargaByTime && d3.max(plantMetrics.waitCargaByTime) > 0;
+        const delayVal = plantMetrics?.delay2ByTime?.[t] || 0;
         const yDelay = scales.yDelayPlants?.[pCode];
-        if (yDelay && delayVal > 0 && !isColasAndReal) {
+        if (yDelay && delayVal > 0 && !isColasAndReal && !hasWaitCargaPlant) {
           const delayMin = delayVal * granularidad;
           d3.select(this)
             .attr("x", xPos + 8)
@@ -881,9 +885,11 @@ function setupInteraction(
       });
 
       activeWaitCircles.each(function(pCode) {
-        const waitVal = metrics.plantStacks?.[pCode]?.metrics?.waitCargaByTime?.[t] || 0;
+        const plantMetrics = metrics.plantStacks?.[pCode]?.metrics;
+        const hasWaitCargaPlant = plantMetrics?.waitCargaByTime && d3.max(plantMetrics.waitCargaByTime) > 0;
+        const waitVal = plantMetrics?.waitCargaByTime?.[t] || 0;
         const yDelay = scales.yDelayPlants?.[pCode];
-        if (yDelay && waitVal > 0) {
+        if (yDelay && waitVal > 0 && hasWaitCargaPlant) {
           const waitMin = waitVal;
           d3.select(this)
             .attr("cx", xPos)
@@ -895,9 +901,11 @@ function setupInteraction(
       });
 
       activeWaitLabels.each(function(pCode) {
-        const waitVal = metrics.plantStacks?.[pCode]?.metrics?.waitCargaByTime?.[t] || 0;
+        const plantMetrics = metrics.plantStacks?.[pCode]?.metrics;
+        const hasWaitCargaPlant = plantMetrics?.waitCargaByTime && d3.max(plantMetrics.waitCargaByTime) > 0;
+        const waitVal = plantMetrics?.waitCargaByTime?.[t] || 0;
         const yDelay = scales.yDelayPlants?.[pCode];
-        if (yDelay && waitVal > 0) {
+        if (yDelay && waitVal > 0 && hasWaitCargaPlant) {
           const waitMin = waitVal;
           d3.select(this)
             .attr("x", xPos + 8)
@@ -927,7 +935,8 @@ function setupInteraction(
     // 4. Delay (global)
     const delayVal = metrics.delay2ByTime ? metrics.delay2ByTime[t] : 0;
     const isColasAndReal = currentGraphView === 'colas' && getCurrentGanttView() === 'despachos_reales';
-    if (scales.yDelay && delayVal > 0 && !(currentGraphView === 'colas' && scales.yColasPlants) && !isColasAndReal) {
+    const hasWaitCargaGlobal = metrics.waitCargaByTime && d3.max(metrics.waitCargaByTime) > 0;
+    if (scales.yDelay && delayVal > 0 && !(currentGraphView === 'colas' && scales.yColasPlants) && !isColasAndReal && !hasWaitCargaGlobal) {
       const delayMin = delayVal * granularidad;
       circleDelay.attr("cx", xPos).attr("cy", scales.yDelay(delayMin)).style("opacity", 1);
       labelDelay.attr("x", xPos + 8).attr("y", scales.yDelay(delayMin) - 5).text(delayMin).style("opacity", 1);
@@ -937,7 +946,7 @@ function setupInteraction(
 
     // 4b. Espera Carga (global)
     const waitVal = metrics.waitCargaByTime ? metrics.waitCargaByTime[t] : 0;
-    if (scales.yDelay && waitVal > 0 && !(currentGraphView === 'colas' && scales.yColasPlants)) {
+    if (scales.yDelay && waitVal > 0 && !(currentGraphView === 'colas' && scales.yColasPlants) && hasWaitCargaGlobal) {
       const waitMin = waitVal;
       circleWaitCarga.attr("cx", xPos).attr("cy", scales.yDelay(waitMin)).style("opacity", 1);
       labelWaitCarga.attr("x", xPos + 8).attr("y", scales.yDelay(waitMin) - 5).text(waitMin).style("opacity", 1);
