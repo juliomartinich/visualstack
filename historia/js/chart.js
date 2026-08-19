@@ -5,9 +5,9 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
 
   // Obtener dimensiones reales del SVG o contenedor
   const width = +svg.attr("width") || container.node()?.clientWidth || 1260;
-  const height = +svg.attr("height") || container.node()?.clientHeight || 450;
+  const height = +svg.attr("height") || container.node()?.clientHeight || 490;
 
-  const margin = { top: 30, right: 30, bottom: 40, left: 45 };
+  const margin = { top: 25, right: 20, bottom: 40, left: 50 };
   const innerW = width - margin.left - margin.right;
   const innerH = height - margin.top - margin.bottom;
 

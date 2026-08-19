@@ -23,8 +23,8 @@ document.addEventListener('alpine:init', () => {
     activeSuffixes: [],    // Los 4 sufijos (Día y 3 días anteriores)
     plantasOptions: [],
     
-    // Memoria caché de datos en bruto cargados al inicio
-    rawCapturas: {}, // { suffix: { pedidosRaw, ticketsRaw, orderDates, ticketDates } }
+    // Memoria caché de datos en bruto cargados bajo demanda
+    rawCapturas: {}, // { suffix: { pedidosRaw, ticketsRaw } }
     
     fullPedidos: [],
     metrics: {
@@ -69,18 +69,6 @@ document.addEventListener('alpine:init', () => {
       return !!this.rawCapturas[suffix];
     },
 
-    getLegendLineStyle(index) {
-      const isBlue = this.activeMode === 'pedidos';
-      const colors = isBlue 
-        ? ["#0066cc", "#3b82f6", "#60a5fa", "#93c5fd"]
-        : ["#2e7d32", "#4caf50", "#81c784", "#a5d6a7"];
-      
-      const color = colors[index] || "#999";
-      const borderStyle = index === 2 ? "dashed" : index === 3 ? "dotted" : "solid";
-      
-      return `display: inline-block; width: 25px; height: 0; border-top: 2px ${borderStyle} ${color}; vertical-align: middle;`;
-    },
-
     getPrecedingSuffixes(dateStr) {
       if (!dateStr) return [];
       const suffixes = [];
@@ -114,61 +102,10 @@ document.addEventListener('alpine:init', () => {
           return;
         }
 
-        // 3. Cargar TODOS los archivos de Pedidos y Tickets en paralelo
-        const loadPromises = this.capturaDates.map(async (suffix) => {
-          try {
-            const [pedRaw, tickRaw] = await Promise.all([
-              fetchSafeJson(`data/Pedidos_${suffix}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
-              fetchSafeJson(`data/Tickets_${suffix}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
-            ]);
-            
-            // Extraer fechas únicas para esta captura
-            const pDates = [...new Set(
-              Object.values(pedRaw.pedidos || {})
-                .filter(p => p !== "dummy" && p["Fecha Pedido"])
-                .map(p => String(p["Fecha Pedido"]))
-            )];
-
-            // Extraer fechas únicas de tickets para esta captura
-            const tDatesSet = new Set();
-            Object.values(tickRaw.Ticket || {}).forEach(t => {
-              const ped = pedRaw.pedidos && pedRaw.pedidos[t.Pedido];
-              if (ped && ped["Fecha Pedido"]) {
-                tDatesSet.add(String(ped["Fecha Pedido"]));
-              } else {
-                tDatesSet.add(`20${suffix}`);
-              }
-            });
-
-            return {
-              suffix,
-              pedidosRaw: pedRaw,
-              ticketsRaw: tickRaw,
-              orderDates: pDates,
-              ticketDates: [...tDatesSet]
-            };
-          } catch (err) {
-            console.error(`Error al cargar datos del sufijo ${suffix}:`, err);
-            return null;
-          }
-        });
-
-        const loaded = await Promise.all(loadPromises);
-        
-        // Almacenar en caché y extraer colecciones globales
-        const globalOrderDatesSet = new Set();
-        const globalTicketDatesSet = new Set();
-
-        loaded.forEach(item => {
-          if (item) {
-            this.rawCapturas[item.suffix] = item;
-            item.orderDates.forEach(d => globalOrderDatesSet.add(d));
-            item.ticketDates.forEach(d => globalTicketDatesSet.add(d));
-          }
-        });
-
-        this.orderDates = [...globalOrderDatesSet].sort().reverse();
-        this.ticketDates = [...globalTicketDatesSet].sort().reverse();
+        // 3. Generar listas de fechas basándose en las capturas disponibles
+        // Cada captura de fecha YYMMDD representa un día operativo 20YYMMDD
+        this.orderDates = this.capturaDates.map(suffix => `20${suffix.slice(0,2)}${suffix.slice(2,4)}${suffix.slice(4,6)}`).sort().reverse();
+        this.ticketDates = [...this.orderDates];
 
         // Valores por defecto
         if (this.orderDates.length > 0) {
@@ -272,14 +209,30 @@ document.addEventListener('alpine:init', () => {
         const granularidadMin = 5;
         const resultsBySuffix = {};
 
-        this.activeSuffixes.forEach(suffix => {
-          const cacheItem = this.rawCapturas[suffix];
-          if (!cacheItem) return;
+        // 1. Cargar y procesar los archivos correspondientes a los 4 sufijos bajo demanda
+        const loadPromises = this.activeSuffixes.map(async (suffix) => {
+          // Si no está dentro de los archivos de captura disponibles, omitir
+          if (!this.capturaDates.includes(suffix)) return;
 
+          // Si no está en caché, lo descargamos y guardamos
+          if (!this.rawCapturas[suffix]) {
+            try {
+              const [pedRaw, tickRaw] = await Promise.all([
+                fetchSafeJson(`data/Pedidos_${suffix}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
+                fetchSafeJson(`data/Tickets_${suffix}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
+              ]);
+              this.rawCapturas[suffix] = { pedidosRaw: pedRaw, ticketsRaw: tickRaw };
+            } catch (err) {
+              console.error(`Error cargando captura ${suffix}:`, err);
+              return;
+            }
+          }
+
+          const cacheItem = this.rawCapturas[suffix];
           const pedidosData = cacheItem.pedidosRaw;
           const localTicketsData = cacheItem.ticketsRaw.Ticket || {};
 
-          // Procesar y enriquecer la captura seleccionada en memoria
+          // Procesar y enriquecer la captura en memoria
           const fullPedidos = Object.entries(pedidosData.pedidos || {})
             .filter(([id]) => id !== "dummy")
             .map(([id, p]) => {
@@ -302,30 +255,30 @@ document.addEventListener('alpine:init', () => {
 
           enrichPedidosForDate(fullPedidos);
 
-          // Actualizar window.grupos
-          window.grupos = {};
+          // Poblar grupos temporales para filtrado de plantas
+          const localGrupos = {};
           Object.entries(window.plantasData).forEach(([code, p]) => {
             const g = p.grupo_despacho;
             if (g) {
-              if (!window.grupos[g]) window.grupos[g] = [];
-              window.grupos[g].push(code);
+              if (!localGrupos[g]) localGrupos[g] = [];
+              localGrupos[g].push(code);
             }
           });
 
-          // Obtener plantas permitidas
+          // Obtener plantas permitidas según el filtro
           let permitidas = [];
           if (this.selectedPlanta) {
             const filterParts = this.selectedPlanta.split(':');
             const filterType = filterParts[0];
             const filterVal = filterParts[1];
             if (filterType === 'Grupo') {
-              permitidas = window.grupos[filterVal] || [];
+              permitidas = localGrupos[filterVal] || [];
             } else {
               permitidas = [filterVal];
             }
           }
 
-          const baseOrders = fullPedidos.filter(p => p["Fecha Pedido"] === date && permitidas.includes(p.Planta));
+          const baseOrders = fullPedidos.filter(p => p["Fecha Pedido"] === date && (permitidas.length === 0 || permitidas.includes(p.Planta)));
 
           let dataToStack = [];
           if (this.activeMode === 'pedidos') {
@@ -344,11 +297,14 @@ document.addEventListener('alpine:init', () => {
           };
         });
 
-        // 2. Calcular la escala Y global (máximo global de ocupación de camiones)
+        // Esperar a que terminen todas las cargas paralelas activas
+        await Promise.all(loadPromises);
+
+        // 2. Calcular la escala Y global
         const allOcupaciones = Object.values(resultsBySuffix).map(r => r.stackResult.ocupacionMax || 0);
         const globalYMax = d3.max(allOcupaciones) || 5;
 
-        // 3. Calcular métricas para el gráfico principal (el del mismo día de despacho, index 0, si existe)
+        // 3. Calcular métricas agregadas del día principal (index 0, mismo día)
         const primarySuffix = this.activeSuffixes[0];
         const primaryResult = resultsBySuffix[primarySuffix];
         if (primaryResult) {
@@ -368,18 +324,29 @@ document.addEventListener('alpine:init', () => {
           }
         }
 
-        // 4. Actualizar las opciones del combo box de plantas usando los datos de la captura principal (u otra disponible)
+        // 4. Actualizar plantas dropdown usando una captura que contenga datos
         const representativeSuffix = this.activeSuffixes.find(s => resultsBySuffix[s]);
         if (representativeSuffix) {
           const cacheItem = this.rawCapturas[representativeSuffix];
           const pedidosData = cacheItem.pedidosRaw;
+
+          // Regenerar window.grupos para updatePlantasOptions
+          window.grupos = {};
+          Object.entries(window.plantasData).forEach(([code, p]) => {
+            const g = p.grupo_despacho;
+            if (g) {
+              if (!window.grupos[g]) window.grupos[g] = [];
+              window.grupos[g].push(code);
+            }
+          });
+
           this.fullPedidos = Object.entries(pedidosData.pedidos || {})
             .filter(([id]) => id !== "dummy")
             .map(([id, p]) => ({ ...p, id, Planta: p.Planta || '', CantProgramada: p.CantProgramada || 0, "Fecha Pedido": p["Fecha Pedido"] }));
           this.updatePlantasOptions(date);
         }
 
-        // 5. Redibujar D3 en el único gráfico global superpuesto
+        // 5. Redibujar D3 en el gráfico global superpuesto
         this.$nextTick(() => {
           const colorTheme = this.activeMode === 'pedidos' ? 'blue' : 'green';
           const formattedLabels = this.activeSuffixes.map((suffix, index) => {
