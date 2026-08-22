@@ -303,9 +303,9 @@ document.addEventListener('alpine:init', () => {
           const mapB = new Map(baseOrdersB.map(p => [p.id, p]));
 
           // Clasificar y calcular deltas para curvas
-          const nuevos = baseOrdersA.filter(p => !mapB.has(p.id)).map(p => ({ ...p }));
-          const anulados = baseOrdersB.filter(p => !mapA.has(p.id)).map(p => ({ ...p }));
-          const iguales = baseOrdersA.filter(p => mapB.has(p.id) && mapB.get(p.id).CantProgramada === p.CantProgramada).map(p => ({ ...p }));
+          const nuevos = baseOrdersA.filter(p => !mapB.has(p.id)).map(p => ({ ...p, originalVol: 0, nuevoVol: p.CantProgramada }));
+          const anulados = baseOrdersB.filter(p => !mapA.has(p.id)).map(p => ({ ...p, originalVol: p.CantProgramada, nuevoVol: 0 }));
+          const iguales = baseOrdersA.filter(p => mapB.has(p.id) && mapB.get(p.id).CantProgramada === p.CantProgramada).map(p => ({ ...p, originalVol: p.CantProgramada, nuevoVol: p.CantProgramada }));
 
           // Mayor Volumen: representamos el incremento (VolA - VolB)
           const mayor = baseOrdersA.filter(p => mapB.has(p.id) && p.CantProgramada > mapB.get(p.id).CantProgramada)
@@ -316,6 +316,8 @@ document.addEventListener('alpine:init', () => {
               const denom = p.CantProgramada || 1;
               const ratio = deltaVol / denom;
               clone.CantProgramada = deltaVol;
+              clone.originalVol = pB.CantProgramada;
+              clone.nuevoVol = p.CantProgramada;
               if (p.XG) {
                 clone.XG = {
                   ...p.XG,
@@ -334,6 +336,8 @@ document.addEventListener('alpine:init', () => {
               const denom = pB.CantProgramada || 1;
               const ratio = deltaVol / denom;
               clone.CantProgramada = deltaVol;
+              clone.originalVol = pB.CantProgramada;
+              clone.nuevoVol = p.CantProgramada;
               // Usar la demanda de B como base y escalarla
               if (pB.XG) {
                 clone.XG = {

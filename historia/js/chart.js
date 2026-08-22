@@ -15,17 +15,9 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
     .attr("transform", `translate(${margin.left}, ${margin.top})`);
 
   // 1. Configurar Rango de Tiempo (X)
-  const slotMin = (8 * 60) / granularidadMin; // 08:00
+  const slotMin = (6 * 60) / granularidadMin; // 06:00
   const slotMax = (20 * 60) / granularidadMin; // 20:00
-  
-  let maxSimSlot = slotMax;
-  activeSuffixes.forEach(s => {
-    const res = resultsBySuffix[s];
-    if (res && res.stackResult && res.stackResult.horaMax) {
-      maxSimSlot = Math.max(maxSimSlot, res.stackResult.horaMax);
-    }
-  });
-  const xDomain = [slotMin, maxSimSlot];
+  const xDomain = [slotMin, slotMax];
 
   const xScale = d3.scaleLinear()
     .domain(xDomain)
@@ -53,9 +45,10 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
     .range([innerH, 0]);
 
   // 3. Dibujar Grillas de Fondo
+  const yTicks = yScale.ticks(5).filter(d => Number.isInteger(d));
   g.append("g")
     .attr("class", "grid grid-y")
-    .call(d3.axisLeft(yScale).ticks(5).tickSize(-innerW).tickFormat(""))
+    .call(d3.axisLeft(yScale).tickValues(yTicks).tickSize(-innerW).tickFormat(""))
     .selectAll("line")
     .style("stroke", "#eee")
     .style("stroke-dasharray", "4,4");
@@ -93,7 +86,7 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
     .style("font-size", "11px");
 
   g.append("g")
-    .call(d3.axisLeft(yScale).ticks(5))
+    .call(d3.axisLeft(yScale).tickValues(yTicks).tickFormat(d3.format("d")))
     .selectAll("text")
     .style("fill", "#555")
     .style("font-size", "11px");
@@ -306,22 +299,35 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
           const plotYVal = isDownward ? -yVal : yVal;
           const yPos = yScale(plotYVal);
 
+          // Determinar si el mouse está cerca de esta curva verticalmente (tolerancia de +-5px)
+          const isCloseToCurve = Math.abs(my - yPos) <= 5;
+
           if (res && res.stackResult) {
+            // Expandir círculo si el cursor está sobre la curva específica
             circles[index]
               .attr("cx", xPos)
               .attr("cy", yPos)
-              .style("opacity", yVal > 0 ? 1 : 0.2);
+              .attr("r", isCloseToCurve ? 7.0 : 4.5)
+              .style("opacity", isCloseToCurve ? 1.0 : (yVal > 0 ? 0.9 : 0.2))
+              .attr("stroke-width", isCloseToCurve ? 2.5 : 1.5);
 
             const captureLabel = formattedLabels[index] || suffix;
+            
+            // Destacar texto de la curva activa (Focus)
             const labelStyle = colorTheme === 'anulaciones'
-              ? `font-weight: 500; color: ${colors[index]};`
+              ? `font-weight: ${isCloseToCurve ? '700' : '500'}; color: ${colors[index]};`
               : (index === 0 ? `font-weight: bold; color: ${colors[index]};` : `color: #555;`);
+            
             const cantStr = colorTheme === 'green' ? 'tck.' : 'ped.';
             
             // Calcular cantidad de pedidos y volumen activos en el slot t
             let activeCount = 0;
             let activeVolume = 0;
             const items = res.dataToStack || [];
+            const activeOrdersInfo = [];
+
+            // Solo mostrar detalle de pedidos si el mouse está físicamente encima de esta curva
+            const showOrderDetails = isCloseToCurve && colorTheme === 'anulaciones' && (suffix === 'nuevos' || suffix === 'mayor' || suffix === 'anulados' || suffix === 'menor');
 
             items.forEach(d => {
               const seg = d.STK && d.STK.segmentosXY ? d.STK.segmentosXY.find(s => s.x === t) : null;
@@ -332,18 +338,36 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
                 } else {
                   activeVolume += (d.CantProgramada || 0);
                 }
+
+                if (showOrderDetails) {
+                  const origVol = d.originalVol ?? 0;
+                  const newVol = d.nuevoVol ?? 0;
+                  const diff = Math.abs(origVol - newVol);
+                  activeOrdersInfo.push({
+                    id: d.id,
+                    obra: d.Obra || '',
+                    producto: d.Producto || '',
+                    origVol,
+                    newVol,
+                    diff
+                  });
+                }
               }
             });
 
+            // Ordenar pedidos en forma descendente según el cambio de volumen absoluto
+            if (activeOrdersInfo.length > 0) {
+              activeOrdersInfo.sort((a, b) => b.diff - a.diff);
+            }
+
             // Downward negative values for tooltip
-            const isDownward = colorTheme === 'anulaciones' && (suffix === 'anulados' || suffix === 'menor');
             let displayYVal = yVal;
             if (isDownward) {
               if (displayYVal > 0) displayYVal = -displayYVal;
               if (activeCount > 0) activeCount = -activeCount;
               if (activeVolume > 0) activeVolume = -activeVolume;
             }
-            displayYVal = Math.round(displayYVal * 10) / 10;
+            displayYVal = Math.round(displayYVal);
 
             const volM3 = Math.round(activeVolume);
 
@@ -353,6 +377,14 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
             }
 
             html += `<span style="${labelStyle}">${captureLabel}: <strong>${displayYVal} cam.</strong> <span style="font-size: 9px; color: #666; font-weight: normal;">(${activeCount} ${cantStr}, ${volM3} m³)</span></span><br/>`;
+
+            // Agregar listado de pedidos si corresponde
+            if (activeOrdersInfo.length > 0) {
+              activeOrdersInfo.forEach(info => {
+                const text = `• #${info.id} (${info.origVol} → ${info.newVol} m³) | ${info.obra} | ${info.producto}`;
+                html += `<span style="font-size: 9px; color: #64748b; padding-left: 10px; display: block; font-family: system-ui, sans-serif; line-height: 1.3; white-space: nowrap;">${text}</span>`;
+              });
+            }
             valuesCount++;
           } else {
             circles[index].style("opacity", 0);
@@ -361,14 +393,25 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
 
 
 
-        // Posicionar tooltip
+        // Posicionar tooltip dinámicamente en los 4 cuadrantes del contenedor
         const containerBounds = container.node().getBoundingClientRect();
-        const tooltipX = ev.clientX - containerBounds.left + 15;
-        const tooltipY = ev.clientY - containerBounds.top + 15;
+        const mouseX = ev.clientX - containerBounds.left;
+        const mouseY = ev.clientY - containerBounds.top;
+
+        const isPastHalf = mouseX > (containerBounds.width / 2);
+        const isLowerHalf = mouseY > (containerBounds.height / 2);
+
+        const tooltipX = isPastHalf ? (mouseX - 15) : (mouseX + 15);
+        const tooltipY = isLowerHalf ? (mouseY - 15) : (mouseY + 15);
+
+        const transX = isPastHalf ? "-100%" : "0";
+        const transY = isLowerHalf ? "-100%" : "0";
+        const transformStyle = `translate(${transX}, ${transY})`;
 
         tooltip
           .style("left", `${tooltipX}px`)
           .style("top", `${tooltipY}px`)
+          .style("transform", transformStyle)
           .html(html)
           .style("display", "block");
       }
