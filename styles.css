@@ -77,7 +77,7 @@ body {
 
 /* Grillas */
 .grid line {
-  stroke: #ccc;
+  stroke: #eee;
   stroke-dasharray: 4, 4;
 }
 

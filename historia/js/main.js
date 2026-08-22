@@ -432,21 +432,43 @@ document.addEventListener('alpine:init', () => {
           const stackMenor = buildStack(menor);
           const stackIguales = buildStack(iguales);
 
+          // Calcular la curva de diferencia neta en camiones (Actual - Anterior)
+          const diffEnvolvente = [];
+          const envActual = stackActual.metrics.envolvente || [];
+          const envAnterior = stackAnterior.metrics.envolvente || [];
+          const maxLen = Math.max(envActual.length, envAnterior.length);
+          for (let t = 0; t < maxLen; t++) {
+            const valA = envActual[t] || 0;
+            const valB = envAnterior[t] || 0;
+            diffEnvolvente[t] = valA - valB;
+          }
+
+          // Estructurar un objeto stackResult dummy para la curva de diferencia
+          const stackDiferencia = {
+            ocupacion: [],
+            ocupacionMax: d3.max(diffEnvolvente.map(Math.abs)) || 0,
+            metrics: { envolvente: diffEnvolvente }
+          };
+
+          const diffVol = d3.sum(baseOrdersA, p => p.CantProgramada || 0) - (hasSuffixB ? d3.sum(baseOrdersB, p => p.CantProgramada || 0) : 0);
+
           // Consolidar resultados, conteos y métricas de volumen para el renderizado
           const results = {
             'actual': { stackResult: stackActual, dataToStack: baseOrdersA, cantPedidos: baseOrdersA.length, volumenT: d3.sum(baseOrdersA, p => p.CantProgramada || 0), volConfirmado: d3.sum(baseOrdersA.filter(p => p.Confirmado === "SI"), p => p.CantProgramada || 0) },
             'anterior': { stackResult: stackAnterior, dataToStack: baseOrdersB, cantPedidos: baseOrdersB.length, volumenT: d3.sum(baseOrdersB, p => p.CantProgramada || 0) },
+            'diferencia': { stackResult: stackDiferencia, dataToStack: [], cantPedidos: 0, volumenT: diffVol },
+            'iguales': { stackResult: stackIguales, dataToStack: iguales, cantPedidos: iguales.length, volumenT: d3.sum(iguales, p => p.CantProgramada || 0) },
             'nuevos': { stackResult: stackNuevos, dataToStack: nuevos, cantPedidos: nuevos.length, volumenT: d3.sum(nuevos, p => p.CantProgramada || 0) },
-            'anulados': { stackResult: stackAnulados, dataToStack: anulados, cantPedidos: anulados.length, volumenT: d3.sum(anulados, p => p.CantProgramada || 0) },
             'mayor': { stackResult: stackMayor, dataToStack: mayor, cantPedidos: mayor.length, volumenT: d3.sum(mayor, p => p.CantProgramada || 0) },
-            'menor': { stackResult: stackMenor, dataToStack: menor, cantPedidos: menor.length, volumenT: d3.sum(menor, p => p.CantProgramada || 0) },
-            'iguales': { stackResult: stackIguales, dataToStack: iguales, cantPedidos: iguales.length, volumenT: d3.sum(iguales, p => p.CantProgramada || 0) }
+            'anulados': { stackResult: stackAnulados, dataToStack: anulados, cantPedidos: anulados.length, volumenT: d3.sum(anulados, p => p.CantProgramada || 0) },
+            'menor': { stackResult: stackMenor, dataToStack: menor, cantPedidos: menor.length, volumenT: d3.sum(menor, p => p.CantProgramada || 0) }
           };
 
-          const keys = ['actual', 'anterior', 'iguales', 'nuevos', 'mayor', 'anulados', 'menor'];
+          const keys = ['actual', 'anterior', 'diferencia', 'iguales', 'nuevos', 'mayor', 'anulados', 'menor'];
           const formattedLabels = [
             `Actual (${this.formatToDddDdMmm(suffixA)})`,
             hasSuffixB ? `Anterior (${this.formatToDddDdMmm(suffixB)})` : "Anterior (No disp.)",
+            "Diferencia neta",
             "Pedidos Iguales",
             "Pedidos Nuevos",
             "Mayor Volumen",
@@ -458,7 +480,6 @@ document.addEventListener('alpine:init', () => {
           const allOcupaciones = keys.map(k => results[k]?.stackResult?.ocupacionMax || 0);
           const globalYMax = d3.max(allOcupaciones) || 5;
 
-          const diffVol = results.actual.volumenT - (hasSuffixB ? results.anterior.volumenT : 0);
           this.metrics = {
             volumenT: Math.round(results.actual.volumenT),
             volConfirmado: Math.round(results.actual.volConfirmado),

@@ -95,7 +95,7 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
 
   // 5. Dibujar cada una de las curvas envolventes superpuestas
   const colors = colorTheme === 'anulaciones'
-    ? ["#0066cc", "#777777", "#9c27b0", "#2e7d32", "#009688", "#d32f2f", "#ef6c00"]
+    ? ["#0066cc", "#777777", "#9c27b0", "#0066cc", "#2e7d32", "#2e7d32", "#d32f2f", "#d32f2f"]
     : (colorTheme === 'tickets'
       ? (activeSuffixes.length === 3
         ? ["#0066cc", "#475569", "#2e7d32"] // Pedidos Actual (Blue), Pedidos Anterior (Slate), Despachos Reales (Green)
@@ -104,19 +104,19 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
         ? ["#0066cc", "#3b82f6", "#60a5fa", "#93c5fd"]
         : ["#2e7d32", "#4caf50", "#81c784", "#a5d6a7"]));
   const strokeWidths = colorTheme === 'anulaciones'
-    ? [2.5, 1.8, 1.2, 1.8, 1.5, 1.8, 1.5]
+    ? [2.5, 1.8, 2.5, 1.5, 2.0, 1.5, 2.0, 1.5]
     : (colorTheme === 'tickets'
       ? (activeSuffixes.length === 3 ? [2.5, 1.8, 2.5] : [2.5, 2.5])
       : [2.5, 1.8, 1.5, 1.2]);
   const dashArrays = colorTheme === 'anulaciones'
-    ? [null, null, "2,2", null, "4,4", null, "4,4"]
+    ? [null, null, null, "4,4", null, "4,4", null, "4,4"]
     : (colorTheme === 'tickets'
       ? (activeSuffixes.length === 3 ? [null, "4,4", null] : [null, null])
       : [null, null, "4,4", "2,2"]);
 
-  // Relleno suave bajo la curva principal (Mismo día - index 0)
-  const primarySuffix = activeSuffixes[0];
-  const primaryRes = resultsBySuffix[primarySuffix];
+  // Relleno suave bajo la curva principal (Mismo día - index 0, o Despachos si estamos en Modo Despachos)
+  const fillSuffix = colorTheme === 'tickets' ? 'tickets' : activeSuffixes[0];
+  const primaryRes = resultsBySuffix[fillSuffix];
   if (primaryRes && primaryRes.stackResult) {
     const envColas = primaryRes.stackResult.metrics.envolvente || [];
     const envData = envColas
@@ -131,8 +131,32 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
 
     g.append("path")
       .datum(envData)
-      .attr("fill", (colorTheme === 'blue' || colorTheme === 'tickets') ? "rgba(59, 130, 246, 0.12)" : (colorTheme === 'green' ? "rgba(46, 125, 50, 0.12)" : "rgba(0, 102, 204, 0.08)"))
+      .attr("fill", (colorTheme === 'blue' || colorTheme === 'anulaciones') 
+        ? "rgba(59, 130, 246, 0.12)" // Azul para pedidos del día actual
+        : "rgba(46, 125, 50, 0.12)") // Verde para tickets / despachos
       .attr("d", areaGenerator);
+  }
+
+  // Relleno suave violeta bajo la curva de diferencia (solo en modo anulaciones)
+  if (colorTheme === 'anulaciones' && resultsBySuffix['diferencia']) {
+    const diffRes = resultsBySuffix['diferencia'];
+    if (diffRes.stackResult) {
+      const envColas = diffRes.stackResult.metrics.envolvente || [];
+      const envData = envColas
+        .map((v, t) => ({ x: t, y: v }))
+        .filter(d => d.x >= xDomain[0] && d.x <= xDomain[1]);
+
+      const areaGenerator = d3.area()
+        .x(d => xScale(d.x))
+        .y0(yScale(0))
+        .y1(d => yScale(d.y))
+        .curve(d3.curveMonotoneX);
+
+      g.append("path")
+        .datum(envData)
+        .attr("fill", "rgba(156, 39, 176, 0.12)") // Violeta suave
+        .attr("d", areaGenerator);
+    }
   }
 
   // Dibujar las líneas de las envolventes en orden inverso (capas delgadas atrás, gruesa adelante)
@@ -164,7 +188,7 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
   const legendWidth = 240;
   const isMultiLine = colorTheme !== 'anulaciones';
   
-  let legendHeight = 157; // Default for anulaciones
+  let legendHeight = 175; // Default for anulaciones (8 items)
   if (isMultiLine) {
     if (colorTheme === 'tickets') {
       legendHeight = activeSuffixes.length === 3 ? 92 : 64;
@@ -205,7 +229,7 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
   activeSuffixes.forEach((suffix, index) => {
     const yStep = isMultiLine ? 28 : 18;
     let yPos = 16 + index * yStep;
-    if (colorTheme === 'anulaciones' && index >= 2) {
+    if (colorTheme === 'anulaciones' && index >= 3) {
       yPos += 12; // Shift down for divider space
     }
     const label = formattedLabels[index] || "";
@@ -224,14 +248,19 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
         if (totVol > 0) totVol = -totVol;
       }
 
-      const unitStr = (suffix === 'tickets' || colorTheme === 'green') ? 'tck.' : 'ped.';
-      if (totOrders !== 0 || totVol !== 0) {
-        labelSuffix = `(${totOrders} ${unitStr}, ${totVol} m³)`;
+      if (suffix === 'diferencia') {
+        const sign = totVol > 0 ? '+' : '';
+        labelSuffix = `(${sign}${totVol} m³)`;
+      } else {
+        const unitStr = (suffix === 'tickets' || colorTheme === 'green') ? 'tck.' : 'ped.';
+        if (totOrders !== 0 || totVol !== 0) {
+          labelSuffix = `(${totOrders} ${unitStr}, ${totVol} m³)`;
+        }
       }
     }
 
-    // Dibujar línea divisoria horizontal antes del index 2 en modo anulaciones
-    if (colorTheme === 'anulaciones' && index === 2) {
+    // Dibujar línea divisoria horizontal antes del index 3 en modo anulaciones
+    if (colorTheme === 'anulaciones' && index === 3) {
       legendG.append("line")
         .attr("x1", 8)
         .attr("x2", legendWidth - 8)
@@ -403,12 +432,18 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
 
             const volM3 = Math.round(activeVolume);
 
-            // Agregar divisor en tooltip antes de index 2 (Nuevos) en modo anulaciones
-            if (colorTheme === 'anulaciones' && index === 2) {
+            // Agregar divisor en tooltip antes de index 3 (Iguales) en modo anulaciones
+            if (colorTheme === 'anulaciones' && index === 3) {
               html += `<hr style="border: 0; border-top: 1px solid #eee; margin: 4px 0;"/>`;
             }
 
-            html += `<span style="${labelStyle}">${captureLabel}: <strong>${displayYVal} cam.</strong> <span style="font-size: 9px; color: #666; font-weight: normal;">(${activeCount} ${cantStr}, ${volM3} m³)</span></span><br/>`;
+            if (suffix === 'diferencia') {
+              const sign = yVal > 0 ? '+' : '';
+              const roundedVal = Math.round(yVal);
+              html += `<span style="${labelStyle}">${captureLabel}: <strong>${sign}${roundedVal} cam.</strong></span><br/>`;
+            } else {
+              html += `<span style="${labelStyle}">${captureLabel}: <strong>${displayYVal} cam.</strong> <span style="font-size: 9px; color: #666; font-weight: normal;">(${activeCount} ${cantStr}, ${volM3} m³)</span></span><br/>`;
+            }
 
             // Agregar listado de pedidos si corresponde
             if (activeOrdersInfo.length > 0) {
@@ -425,7 +460,7 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
 
 
 
-        // Posicionar tooltip dinámicamente en los 4 cuadrantes del contenedor
+        // Posicionar tooltip dinámicamente
         const containerBounds = container.node().getBoundingClientRect();
         const mouseX = ev.clientX - containerBounds.left;
         const mouseY = ev.clientY - containerBounds.top;
@@ -433,19 +468,40 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
         const isPastHalf = mouseX > (containerBounds.width / 2);
         const isLowerHalf = mouseY > (containerBounds.height / 2);
 
-        const tooltipX = isPastHalf ? (mouseX - 15) : (mouseX + 15);
-        const tooltipY = isLowerHalf ? (mouseY - 15) : (mouseY + 15);
-
-        const transX = isPastHalf ? "-100%" : "0";
-        const transY = isLowerHalf ? "-100%" : "0";
-        const transformStyle = `translate(${transX}, ${transY})`;
-
+        // Primero mostramos y seteamos el contenido del tooltip para calcular sus dimensiones reales
         tooltip
-          .style("left", `${tooltipX}px`)
-          .style("top", `${tooltipY}px`)
-          .style("transform", transformStyle)
           .html(html)
           .style("display", "block");
+
+        const tooltipNode = tooltip.node();
+        const tooltipW = tooltipNode.offsetWidth;
+        const tooltipH = tooltipNode.offsetHeight;
+
+        let finalLeft = isPastHalf ? (mouseX - 15 - tooltipW) : (mouseX + 15);
+        let finalTop = isLowerHalf ? (mouseY - 15 - tooltipH) : (mouseY + 15);
+
+        // Controlar límites para evitar que salga del contenedor por arriba (y = 0)
+        if (finalTop < 0) {
+          finalTop = 0;
+        }
+        // Evitar que salga del contenedor por abajo
+        if (finalTop + tooltipH > containerBounds.height) {
+          finalTop = Math.max(0, containerBounds.height - tooltipH);
+        }
+
+        // Evitar que salga por la izquierda (x = 0)
+        if (finalLeft < 0) {
+          finalLeft = 0;
+        }
+        // Evitar que salga por la derecha
+        if (finalLeft + tooltipW > containerBounds.width) {
+          finalLeft = Math.max(0, containerBounds.width - tooltipW);
+        }
+
+        tooltip
+          .style("left", `${finalLeft}px`)
+          .style("top", `${finalTop}px`)
+          .style("transform", "none");
       }
     })
     .on("mouseleave", () => {
