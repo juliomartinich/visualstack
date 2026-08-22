@@ -1,3 +1,10 @@
+/**
+ * Realiza una petición fetch segura limpiando posibles errores de formato del JSON.
+ * Convierte formatos numéricos no válidos como .8 a 0.8 antes de parsear.
+ * 
+ * @param {string} url - Dirección del recurso JSON a consultar.
+ * @returns {Promise<any>} Objeto parseado del JSON limpio.
+ */
 async function fetchSafeJson(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -7,31 +14,39 @@ async function fetchSafeJson(url) {
   return JSON.parse(text);
 }
 
+// Inicializar la aplicación con Alpine.js
 document.addEventListener('alpine:init', () => {
+  // Almacén de estado principal de la vista histórica
   Alpine.data('appState', () => ({
-    loading: true,
-    activeMode: localStorage.getItem("historiaFilterModo") || 'pedidos', // 'pedidos', 'tickets', o 'anulaciones'
+    loading: true, // Indica si la aplicación está procesando carga de datos o redibujando
+    activeMode: localStorage.getItem("historiaFilterModo") || 'pedidos', // Filtro Modo: 'pedidos', 'tickets' (Despachos), o 'anulaciones'
     
-    // Selectores
-    selectedPedidosDate: '',
-    selectedPlanta: localStorage.getItem("filterPlantaGrupo") || '',
+    // Selectores del Encabezado
+    selectedPedidosDate: '', // Fecha elegida para consulta (formato YYYYMMDD)
+    selectedPlanta: localStorage.getItem("filterPlantaGrupo") || '', // Planta o Grupo seleccionado
 
-    // Colecciones de datos
-    capturaDates: [],      // Todos los sufijos disponibles en index.json
-    orderDates: [],        // Todas las fechas únicas de Pedidos a nivel global
-    ticketDates: [],       // Todas las fechas únicas de Tickets a nivel global
-    activeSuffixes: [],    // Los 4 sufijos (Día y 3 días anteriores)
-    plantasOptions: [],
+    // Colecciones de Datos y Filtros
+    capturaDates: [],      // Lista completa de sufijos YYMMDD disponibles en data/ (de index.json)
+    orderDates: [],        // Fechas YYYYMMDD de Pedidos a nivel global
+    ticketDates: [],       // Fechas YYYYMMDD de Tickets a nivel global
+    activeSuffixes: [],    // Sufijos cargados activos (mismo día y 3 días anteriores en modo normal)
+    plantasOptions: [],    // Opciones del dropdown de plantas (desglose por grupos despacho y plantas)
     
-    // Memoria caché de datos en bruto cargados bajo demanda
-    rawCapturas: {}, // { suffix: { pedidosRaw, ticketsRaw } }
+    // Memoria caché local para evitar descargas duplicadas de los archivos JSON en la sesión
+    rawCapturas: {}, // Estructura: { YYMMDD: { pedidosRaw, ticketsRaw } }
     
-    fullPedidos: [],
+    fullPedidos: [], // Pedidos completos cargados para la fecha elegida (sin filtrar por planta)
     metrics: {
-      volumenT: 0,
-      volConfirmado: 0
+      volumenT: 0, // Volumen total del día para la curva del día ($m^3$)
+      volConfirmado: 0 // Volumen total confirmado en SAP ($m^3$)
     },
 
+    /**
+     * Da formato legible a una fecha (Ej: "Vie 07 Ago") soportando formatos YYYYMMDD o YYMMDD.
+     * 
+     * @param {string|number} dateStr - Fecha de entrada.
+     * @returns {string} Fecha formateada.
+     */
     formatToDddDdMmm(dateStr) {
       if (!dateStr) return '';
       const dateVal = String(dateStr);
@@ -41,23 +56,26 @@ document.addEventListener('alpine:init', () => {
         m = Number(dateVal.slice(4, 6)) - 1;
         d = Number(dateVal.slice(6, 8));
       } else if (dateVal.length === 6) { // YYMMDD
-        y = 2000 + Number(dateVal.slice(0, 2));
+        y = Number('20' + dateVal.slice(0, 2));
         m = Number(dateVal.slice(2, 4)) - 1;
         d = Number(dateVal.slice(4, 6));
       } else {
-        return dateVal;
+        return dateStr;
       }
+      
       const date = new Date(y, m, d);
-      const dias = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
-      const meses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+      const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+      const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
       
-      const ddd = dias[date.getDay()] || '';
-      const dd = String(d).padStart(2, "0");
-      const mmm = meses[date.getMonth()] || '';
-      
-      return `${ddd} ${dd} ${mmm}`;
+      return `${days[date.getDay()]} ${String(date.getDate()).padStart(2, "0")} ${months[date.getMonth()]}`;
     },
 
+    /**
+     * Obtiene el nombre descriptivo de una Planta a partir de su código en plantas.json.
+     * 
+     * @param {string} pCode - Código de la planta.
+     * @returns {string} Nombre descriptivo o código fallback.
+     */
     getPlantName(pCode) {
       if (window.plantasData && window.plantasData[pCode]) {
         return window.plantasData[pCode].nombre || pCode;
@@ -65,10 +83,19 @@ document.addEventListener('alpine:init', () => {
       return pCode;
     },
 
+    /**
+     * Comprueba si la memoria caché ya cuenta con los datos de un sufijo determinado.
+     */
     hasDataForSuffix(suffix) {
       return !!this.rawCapturas[suffix];
     },
 
+    /**
+     * Calcula los 4 sufijos de fecha consecutivos hacia atrás a partir de una fecha YYYYMMDD de referencia.
+     * 
+     * @param {string} dateStr - Fecha YYYYMMDD de partida.
+     * @returns {string[]} Lista de 4 sufijos en formato YYMMDD.
+     */
     getPrecedingSuffixes(dateStr) {
       if (!dateStr) return [];
       const suffixes = [];
@@ -87,13 +114,17 @@ document.addEventListener('alpine:init', () => {
       return suffixes;
     },
 
+    /**
+     * Inicialización del estado de Alpine al cargar el sitio.
+     * Carga catálogo de plantas, lista de capturas indexadas y activa el primer día y modo guardado.
+     */
     async init() {
       this.loading = true;
       try {
-        // 1. Cargar configuración de plantas compartida
+        // 1. Cargar catálogo global de plantas de la aplicación
         window.plantasData = await fetchSafeJson(`../data/plantas.json?v=${Date.now()}`).catch(() => ({}));
 
-        // 2. Cargar el index de capturas disponibles
+        // 2. Cargar el index.json de capturas existentes
         const index = await fetchSafeJson(`data/index.json?v=${Date.now()}`);
         this.capturaDates = index.sort().reverse();
 
@@ -102,17 +133,16 @@ document.addEventListener('alpine:init', () => {
           return;
         }
 
-        // 3. Generar listas de fechas basándose en las capturas disponibles
+        // 3. Convertir sufijos YYMMDD a formato de fecha YYYYMMDD para selectores
         this.orderDates = this.capturaDates.map(suffix => `20${suffix.slice(0,2)}${suffix.slice(2,4)}${suffix.slice(4,6)}`).sort().reverse();
         this.ticketDates = [...this.orderDates];
 
-        // Valores por defecto
+        // Definir la última fecha disponible como seleccionada por defecto
         if (this.orderDates.length > 0) {
           this.selectedPedidosDate = this.orderDates[0];
         }
 
-        // Inicializar en modo pedidos
-        // Inicializar modo desde persistencia
+        // Recuperar modo preferido y definir sufijos activos de inicio
         this.activeMode = localStorage.getItem("historiaFilterModo") || 'pedidos';
         this.activeSuffixes = this.getPrecedingSuffixes(this.selectedPedidosDate);
         await this.filtrarYRedibujar();
@@ -123,11 +153,18 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    /**
+     * Controlador ejecutado cuando el usuario cambia el día de despacho en el selector.
+     */
     async cambiarDia() {
       this.activeSuffixes = this.getPrecedingSuffixes(this.selectedPedidosDate);
       await this.filtrarYRedibujar();
     },
 
+    /**
+     * Controlador ejecutado cuando el usuario cambia de modo (Pedidos / Despachos / Anulaciones).
+     * Se encarga de validar la fecha actual para el nuevo modo y recargar los datos.
+     */
     async cambiarModo() {
       localStorage.setItem("historiaFilterModo", this.activeMode);
       const targetDate = this.selectedPedidosDate;
@@ -141,9 +178,16 @@ document.addEventListener('alpine:init', () => {
       await this.filtrarYRedibujar();
     },
 
+    /**
+     * Reconstruye dinámicamente las opciones del selector de plantas y grupos de despacho
+     * basándose en la fecha consultada y los volúmenes de pedidos activos.
+     * 
+     * @param {string} date - Fecha YYYYMMDD activa.
+     */
     updatePlantasOptions(date) {
       if (!date) return;
       
+      // 1. Agrupar volumen programado acumulado por planta para la fecha dada
       const plantVolumes = {};
       this.fullPedidos
         .filter(p => p["Fecha Pedido"] === date)
@@ -152,6 +196,7 @@ document.addEventListener('alpine:init', () => {
           plantVolumes[p.Planta] = (plantVolumes[p.Planta] || 0) + vol;
         });
 
+      // 2. Determinar qué plantas registraron actividad y a qué grupos pertenecen
       const activePlants = Object.keys(plantVolumes).sort();
       const groups = new Set();
       activePlants.forEach(pCode => {
@@ -161,13 +206,16 @@ document.addEventListener('alpine:init', () => {
 
       const options = [];
       
+      // 3. Insertar los grupos de despacho y sus plantas asociadas jerárquicamente
       Array.from(groups).sort().forEach(g => {
         const gPlants = window.grupos[g] || [];
         const activeGPlants = gPlants.filter(p => activePlants.includes(p)).sort();
         const gVol = d3.sum(activeGPlants, p => plantVolumes[p] || 0);
 
+        // Opción del grupo consolidador
         options.push({ id: `Grupo:${g}`, label: `Grupo ${g} (${Math.round(gVol)} m³)` });
         
+        // Opciones de plantas anidadas (con sangría visual)
         activeGPlants.forEach(pCode => {
           const pVol = plantVolumes[pCode] || 0;
           const pName = this.getPlantName(pCode);
@@ -175,6 +223,7 @@ document.addEventListener('alpine:init', () => {
         });
       });
 
+      // 4. Insertar las plantas independientes sin grupo despacho asignado
       activePlants.forEach(pCode => {
         const g = window.plantasData[pCode]?.grupo_despacho;
         if (!g) {
@@ -186,6 +235,7 @@ document.addEventListener('alpine:init', () => {
 
       this.plantasOptions = options;
 
+      // 5. Validar que la planta o grupo seleccionado persista. De lo contrario, asignar la primera opción activa.
       if (options.length > 0) {
         const exists = options.some(o => o.id === this.selectedPlanta);
         if (!exists) {
@@ -194,11 +244,21 @@ document.addEventListener('alpine:init', () => {
       } else {
         this.selectedPlanta = '';
       }
+      // Guardar filtro de planta en localStorage para persistencia cruzada
       localStorage.setItem("filterPlantaGrupo", this.selectedPlanta);
     },
 
+    /**
+     * Función principal del ciclo de vida de los datos:
+     * 1. Carga archivos JSON correspondientes a las fechas requeridas (usando caché si ya existen).
+     * 2. Procesa y estructura la información asociando Pedidos con sus respectivos Tickets.
+     * 3. Aplica los filtros de Planta o Grupo seleccionados.
+     * 4. En modo Anulaciones: realiza la clasificación diferencial y cálculo de deltas de volumen.
+     * 5. Calcula envolventes de ocupación de camiones y renderiza el gráfico SVG interactivo con D3.
+     */
     async filtrarYRedibujar() {
       this.loading = true;
+      // Sincronizar el filtro seleccionado en el almacenamiento persistente
       localStorage.setItem("filterPlantaGrupo", this.selectedPlanta);
       
       const date = this.selectedPedidosDate;
@@ -209,12 +269,14 @@ document.addEventListener('alpine:init', () => {
       }
 
       try {
-        const granularidadMin = 5;
+        const granularidadMin = 5; // Granularidad temporal de 5 minutos por slot de simulación
 
         if (this.activeMode === 'anulaciones') {
           // ==========================================
           // MODO ANULACIONES (COMPARACIÓN PEDIDO A PEDIDO)
           // ==========================================
+          
+          // Obtener sufijo del día seleccionado (Actual) y del día inmediatamente anterior (Anterior)
           const suffixA = this.activeSuffixes[0];
           const suffixB = this.activeSuffixes[1];
           const hasSuffixB = suffixB && this.capturaDates.includes(suffixB);
@@ -222,6 +284,7 @@ document.addEventListener('alpine:init', () => {
           const suffixesToLoad = [suffixA];
           if (hasSuffixB) suffixesToLoad.push(suffixB);
 
+          // Cargar capturas bajo demanda si no se encuentran en la memoria caché rawCapturas
           const loadPromises = suffixesToLoad.map(async (suffix) => {
             if (!this.rawCapturas[suffix]) {
               try {
@@ -238,6 +301,7 @@ document.addEventListener('alpine:init', () => {
 
           await Promise.all(loadPromises);
 
+          // Recuperar datos desde caché
           const cacheA = this.rawCapturas[suffixA];
           const cacheB = hasSuffixB ? this.rawCapturas[suffixB] : null;
 
@@ -247,21 +311,26 @@ document.addEventListener('alpine:init', () => {
           const tDataA = cacheA ? cacheA.ticketsRaw.Ticket || {} : {};
           const tDataB = cacheB ? cacheB.ticketsRaw.Ticket || {} : {};
 
+          // Función interna helper para estructurar pedidos y asociarles sus tickets (despachos reales)
           const processOrders = (pedidosObj, ticketsObj) => {
             return Object.entries(pedidosObj || {})
               .filter(([id]) => id !== "dummy")
               .map(([id, p]) => {
+                // Extender datos de negocio y cronograma de simulación
                 const pedidoNeg = extendPedidoNegocio(p, id, window.plantasData);
                 const XG = extendPedidoXG(pedidoNeg, granularidadMin);
                 const MaxCamiones = XG.demanda.length ? Math.max(...XG.demanda) : 0;
                 const result = { ...pedidoNeg, id, XG, MaxCamiones };
                 
+                // Calcular despachos teóricos según la tasa de carga
                 result.despachos = calculateDespachosForPedido(result, granularidadMin);
 
+                // Filtrar y adjuntar tickets asociados a este pedido específico
                 const orderTickets = Object.entries(ticketsObj)
                   .filter(([tId, t]) => String(t.Pedido) === id)
                   .map(([tId, t]) => ({ ...t, ticketId: tId }));
                 
+                // Calcular la asignación de despachos reales basados en tickets
                 result.realDespachos = calculateRealDespachosForPedido(result, orderTickets, granularidadMin);
                 result.CantRealDespachos = result.realDespachos.filter(d => !d.isAnulado).length;
                 
@@ -269,12 +338,15 @@ document.addEventListener('alpine:init', () => {
               });
           };
 
+          // Procesar las colecciones completas de pedidos para el día actual y anterior
           const fullOrdersA = processOrders(pDataA.pedidos, tDataA);
           const fullOrdersB = processOrders(pDataB.pedidos, tDataB);
 
+          // Enriquecer datos con duraciones de ciclos y tolerancias de sobretiempo
           enrichPedidosForDate(fullOrdersA);
           enrichPedidosForDate(fullOrdersB);
 
+          // Construir mapa local de grupos despacho
           const localGrupos = {};
           Object.entries(window.plantasData).forEach(([code, p]) => {
             const g = p.grupo_despacho;
@@ -284,6 +356,7 @@ document.addEventListener('alpine:init', () => {
             }
           });
 
+          // Determinar qué códigos de planta están permitidos según la selección del filtro
           let permitidas = [];
           if (this.selectedPlanta) {
             const filterParts = this.selectedPlanta.split(':');
@@ -296,18 +369,19 @@ document.addEventListener('alpine:init', () => {
             }
           }
 
+          // Filtrar las colecciones de pedidos aplicando el filtro de Planta / Grupo seleccionado
           const baseOrdersA = fullOrdersA.filter(p => p["Fecha Pedido"] === date && (permitidas.length === 0 || permitidas.includes(p.Planta)));
           const baseOrdersB = fullOrdersB.filter(p => p["Fecha Pedido"] === date && (permitidas.length === 0 || permitidas.includes(p.Planta)));
 
           const mapA = new Map(baseOrdersA.map(p => [p.id, p]));
           const mapB = new Map(baseOrdersB.map(p => [p.id, p]));
 
-          // Clasificar y calcular deltas para curvas
+          // Clasificar y calcular deltas de volumen para construir las curvas diferenciales
           const nuevos = baseOrdersA.filter(p => !mapB.has(p.id)).map(p => ({ ...p, originalVol: 0, nuevoVol: p.CantProgramada }));
           const anulados = baseOrdersB.filter(p => !mapA.has(p.id)).map(p => ({ ...p, originalVol: p.CantProgramada, nuevoVol: 0 }));
           const iguales = baseOrdersA.filter(p => mapB.has(p.id) && mapB.get(p.id).CantProgramada === p.CantProgramada).map(p => ({ ...p, originalVol: p.CantProgramada, nuevoVol: p.CantProgramada }));
 
-          // Mayor Volumen: representamos el incremento (VolA - VolB)
+          // Mayor Volumen: representamos el incremento (VolA - VolB) y escalamos proporcionalmente la curva
           const mayor = baseOrdersA.filter(p => mapB.has(p.id) && p.CantProgramada > mapB.get(p.id).CantProgramada)
             .map(p => {
               const clone = { ...p };
@@ -327,7 +401,7 @@ document.addEventListener('alpine:init', () => {
               return clone;
             });
 
-          // Menor Volumen: representamos el decremento (VolB - VolA) basado en la curva de B
+          // Menor Volumen: representamos el decremento (VolB - VolA) basándonos en la curva de B y escalándola
           const menor = baseOrdersA.filter(p => mapB.has(p.id) && p.CantProgramada < mapB.get(p.id).CantProgramada)
             .map(p => {
               const clone = { ...p };
@@ -348,6 +422,7 @@ document.addEventListener('alpine:init', () => {
               return clone;
             });
 
+          // Generar los agregados de ocupación simulada (stacks) para cada una de las 7 curvas
           const stackActual = buildStack(baseOrdersA);
           const stackAnterior = buildStack(baseOrdersB);
           const stackNuevos = buildStack(nuevos);
@@ -356,6 +431,7 @@ document.addEventListener('alpine:init', () => {
           const stackMenor = buildStack(menor);
           const stackIguales = buildStack(iguales);
 
+          // Consolidar resultados, conteos y métricas de volumen para el renderizado
           const results = {
             'actual': { stackResult: stackActual, dataToStack: baseOrdersA, cantPedidos: baseOrdersA.length, volumenT: d3.sum(baseOrdersA, p => p.CantProgramada || 0), volConfirmado: d3.sum(baseOrdersA.filter(p => p.Confirmado === "SI"), p => p.CantProgramada || 0) },
             'anterior': { stackResult: stackAnterior, dataToStack: baseOrdersB, cantPedidos: baseOrdersB.length, volumenT: d3.sum(baseOrdersB, p => p.CantProgramada || 0) },
@@ -377,15 +453,17 @@ document.addEventListener('alpine:init', () => {
             "Menor Volumen"
           ];
 
+          // Encontrar el valor máximo global en el eje Y para normalizar la escala vertical
           const allOcupaciones = keys.map(k => results[k]?.stackResult?.ocupacionMax || 0);
           const globalYMax = d3.max(allOcupaciones) || 5;
 
+          // Asignar métricas consolidadas del día de consulta
           this.metrics = {
             volumenT: Math.round(results.actual.volumenT),
             volConfirmado: Math.round(results.actual.volConfirmado)
           };
 
-          // Planta dropdown
+          // Reconstruir mapeo global de grupos y plantas
           window.grupos = {};
           Object.entries(window.plantasData).forEach(([code, p]) => {
             const g = p.grupo_despacho;
@@ -394,23 +472,25 @@ document.addEventListener('alpine:init', () => {
               window.grupos[g].push(code);
             }
           });
-          this.fullPedidos = fullOrdersA;
+          this.fullPedidos = fullOrdersA; // Aseguramos poblar con datos completos para evitar encogimiento del selector
           this.updatePlantasOptions(date);
 
+          // Esperar al ciclo de actualización de Alpine para dibujar la gráfica
           this.$nextTick(() => {
             drawMultiTruckChart("#chart-global", "#chart-container-global", results, keys, formattedLabels, granularidadMin, 'anulaciones', globalYMax);
           });
 
         } else {
           // ==========================================
-          // MODO PEDIDOS / TICKETS NORMAL
+          // MODO PEDIDOS / TICKETS NORMAL (HISTORIAL 4 DÍAS)
           // ==========================================
           const resultsBySuffix = {};
 
-          // Cargar los archivos correspondientes a los 4 sufijos bajo demanda
+          // Cargar secuencialmente los archivos correspondientes a los 4 sufijos bajo demanda
           const loadPromises = this.activeSuffixes.map(async (suffix) => {
             if (!this.capturaDates.includes(suffix)) return;
 
+            // Verificar si el sufijo no está cargado ya en caché
             if (!this.rawCapturas[suffix]) {
               try {
                 const [pedRaw, tickRaw] = await Promise.all([
@@ -428,6 +508,7 @@ document.addEventListener('alpine:init', () => {
             const pedidosData = cacheItem.pedidosRaw;
             const localTicketsData = cacheItem.ticketsRaw.Ticket || {};
 
+            // Procesar y modelar el listado de pedidos cargados
             const fullPedidos = Object.entries(pedidosData.pedidos || {})
               .filter(([id]) => id !== "dummy")
               .map(([id, p]) => {
@@ -450,6 +531,7 @@ document.addEventListener('alpine:init', () => {
 
             enrichPedidosForDate(fullPedidos);
 
+            // Determinar plantas asociadas a cada grupo despacho
             const localGrupos = {};
             Object.entries(window.plantasData).forEach(([code, p]) => {
               const g = p.grupo_despacho;
@@ -459,6 +541,7 @@ document.addEventListener('alpine:init', () => {
               }
             });
 
+            // Resolver códigos de plantas permitidos según el filtro de Planta / Grupo seleccionado
             let permitidas = [];
             if (this.selectedPlanta) {
               const filterParts = this.selectedPlanta.split(':');
@@ -471,17 +554,21 @@ document.addEventListener('alpine:init', () => {
               }
             }
 
+            // Filtrar pedidos según planta seleccionada
             const baseOrders = fullPedidos.filter(p => p["Fecha Pedido"] === date && (permitidas.length === 0 || permitidas.includes(p.Planta)));
 
+            // Enrutar datos a stackear según el modo activo
             let dataToStack = [];
             if (this.activeMode === 'pedidos') {
               dataToStack = baseOrders.map(p => ({ ...p }));
             } else {
+              // En modo despachos stackeamos los tickets reales asociados
               dataToStack = baseOrders.flatMap(p => (p.realDespachos || []).map(d => ({ ...d, parentPedido: p })));
             }
 
             const stackResult = buildStack(dataToStack);
 
+            // Calcular acumulados de volumen y cantidad de pedidos activos
             let cantPedidos = 0;
             let volumenT = 0;
             if (this.activeMode === 'pedidos') {
@@ -493,6 +580,7 @@ document.addEventListener('alpine:init', () => {
               volumenT = d3.sum(dataToStack, d => d.Volumen || 0);
             }
 
+            // Almacenar el resultado consolidado del día histórico procesado
             resultsBySuffix[suffix] = {
               stackResult,
               dataToStack,
@@ -504,9 +592,11 @@ document.addEventListener('alpine:init', () => {
 
           await Promise.all(loadPromises);
 
+          // Encontrar escala máxima para eje Y
           const allOcupaciones = Object.values(resultsBySuffix).map(r => r.stackResult.ocupacionMax || 0);
           const globalYMax = d3.max(allOcupaciones) || 5;
 
+          // Actualizar métricas del día actual
           const primarySuffix = this.activeSuffixes[0];
           const primaryResult = resultsBySuffix[primarySuffix];
           if (primaryResult) {
@@ -526,6 +616,7 @@ document.addEventListener('alpine:init', () => {
             }
           }
 
+          // Inicializar dropdown con datos del primer día histórico representativo
           const representativeSuffix = this.activeSuffixes.find(s => resultsBySuffix[s]);
           if (representativeSuffix) {
             const cacheItem = this.rawCapturas[representativeSuffix];
@@ -546,6 +637,7 @@ document.addEventListener('alpine:init', () => {
             this.updatePlantasOptions(date);
           }
 
+          // Redibujar gráfico SVG normal
           this.$nextTick(() => {
             const colorTheme = this.activeMode === 'pedidos' ? 'blue' : 'green';
             const formattedLabels = this.activeSuffixes.map((suffix, index) => {
