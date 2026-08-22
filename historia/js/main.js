@@ -38,7 +38,8 @@ document.addEventListener('alpine:init', () => {
     fullPedidos: [], // Pedidos completos cargados para la fecha elegida (sin filtrar por planta)
     metrics: {
       volumenT: 0, // Volumen total del día para la curva del día ($m^3$)
-      volConfirmado: 0 // Volumen total confirmado en SAP ($m^3$)
+      volConfirmado: 0, // Volumen total confirmado en SAP ($m^3$)
+      volDiferencia: 0 // Diferencia de volumen con el día anterior ($m^3$)
     },
 
     /**
@@ -457,10 +458,11 @@ document.addEventListener('alpine:init', () => {
           const allOcupaciones = keys.map(k => results[k]?.stackResult?.ocupacionMax || 0);
           const globalYMax = d3.max(allOcupaciones) || 5;
 
-          // Asignar métricas consolidadas del día de consulta
+          const diffVol = results.actual.volumenT - (hasSuffixB ? results.anterior.volumenT : 0);
           this.metrics = {
             volumenT: Math.round(results.actual.volumenT),
-            volConfirmado: Math.round(results.actual.volConfirmado)
+            volConfirmado: Math.round(results.actual.volConfirmado),
+            volDiferencia: Math.round(diffVol)
           };
 
           // Reconstruir mapeo global de grupos y plantas
@@ -480,9 +482,188 @@ document.addEventListener('alpine:init', () => {
             drawMultiTruckChart("#chart-global", "#chart-container-global", results, keys, formattedLabels, granularidadMin, 'anulaciones', globalYMax);
           });
 
+        } else if (this.activeMode === 'tickets') {
+          // ==========================================
+          // MODO DESPACHOS (PEDIDOS ACTUAL, PEDIDOS ANTERIOR Y DESPACHOS REALES DEL MISMO DÍA)
+          // ==========================================
+          const suffixA = this.activeSuffixes[0];
+          const suffixB = this.activeSuffixes[1];
+          const hasSuffixB = suffixB && this.capturaDates.includes(suffixB);
+
+          const suffixesToLoad = [suffixA];
+          if (hasSuffixB) suffixesToLoad.push(suffixB);
+
+          // Cargar capturas bajo demanda si no se encuentran en la memoria caché rawCapturas
+          const loadPromises = suffixesToLoad.map(async (suffix) => {
+            if (!this.rawCapturas[suffix]) {
+              try {
+                const [pedRaw, tickRaw] = await Promise.all([
+                  fetchSafeJson(`data/Pedidos_${suffix}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
+                  fetchSafeJson(`data/Tickets_${suffix}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
+                ]);
+                this.rawCapturas[suffix] = { pedidosRaw: pedRaw, ticketsRaw: tickRaw };
+              } catch (err) {
+                console.error(`Error cargando captura ${suffix}:`, err);
+              }
+            }
+          });
+
+          await Promise.all(loadPromises);
+
+          // Recuperar datos desde la caché
+          const cacheA = this.rawCapturas[suffixA];
+          const cacheB = hasSuffixB ? this.rawCapturas[suffixB] : null;
+
+          const pDataA = cacheA ? cacheA.pedidosRaw : { pedidos: {} };
+          const pDataB = cacheB ? cacheB.pedidosRaw : { pedidos: {} };
+          const tDataA = cacheA ? cacheA.ticketsRaw.Ticket || {} : {};
+
+          // Función helper para procesar pedidos con o sin asociación de tickets
+          const processOrders = (pedidosObj, ticketsObj) => {
+            return Object.entries(pedidosObj || {})
+              .filter(([id]) => id !== "dummy")
+              .map(([id, p]) => {
+                const pedidoNeg = extendPedidoNegocio(p, id, window.plantasData);
+                const XG = extendPedidoXG(pedidoNeg, granularidadMin);
+                const MaxCamiones = XG.demanda.length ? Math.max(...XG.demanda) : 0;
+                const result = { ...pedidoNeg, id, XG, MaxCamiones };
+                
+                result.despachos = calculateDespachosForPedido(result, granularidadMin);
+
+                if (ticketsObj) {
+                  const orderTickets = Object.entries(ticketsObj)
+                    .filter(([tId, t]) => String(t.Pedido) === id)
+                    .map(([tId, t]) => ({ ...t, ticketId: tId }));
+                  
+                  result.realDespachos = calculateRealDespachosForPedido(result, orderTickets, granularidadMin);
+                  result.CantRealDespachos = result.realDespachos.filter(d => !d.isAnulado).length;
+                } else {
+                  result.realDespachos = [];
+                  result.CantRealDespachos = 0;
+                }
+                
+                return result;
+              });
+          };
+
+          const fullOrdersA = processOrders(pDataA.pedidos, tDataA);
+          const fullOrdersB = processOrders(pDataB.pedidos, null); // No necesitamos tickets para el día anterior
+
+          enrichPedidosForDate(fullOrdersA);
+          enrichPedidosForDate(fullOrdersB);
+
+          // Construir mapa local de grupos despacho para filtrar
+          const localGrupos = {};
+          Object.entries(window.plantasData).forEach(([code, p]) => {
+            const g = p.grupo_despacho;
+            if (g) {
+              if (!localGrupos[g]) localGrupos[g] = [];
+              localGrupos[g].push(code);
+            }
+          });
+
+          // Resolver códigos de plantas permitidos según el filtro de Planta / Grupo seleccionado
+          let permitidas = [];
+          if (this.selectedPlanta) {
+            const filterParts = this.selectedPlanta.split(':');
+            const filterType = filterParts[0];
+            const filterVal = filterParts[1];
+            if (filterType === 'Grupo') {
+              permitidas = localGrupos[filterVal] || [];
+            } else {
+              permitidas = [filterVal];
+            }
+          }
+
+          // Filtrar colecciones de pedidos aplicando el filtro de Planta / Grupo
+          const baseOrdersA = fullOrdersA.filter(p => p["Fecha Pedido"] === date && (permitidas.length === 0 || permitidas.includes(p.Planta)));
+          const baseOrdersB = fullOrdersB.filter(p => p["Fecha Pedido"] === date && (permitidas.length === 0 || permitidas.includes(p.Planta)));
+
+          // Clones separados para Pedidos (Programado) y Despachos (Real)
+          const dataPedidosActual = baseOrdersA.map(p => ({ ...p }));
+          const dataPedidosAnterior = baseOrdersB.map(p => ({ ...p }));
+          const dataDespachos = baseOrdersA.flatMap(p => (p.realDespachos || []).map(d => ({ ...d, parentPedido: p })));
+
+          // Generar los agregados de ocupación (stacks)
+          const stackPedidosActual = buildStack(dataPedidosActual);
+          const stackPedidosAnterior = buildStack(dataPedidosAnterior);
+          const stackDespachos = buildStack(dataDespachos);
+
+          const uniquePedidosInTickets = new Set(dataDespachos.map(d => d.Pedido || (d.parentPedido && d.parentPedido.id))).size;
+
+          // Consolidar resultados en la misma estructura del gráfico
+          const results = {
+            'pedidos_actual': {
+              stackResult: stackPedidosActual,
+              dataToStack: dataPedidosActual,
+              cantPedidos: dataPedidosActual.length,
+              volumenT: d3.sum(dataPedidosActual, p => p.CantProgramada || 0),
+              volConfirmado: d3.sum(dataPedidosActual.filter(p => p.Confirmado === "SI"), p => p.CantProgramada || 0)
+            },
+            'tickets': {
+              stackResult: stackDespachos,
+              dataToStack: dataDespachos,
+              cantPedidos: uniquePedidosInTickets,
+              volumenT: d3.sum(baseOrdersA, p => p.CantDespachada || 0)
+            }
+          };
+
+          if (hasSuffixB) {
+            results['pedidos_anterior'] = {
+              stackResult: stackPedidosAnterior,
+              dataToStack: dataPedidosAnterior,
+              cantPedidos: dataPedidosAnterior.length,
+              volumenT: d3.sum(dataPedidosAnterior, p => p.CantProgramada || 0)
+            };
+          }
+
+          // Definir claves y etiquetas según la presencia del día anterior
+          const keys = hasSuffixB 
+            ? ['pedidos_actual', 'pedidos_anterior', 'tickets'] 
+            : ['pedidos_actual', 'tickets'];
+
+          const formattedLabels = hasSuffixB
+            ? [
+                `Pedidos día Actual (${this.formatToDddDdMmm(suffixA)})`,
+                `Pedidos día Anterior (${this.formatToDddDdMmm(suffixB)})`,
+                `Despachos Reales (${this.formatToDddDdMmm(suffixA)})`
+              ]
+            : [
+                `Pedidos día Actual (${this.formatToDddDdMmm(suffixA)})`,
+                `Despachos Reales (${this.formatToDddDdMmm(suffixA)})`
+              ];
+
+          // Determinar escala máxima en eje Y
+          const allStacks = [stackPedidosActual.ocupacionMax || 0, stackDespachos.ocupacionMax || 0];
+          if (hasSuffixB) allStacks.push(stackPedidosAnterior.ocupacionMax || 0);
+          const globalYMax = d3.max(allStacks) || 5;
+
+          // Asignar métricas de volumen totales
+          this.metrics = {
+            volumenT: Math.round(results.tickets.volumenT), // Volumen real despachado
+            volConfirmado: Math.round(results.pedidos_actual.volumenT) // Volumen programado total (Pedidos)
+          };
+
+          // Reconstruir grupos y actualizar dropdown de plantas
+          window.grupos = {};
+          Object.entries(window.plantasData).forEach(([code, p]) => {
+            const g = p.grupo_despacho;
+            if (g) {
+              if (!window.grupos[g]) window.grupos[g] = [];
+              window.grupos[g].push(code);
+            }
+          });
+          this.fullPedidos = fullOrdersA; // Usar pedidos completos del día actual para poblar opciones
+          this.updatePlantasOptions(date);
+
+          // Redibujar gráfico SVG con el tema 'tickets'
+          this.$nextTick(() => {
+            drawMultiTruckChart("#chart-global", "#chart-container-global", results, keys, formattedLabels, granularidadMin, 'tickets', globalYMax);
+          });
+
         } else {
           // ==========================================
-          // MODO PEDIDOS / TICKETS NORMAL (HISTORIAL 4 DÍAS)
+          // MODO PEDIDOS NORMAL (HISTORIAL 4 DÍAS DE PEDIDOS PROGRAMADOS)
           // ==========================================
           const resultsBySuffix = {};
 

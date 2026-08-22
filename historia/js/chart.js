@@ -96,15 +96,23 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
   // 5. Dibujar cada una de las curvas envolventes superpuestas
   const colors = colorTheme === 'anulaciones'
     ? ["#0066cc", "#777777", "#9c27b0", "#2e7d32", "#009688", "#d32f2f", "#ef6c00"]
-    : (colorTheme === 'blue'
-      ? ["#0066cc", "#3b82f6", "#60a5fa", "#93c5fd"]
-      : ["#2e7d32", "#4caf50", "#81c784", "#a5d6a7"]);
+    : (colorTheme === 'tickets'
+      ? (activeSuffixes.length === 3
+        ? ["#0066cc", "#475569", "#2e7d32"] // Pedidos Actual (Blue), Pedidos Anterior (Slate), Despachos Reales (Green)
+        : ["#0066cc", "#2e7d32"]) // Pedidos (Blue), Despachos (Green)
+      : (colorTheme === 'blue'
+        ? ["#0066cc", "#3b82f6", "#60a5fa", "#93c5fd"]
+        : ["#2e7d32", "#4caf50", "#81c784", "#a5d6a7"]));
   const strokeWidths = colorTheme === 'anulaciones'
     ? [2.5, 1.8, 1.2, 1.8, 1.5, 1.8, 1.5]
-    : [2.5, 1.8, 1.5, 1.2];
+    : (colorTheme === 'tickets'
+      ? (activeSuffixes.length === 3 ? [2.5, 1.8, 2.5] : [2.5, 2.5])
+      : [2.5, 1.8, 1.5, 1.2]);
   const dashArrays = colorTheme === 'anulaciones'
     ? [null, null, "2,2", null, "4,4", null, "4,4"]
-    : [null, null, "4,4", "2,2"];
+    : (colorTheme === 'tickets'
+      ? (activeSuffixes.length === 3 ? [null, "4,4", null] : [null, null])
+      : [null, null, "4,4", "2,2"]);
 
   // Relleno suave bajo la curva principal (Mismo día - index 0)
   const primarySuffix = activeSuffixes[0];
@@ -123,7 +131,7 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
 
     g.append("path")
       .datum(envData)
-      .attr("fill", colorTheme === 'blue' ? "rgba(59, 130, 246, 0.12)" : (colorTheme === 'green' ? "rgba(46, 125, 50, 0.12)" : "rgba(0, 102, 204, 0.08)"))
+      .attr("fill", (colorTheme === 'blue' || colorTheme === 'tickets') ? "rgba(59, 130, 246, 0.12)" : (colorTheme === 'green' ? "rgba(46, 125, 50, 0.12)" : "rgba(0, 102, 204, 0.08)"))
       .attr("d", areaGenerator);
   }
 
@@ -154,7 +162,17 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
   }
   // 5.5. Dibujar Leyenda dentro del Gráfico (Superior Derecha)
   const legendWidth = 240;
-  const legendHeight = colorTheme === 'anulaciones' ? 157 : 85;
+  const isMultiLine = colorTheme !== 'anulaciones';
+  
+  let legendHeight = 157; // Default for anulaciones
+  if (isMultiLine) {
+    if (colorTheme === 'tickets') {
+      legendHeight = activeSuffixes.length === 3 ? 92 : 64;
+    } else {
+      legendHeight = 120; // 4 items in blue/green
+    }
+  }
+
   const legendG = g.append("g")
     .attr("class", "chart-legend")
     .attr("transform", `translate(${innerW - (legendWidth + 15)}, 10)`);
@@ -185,7 +203,8 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
     .attr("filter", "url(#legend-shadow)");
 
   activeSuffixes.forEach((suffix, index) => {
-    let yPos = 16 + index * 18;
+    const yStep = isMultiLine ? 28 : 18;
+    let yPos = 16 + index * yStep;
     if (colorTheme === 'anulaciones' && index >= 2) {
       yPos += 12; // Shift down for divider space
     }
@@ -205,9 +224,9 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
         if (totVol > 0) totVol = -totVol;
       }
 
-      const unitStr = colorTheme === 'green' ? 'tck.' : 'ped.';
+      const unitStr = (suffix === 'tickets' || colorTheme === 'green') ? 'tck.' : 'ped.';
       if (totOrders !== 0 || totVol !== 0) {
-        labelSuffix = ` (${totOrders} ${unitStr}, ${totVol} m³)`;
+        labelSuffix = `(${totOrders} ${unitStr}, ${totVol} m³)`;
       }
     }
 
@@ -223,11 +242,12 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
     }
 
     // Muestra de línea
+    const lineY = isMultiLine ? (yPos + 5) : yPos;
     legendG.append("line")
       .attr("x1", 12)
       .attr("x2", 37)
-      .attr("y1", yPos)
-      .attr("y2", yPos)
+      .attr("y1", lineY)
+      .attr("y2", lineY)
       .attr("stroke", colors[index] || "#999")
       .attr("stroke-width", strokeWidths[index] || 1)
       .attr("stroke-dasharray", dashArrays[index] || null);
@@ -238,11 +258,23 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
       .attr("y", yPos + 3.5)
       .attr("fill", label.includes("(No disp.)") ? "#ef4444" : "#334155")
       .attr("font-family", "sans-serif")
-      .attr("font-size", "10px")
-      .text(`${label}${labelSuffix}`);
+      .attr("font-size", "10px");
 
     if (index === 0) {
       textNode.attr("font-weight", "bold");
+    }
+
+    if (isMultiLine && labelSuffix) {
+      textNode.text(label);
+      legendG.append("text")
+        .attr("x", 44)
+        .attr("y", yPos + 14.5)
+        .attr("fill", "#64748b")
+        .attr("font-family", "sans-serif")
+        .attr("font-size", "9px")
+        .text(labelSuffix);
+    } else {
+      textNode.text(`${label}${labelSuffix ? ' ' + labelSuffix : ''}`);
     }
   });
   // 6. Capa de Interacción y Cursor Multicapa
@@ -318,7 +350,7 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
               ? `font-weight: ${isCloseToCurve ? '700' : '500'}; color: ${colors[index]};`
               : (index === 0 ? `font-weight: bold; color: ${colors[index]};` : `color: #555;`);
             
-            const cantStr = colorTheme === 'green' ? 'tck.' : 'ped.';
+            const cantStr = (suffix === 'tickets' || colorTheme === 'green') ? 'tck.' : 'ped.';
             
             // Calcular cantidad de pedidos y volumen activos en el slot t
             let activeCount = 0;
