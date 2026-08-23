@@ -1337,11 +1337,15 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
     .text(`% ${termAtrasados} (>5 min)`);
 
   // Título secundario
+  let secondaryTitleSuffix = "";
+  if (type === 'llegada_obra') {
+    secondaryTitleSuffix = ` / Promedio de ${termAtrasos.slice(0, -1).toLowerCase()} (eje secundario)`;
+  }
   svg.append("text")
     .attr("x", margin.left + innerW / 2).attr("y", 12)
     .attr("text-anchor", "middle").attr("fill", "#334155")
     .style("font-size", "12px").style("font-weight", "bold").style("font-family", "sans-serif")
-    .text(`Distribución de ${termAtrasos} ${termCriticas} (>30 min) y ${termModeradas} (5-30 min) cada Media Hora`);
+    .text(`Distribución de ${termAtrasos} ${termCriticas} (>30 min) y ${termModeradas} (5-30 min) cada Media Hora${secondaryTitleSuffix}`);
 
   // Tooltip flotante global
   let tooltip = d3.select(".tooltip");
@@ -1420,4 +1424,153 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
     .attr("stroke-width", 0.5)
     .attr("opacity", 0.75)
     .attr("rx", 1);
+
+  // Dibujar promedio de demora/atraso solo en la vista de Puntualidad en el gráfico inferior
+  if (type === 'llegada_obra') {
+    const lineData = [];
+    for (let min = 360; min < 1200; min += 30) {
+      const nextMin = min + 30;
+      const pointsInBin = pairedData.filter(d => d.x >= min && d.x < nextMin);
+      const delayedPoints = pointsInBin.filter(d => (d.realVal - d.teoVal) > 0);
+      
+      if (delayedPoints.length > 0) {
+        const avgDelay = d3.mean(delayedPoints, d => d.realVal - d.teoVal);
+        const values = delayedPoints.map(d => d.realVal - d.teoVal);
+        const stdDev = values.length > 1 ? d3.deviation(values) : 0;
+
+        lineData.push({
+          x: min + 15,
+          y: avgDelay,
+          stdDev: stdDev,
+          delayedCount: delayedPoints.length,
+          totalCount: pointsInBin.length,
+          startMin: min,
+          endMin: nextMin
+        });
+      }
+    }
+
+    if (lineData.length > 0) {
+      const maxAvg = d3.max(lineData, d => d.y + (d.stdDev || 0)) || 60;
+      const maxDomainY = Math.max(60, Math.ceil(maxAvg / 15) * 15);
+      const yScaleRight = d3.scaleLinear().domain([0, maxDomainY]).range([innerH, 0]);
+
+      // Eje Y derecho (escala secundaria de minutos de atraso) - Solo los ticks
+      g.append("g")
+        .attr("transform", `translate(${innerW}, 0)`)
+        .call(d3.axisRight(yScaleRight).ticks(4).tickFormat(d => `+${d} min`))
+        .style("font-family", "sans-serif").style("font-size", "10px")
+        .attr("color", "#7f1d1d");
+
+      // 1. Dibujar Caja y Bigote (Box and Whisker) para Desviación Estándar
+      // Whisker vertical (rango de +- desviación estándar)
+      g.selectAll(".avg-std-whisker")
+        .data(lineData)
+        .enter()
+        .append("line")
+        .attr("class", "avg-std-whisker")
+        .attr("x1", d => xScale(d.x))
+        .attr("x2", d => xScale(d.x))
+        .attr("y1", d => yScaleRight(Math.max(0, d.y - d.stdDev)))
+        .attr("y2", d => yScaleRight(d.y + d.stdDev))
+        .attr("stroke", "#7f1d1d")
+        .attr("stroke-width", 1.2)
+        .style("opacity", 0.6);
+
+      // Tapa superior del bigote
+      g.selectAll(".avg-std-cap-top")
+        .data(lineData)
+        .enter()
+        .append("line")
+        .attr("class", "avg-std-cap-top")
+        .attr("x1", d => xScale(d.x) - 4)
+        .attr("x2", d => xScale(d.x) + 4)
+        .attr("y1", d => yScaleRight(d.y + d.stdDev))
+        .attr("y2", d => yScaleRight(d.y + d.stdDev))
+        .attr("stroke", "#7f1d1d")
+        .attr("stroke-width", 1.2)
+        .style("opacity", 0.6);
+
+      // Tapa inferior del bigote
+      g.selectAll(".avg-std-cap-bottom")
+        .data(lineData)
+        .enter()
+        .append("line")
+        .attr("class", "avg-std-cap-bottom")
+        .attr("x1", d => xScale(d.x) - 4)
+        .attr("x2", d => xScale(d.x) + 4)
+        .attr("y1", d => yScaleRight(Math.max(0, d.y - d.stdDev)))
+        .attr("y2", d => yScaleRight(Math.max(0, d.y - d.stdDev)))
+        .attr("stroke", "#7f1d1d")
+        .attr("stroke-width", 1.2)
+        .style("opacity", 0.6);
+
+      // 2. Generador de línea promedio
+      const lineGen = d3.line()
+        .x(d => xScale(d.x))
+        .y(d => yScaleRight(d.y))
+        .curve(d3.curveMonotoneX);
+
+      // Línea de promedio de atrasos
+      g.append("path")
+        .datum(lineData)
+        .attr("class", "avg-delay-line")
+        .attr("d", lineGen)
+        .attr("fill", "none")
+        .attr("stroke", "#7f1d1d")
+        .attr("stroke-width", 2.5)
+        .attr("stroke-dasharray", "4,4");
+
+      // Nodos del promedio
+      g.selectAll(".avg-delay-node-bottom")
+        .data(lineData)
+        .enter()
+        .append("circle")
+        .attr("class", "avg-delay-node-bottom")
+        .attr("cx", d => xScale(d.x))
+        .attr("cy", d => yScaleRight(d.y))
+        .attr("r", 4.5)
+        .attr("fill", "#ffffff")
+        .attr("stroke", "#7f1d1d")
+        .attr("stroke-width", 2.0)
+        .style("cursor", "pointer")
+        .on("mouseover", function(ev, d) {
+          d3.select(this).attr("r", 7).attr("fill", "#7f1d1d");
+
+          const html = `
+            <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px; min-width: 170px;">
+              <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px; color: #7f1d1d;">
+                Resumen de ${termAtrasos.slice(0, -1)}
+              </div>
+              <strong>Intervalo:</strong> ${formatTime(d.startMin)} - ${formatTime(d.endMin)}<br/>
+              <strong>Promedio:</strong> ${d.y.toFixed(1)} min<br/>
+              <strong>Desv. Estándar:</strong> ±${d.stdDev.toFixed(1)} min<br/>
+              <strong>Despachos con ${termAtrasos.slice(0, -1)}:</strong> ${d.delayedCount} de ${d.totalCount}
+            </div>
+          `;
+          tooltip.html(html).style("display", "block");
+
+          const tooltipNode = tooltip.node();
+          const tooltipW = tooltipNode.offsetWidth;
+          const tooltipH = tooltipNode.offsetHeight;
+
+          tooltip
+            .style("left", `${ev.pageX - tooltipW / 2}px`)
+            .style("top", `${ev.pageY - tooltipH - 15}px`)
+            .style("transform", "none");
+        })
+        .on("mousemove", function(ev) {
+          const tooltipNode = tooltip.node();
+          const tooltipW = tooltipNode.offsetWidth;
+          const tooltipH = tooltipNode.offsetHeight;
+          tooltip
+            .style("left", `${ev.pageX - tooltipW / 2}px`)
+            .style("top", `${ev.pageY - tooltipH - 15}px`);
+        })
+        .on("mouseleave", function() {
+          d3.select(this).attr("r", 4.5).attr("fill", "#ffffff");
+          tooltip.style("display", "none");
+        });
+    }
+  }
 }
