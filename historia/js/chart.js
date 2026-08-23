@@ -611,12 +611,12 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     : (type === 'viaje_regreso' ? "Hora de Salida de Obra Teórica (Pedidos)" : (type === 'estadia' ? "Hora de Llegada a Obra Teórica (Pedidos)" : (type === 'llegada_obra' ? "Hora Teórica de Descarga (Pedidos)" : (type === 'carga' || type === 'ciclo' ? "Hora de Asignación Teórica (Pedidos)" : "Hora de Asignación Teórica (Pedidos)"))));
 
   const yLabel = type === 'viaje_ida'
-    ? "Adelanto / Atraso en Tiempo de Viaje (Minutos)"
-    : (type === 'viaje_regreso' ? "Adelanto / Atraso en Tiempo de Regreso (Minutos)" : (type === 'estadia' ? "Adelanto / Atraso en Estadía (Minutos)" : (type === 'llegada_obra' ? "Adelanto / Atraso en Llegada a Obra (Minutos)" : (type === 'carga' ? "Adelanto / Atraso en Tiempo de Carga (Minutos)" : (type === 'ciclo' ? "Adelanto / Atraso en Tiempo de Ciclo (Minutos)" : "Adelanto / Atraso (Minutos)")))));
+    ? "Adelanto / Demora en Tiempo de Viaje (Minutos)"
+    : (type === 'viaje_regreso' ? "Adelanto / Demora en Tiempo de Regreso (Minutos)" : (type === 'estadia' ? "Adelanto / Demora en Estadía (Minutos)" : (type === 'llegada_obra' ? "Adelanto / Atraso en Llegada a Obra (Minutos)" : (type === 'carga' ? "Adelanto / Demora en Tiempo de Carga (Minutos)" : (type === 'ciclo' ? "Adelanto / Demora en Tiempo de Ciclo (Minutos)" : "Adelanto / Atraso (Minutos)")))));
 
   const chartTitleText = type === 'viaje_ida'
-    ? "Desviación de Tiempo de Viaje (Ida): Adelanto (arriba) / Atraso (abajo)"
-    : (type === 'viaje_regreso' ? "Desviación de Tiempo de Regreso (Retorno): Adelanto (arriba) / Atraso (abajo)" : (type === 'estadia' ? "Desviación de Estadía (En Obra): Adelanto (arriba) / Atraso (abajo)" : (type === 'llegada_obra' ? "Desviación de Llegada a Obra: Adelanto (arriba) / Atraso (abajo)" : (type === 'carga' ? "Desviación de Tiempo de Carga: Adelanto (arriba) / Atraso (abajo)" : (type === 'ciclo' ? "Desviación de Tiempo de Ciclo Completo: Adelanto (arriba) / Atraso (abajo)" : "Desviación de Asignaciones: Adelanto (arriba) / Atraso (abajo)")))));
+    ? "Desviación de Tiempo de Viaje (Ida): Adelanto (arriba) / Demora (abajo)"
+    : (type === 'viaje_regreso' ? "Desviación de Tiempo de Regreso (Retorno): Adelanto (arriba) / Demora (abajo)" : (type === 'estadia' ? "Desviación de Estadía (En Obra): Adelanto (arriba) / Demora (abajo)" : (type === 'llegada_obra' ? "Desviación de Llegada a Obra: Adelanto (arriba) / Atraso (abajo)" : (type === 'carga' ? "Desviación de Tiempo de Carga: Adelanto (arriba) / Demora (abajo)" : (type === 'ciclo' ? "Desviación de Tiempo de Ciclo Completo: Adelanto (arriba) / Demora (abajo)" : "Desviación de Asignaciones: Adelanto (arriba) / Atraso (abajo)")))));
 
   svg.append("text")
     .attr("x", margin.left + innerW / 2).attr("y", height - 15)
@@ -891,8 +891,22 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     const diffRegreso = realRegreso - teoRegreso;
     const diffCiclo = realCiclo - teoCiclo;
 
-    const formatDiffVal = (diff) => {
-      if (diff > 0) return `<span style="color: #dc2626; font-weight: bold;">+${diff}</span>`;
+    const posAsig = Math.max(0, diffAsignacion);
+    const posCarga = Math.max(0, diffCarga);
+    const posIda = Math.max(0, diffIda);
+    const maxPos = Math.max(posAsig, posCarga, posIda);
+
+    const highlightAsig = (posAsig === maxPos && maxPos > 0);
+    const highlightCarga = (posCarga === maxPos && maxPos > 0);
+    const highlightIda = (posIda === maxPos && maxPos > 0);
+
+    const formatDiffValWithHighlight = (diff, isCulprit) => {
+      if (diff > 0) {
+        if (isCulprit) {
+          return `<span style="color: #dc2626; font-weight: bold; background-color: #fee2e2; padding: 1px 4px; border-radius: 4px; border: 1px solid #fca5a5;" title="Causa Principal del Atraso">+${diff} ⚠️</span>`;
+        }
+        return `<span style="color: #dc2626; font-weight: bold;">+${diff}</span>`;
+      }
       if (diff < 0) return `<span style="color: #16a34a; font-weight: bold;">${diff}</span>`;
       return `<span style="color: #64748b;">0</span>`;
     };
@@ -909,50 +923,85 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
         </thead>
         <tbody>
           <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 3px 0; color: #334155;">Hora Asignación</td>
+            <td style="padding: 3px 0; color: #334155;">
+              <span style="display: inline-block; width: 6px; height: 6px; background-color: #6366f1; border-radius: 50%; margin-right: 5px; vertical-align: middle;"></span>
+              Hora Asignación
+            </td>
             <td style="padding: 3px 0; text-align: right; color: #64748b;">${formatTime(d.teo.HoraAsignacionMin)}</td>
             <td style="padding: 3px 0; text-align: right; color: #1e293b;">${formatTime(d.real.HoraAsignacionMin)}</td>
-            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffAsignacion)}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffValWithHighlight(diffAsignacion, highlightAsig)}</td>
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 3px 0; color: #334155;">Carga [min]</td>
+            <td style="padding: 3px 0; color: #334155;">
+              <span style="display: inline-block; width: 6px; height: 6px; background-color: #f59e0b; border-radius: 50%; margin-right: 5px; vertical-align: middle;"></span>
+              Carga [min]
+            </td>
             <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoCarga}</td>
             <td style="padding: 3px 0; text-align: right; color: #1e293b;">${realCarga}</td>
-            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffCarga)}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffValWithHighlight(diffCarga, highlightCarga)}</td>
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 3px 0; color: #334155;">Viaje Ida [min]</td>
+            <td style="padding: 3px 0; color: #334155;">
+              <span style="display: inline-block; width: 6px; height: 6px; background-color: #0d9488; border-radius: 50%; margin-right: 5px; vertical-align: middle;"></span>
+              Viaje Ida [min]
+            </td>
             <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoIda}</td>
             <td style="padding: 3px 0; text-align: right; color: #1e293b;">${realIda}</td>
-            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffIda)}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffValWithHighlight(diffIda, highlightIda)}</td>
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9; font-weight: bold;">
             <td style="padding: 3px 0; color: #1e293b; font-weight: bold;">Puntualidad</td>
             <td style="padding: 3px 0; text-align: right; color: #1e293b; font-weight: bold;">${formatTime(d.teo.HoraInicioMin)}</td>
             <td style="padding: 3px 0; text-align: right; color: #1e293b; font-weight: bold;">${formatTime(pEnObra)}</td>
-            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffPuntualidad)}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffValWithHighlight(diffPuntualidad, false)}</td>
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9;">
             <td style="padding: 3px 0; color: #334155;">Estadía [min]</td>
             <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoEstadia}</td>
             <td style="padding: 3px 0; text-align: right; color: #1e293b;">${realEstadia}</td>
-            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffEstadia)}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffValWithHighlight(diffEstadia, false)}</td>
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9;">
             <td style="padding: 3px 0; color: #334155;">Regreso [min]</td>
             <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoRegreso}</td>
             <td style="padding: 3px 0; text-align: right; color: #1e293b;">${realRegreso}</td>
-            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffRegreso)}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffValWithHighlight(diffRegreso, false)}</td>
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9; font-weight: bold;">
             <td style="padding: 3px 0; color: #1e293b; font-weight: bold;">Ciclo Completo [min]</td>
             <td style="padding: 3px 0; text-align: right; color: #1e293b; font-weight: bold;">${teoCiclo}</td>
             <td style="padding: 3px 0; text-align: right; color: #1e293b; font-weight: bold;">${realCiclo}</td>
-            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffCiclo)}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffValWithHighlight(diffCiclo, false)}</td>
           </tr>
         </tbody>
       </table>
     `;
+
+    let breakdownBarHtml = "";
+    if (diffPuntualidad > 0) {
+      const sumPos = posAsig + posCarga + posIda;
+      if (sumPos > 0) {
+        const pctAsig = (posAsig / sumPos) * 100;
+        const pctCarga = (posCarga / sumPos) * 100;
+        const pctIda = (posIda / sumPos) * 100;
+
+        breakdownBarHtml = `
+          <div style="margin-top: 8px; border-top: 1px dashed #cbd5e1; padding-top: 6px; text-align: left;">
+            <span style="font-size: 10px; font-weight: 700; color: #475569;">Distribución del Atraso de Llegada:</span>
+            <div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 4px; background-color: #f1f5f9;">
+              ${posAsig > 0 ? `<div style="width: ${pctAsig}%; background-color: #6366f1;" title="Asignación: +${posAsig} min (${pctAsig.toFixed(0)}%)"></div>` : ''}
+              ${posCarga > 0 ? `<div style="width: ${pctCarga}%; background-color: #f59e0b;" title="Carga: +${posCarga} min (${pctCarga.toFixed(0)}%)"></div>` : ''}
+              ${posIda > 0 ? `<div style="width: ${pctIda}%; background-color: #0d9488;" title="Viaje Ida: +${posIda} min (${pctIda.toFixed(0)}%)"></div>` : ''}
+            </div>
+            <div style="display: flex; gap: 8px; font-size: 8.5px; color: #64748b; margin-top: 4px; font-weight: 600;">
+              ${posAsig > 0 ? `<span><span style="color: #6366f1; margin-right: 2px;">●</span>Asig. ${pctAsig.toFixed(0)}%</span>` : ''}
+              ${posCarga > 0 ? `<span><span style="color: #f59e0b; margin-right: 2px;">●</span>Carga ${pctCarga.toFixed(0)}%</span>` : ''}
+              ${posIda > 0 ? `<span><span style="color: #0d9488; margin-right: 2px;">●</span>Ida ${pctIda.toFixed(0)}%</span>` : ''}
+            </div>
+          </div>
+        `;
+      }
+    }
 
     let rawTicketHtml = "";
     if (rawT && Object.keys(rawT).length > 0) {
@@ -1003,6 +1052,7 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
         <strong>Despacho:</strong> Viaje #${d.real.despachoIndex}<br/>
         <strong>Camión:</strong> #${rawT.Camion || 'N/A'}<br/>
         ${tableHtml}
+        ${breakdownBarHtml}
         ${rawTicketHtml}
       </div>
     `;
@@ -1111,9 +1161,17 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
   });
 }
 
-function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granularidadMin) {
+function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granularidadMin, type) {
   const container = d3.select(containerSelector);
   container.selectAll("*").remove(); // Limpiar anterior
+
+  const isDemora = ['carga', 'viaje_ida', 'estadia', 'viaje_regreso', 'ciclo'].includes(type);
+  const termAtrasos = isDemora ? "Demoras" : "Atrasos";
+  const termAtrasados = isDemora ? "Demoradas" : "Atrasados";
+  const termCriticas = isDemora ? "Críticas" : "Críticos";
+  const termModeradas = isDemora ? "Moderadas" : "Moderados";
+  const termCritica = isDemora ? "Crítica" : "Crítico";
+  const termModerada = isDemora ? "Moderada" : "Moderado";
 
   const width = 1260;
   const height = 190;
@@ -1214,14 +1272,14 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
     .attr("x", -(margin.top + innerH / 2)).attr("y", 15)
     .attr("text-anchor", "middle").attr("fill", "#475569")
     .style("font-size", "11px").style("font-weight", "600").style("font-family", "sans-serif")
-    .text("% Atrasados (>5 min)");
+    .text(`% ${termAtrasados} (>5 min)`);
 
   // Título secundario
   svg.append("text")
     .attr("x", margin.left + innerW / 2).attr("y", 12)
     .attr("text-anchor", "middle").attr("fill", "#334155")
     .style("font-size", "12px").style("font-weight", "bold").style("font-family", "sans-serif")
-    .text("Distribución de Atrasos Críticos (>30 min) y Moderados (5-30 min) cada Media Hora");
+    .text(`Distribución de ${termAtrasos} ${termCriticas} (>30 min) y ${termModeradas} (5-30 min) cada Media Hora`);
 
   // Tooltip flotante global
   let tooltip = d3.select(".tooltip");
@@ -1249,10 +1307,10 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
           <strong>Total Despachos:</strong> ${d.totalCount}<br/>
           <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 4px 0;"/>
           <span style="display:inline-block; width:8px; height:8px; background:#dc2626; margin-right:4px; border-radius:2px;"></span>
-          <strong>Crítico (>30 min):</strong> ${d.redCount} (${d.redPercentage.toFixed(1)}%)<br/>
+          <strong>${termCritica} (>30 min):</strong> ${d.redCount} (${d.redPercentage.toFixed(1)}%)<br/>
           <span style="display:inline-block; width:8px; height:8px; background:#f59e0b; margin-right:4px; border-radius:2px;"></span>
-          <strong>Moderado (5-30 min):</strong> ${d.yellowCount} (${d.yellowPercentage.toFixed(1)}%)<br/>
-          <strong>Total Atrasos (>5 min):</strong> ${(d.redCount + d.yellowCount)} (${(d.redPercentage + d.yellowPercentage).toFixed(1)}%)
+          <strong>${termModerada} (5-30 min):</strong> ${d.yellowCount} (${d.yellowPercentage.toFixed(1)}%)<br/>
+          <strong>Total ${termAtrasos} (>5 min):</strong> ${(d.redCount + d.yellowCount)} (${(d.redPercentage + d.yellowPercentage).toFixed(1)}%)
         </div>
       `;
       tooltip.html(html).style("display", "block");

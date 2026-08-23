@@ -842,7 +842,7 @@ document.addEventListener('alpine:init', () => {
           // Redibujar gráfico SVG tipo Scatter Plot y gráfico de barras de atrasos
           this.$nextTick(() => {
             drawScatterTeoricoReal("#chart-global", "#chart-container-global", pairedData, granularidadMin, this.teoricoRealType);
-            drawAtrasosBarChart("#chart-atrasos", "#chart-container-atrasos", pairedData, granularidadMin);
+            drawAtrasosBarChart("#chart-atrasos", "#chart-container-atrasos", pairedData, granularidadMin, this.teoricoRealType);
           });
 
         } else {
