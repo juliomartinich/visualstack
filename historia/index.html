@@ -36,12 +36,28 @@
           <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
             <select x-model="activeMode" @change="cambiarModo()"
               style="border: none; border-radius: 4px; font-size: 12px; font-weight: 600; padding: 1px 4px; cursor: pointer; outline: none; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);"
-              :style="activeMode === 'pedidos' ? 'background-color: #e1f5fe; color: #0066cc;' : (activeMode === 'tickets' ? 'background-color: #e8f5e9; color: #2e7d32;' : 'background-color: #f3e5f5; color: #7b1fa2;')">
+              :style="activeMode === 'pedidos' ? 'background-color: #e1f5fe; color: #0066cc;' : (activeMode === 'tickets' ? 'background-color: #e8f5e9; color: #2e7d32;' : (activeMode === 'teorico_real' ? 'background-color: #e3f2fd; color: #0d47a1;' : 'background-color: #f3e5f5; color: #7b1fa2;'))">
               <option value="pedidos">Modo: Pedidos</option>
               <option value="tickets">Modo: Despachos</option>
+              <option value="teorico_real">Modo: Teórico vs Real</option>
               <option value="anulaciones">Modo: Anulaciones</option>
             </select>
           </div>
+
+          <!-- Combo: Tipo Comparación (Solo visible en modo Teórico vs Real) -->
+          <template x-if="activeMode === 'teorico_real'">
+            <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
+              <select x-model="teoricoRealType" @change="filtrarYRedibujar()"
+                style="border: none; border-radius: 4px; font-size: 12px; font-weight: 600; padding: 1px 4px; cursor: pointer; outline: none; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); background-color: #e3f2fd; color: #0d47a1;">
+                <option value="asignacion">Asignación</option>
+                <option value="carga">Carga</option>
+                <option value="viaje_ida">Viaje Ida</option>
+                <option value="estadia">Estadía</option>
+                <option value="viaje_regreso">Viaje Regreso</option>
+                <option value="ciclo">Ciclo Completo</option>
+              </select>
+            </div>
+          </template>
 
           <!-- Combo 4: Planta -->
           <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #ddd; padding-left: 10px;">
@@ -58,7 +74,7 @@
 
         <!-- Volúmenes y Modo (Derecha) -->
         <div style="font-size: 12px; color: #333; font-weight: 600; font-family: sans-serif;">
-          <template x-if="activeMode === 'tickets'">
+          <template x-if="activeMode === 'tickets' || activeMode === 'teorico_real'">
             <span>
               Volumen Pedidos: <span x-text="`${metrics.volConfirmado} m3`"></span>, 
               Despachos: <span x-text="`${metrics.volumenT} m3`"></span>
@@ -80,7 +96,7 @@
                 x-text="`, Confirmado: ${metrics.volConfirmado} m3`"></span>
             </span>
           </template>
-          <span class="badge" :class="activeMode" x-text="activeMode === 'pedidos' ? 'Pedidos' : (activeMode === 'tickets' ? 'Despachos' : 'Anulaciones')"
+          <span class="badge" :class="activeMode" x-text="activeMode === 'pedidos' ? 'Pedidos' : (activeMode === 'tickets' ? 'Despachos' : (activeMode === 'teorico_real' ? 'Teo vs Real' : 'Anulaciones'))"
             style="font-size: 9px; font-weight: bold; padding: 1px 5px; border-radius: 3px; margin-left: 8px; text-transform: uppercase;"></span>
         </div>
 
@@ -92,8 +108,13 @@
       </div>
 
       <!-- Contenedor del Gráfico Único Superpuesto -->
-      <div x-show="!loading" style="width: 1260px; position: relative; height: 490px;" id="chart-container-global">
+      <div x-show="!loading" style="width: 1260px; position: relative;" id="chart-container-global">
         <svg id="chart-global" width="1260" height="490"></svg>
+      </div>
+
+      <!-- Contenedor del Gráfico de Barras de Atrasos (Solo en modo Teórico vs Real) -->
+      <div x-show="!loading && activeMode === 'teorico_real'" style="width: 1260px; position: relative; margin-top: 10px;" id="chart-container-atrasos">
+        <svg id="chart-atrasos" width="1260" height="190"></svg>
       </div>
 
       <!-- Tooltip flotante -->

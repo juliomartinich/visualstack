@@ -20,6 +20,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('appState', () => ({
     loading: true, // Indica si la aplicación está procesando carga de datos o redibujando
     activeMode: localStorage.getItem("historiaFilterModo") || 'pedidos', // Filtro Modo: 'pedidos', 'tickets' (Despachos), o 'anulaciones'
+    teoricoRealType: 'asignacion', // Tipo comparación Teórico vs Real ('asignacion' o 'viaje_ida')
     
     // Selectores del Encabezado
     selectedPedidosDate: '', // Fecha elegida para consulta (formato YYYYMMDD)
@@ -680,6 +681,194 @@ document.addEventListener('alpine:init', () => {
           // Redibujar gráfico SVG con el tema 'tickets'
           this.$nextTick(() => {
             drawMultiTruckChart("#chart-global", "#chart-container-global", results, keys, formattedLabels, granularidadMin, 'tickets', globalYMax);
+          });
+
+        } else if (this.activeMode === 'teorico_real') {
+          // ==========================================
+          // MODO TEÓRICO VS REAL (PEDIDOS VS TICKETS DEL MISMO DÍA STACKEADOS INDIVIDUAMENTE)
+          // ==========================================
+          const suffixA = this.activeSuffixes[0];
+
+          // Cargar la captura seleccionada bajo demanda si no está en la memoria caché
+          if (!this.rawCapturas[suffixA]) {
+            try {
+              const [pedRaw, tickRaw] = await Promise.all([
+                fetchSafeJson(`data/Pedidos_${suffixA}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
+                fetchSafeJson(`data/Tickets_${suffixA}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
+              ]);
+              this.rawCapturas[suffixA] = { pedidosRaw: pedRaw, ticketsRaw: tickRaw };
+            } catch (err) {
+              console.error(`Error cargando captura ${suffixA}:`, err);
+            }
+          }
+
+          const cacheItem = this.rawCapturas[suffixA];
+          const pedidosData = cacheItem ? cacheItem.pedidosRaw : { pedidos: {} };
+          const localTicketsData = cacheItem ? cacheItem.ticketsRaw.Ticket || {} : {};
+
+          // Procesar y modelar pedidos con sus despachos teóricos e individuales reales
+          const fullPedidos = Object.entries(pedidosData.pedidos || {})
+            .filter(([id]) => id !== "dummy")
+            .map(([id, p]) => {
+              const pedidoNeg = extendPedidoNegocio(p, id, window.plantasData);
+              const XG = extendPedidoXG(pedidoNeg, granularidadMin);
+              const MaxCamiones = XG.demanda.length ? Math.max(...XG.demanda) : 0;
+              const result = { ...pedidoNeg, id, XG, MaxCamiones };
+              
+              result.despachos = calculateDespachosForPedido(result, granularidadMin);
+
+              const orderTickets = Object.entries(localTicketsData)
+                .filter(([tId, t]) => String(t.Pedido) === id)
+                .map(([tId, t]) => ({ ...t, ticketId: tId }));
+              
+              result.realDespachos = calculateRealDespachosForPedido(result, orderTickets, granularidadMin);
+              result.CantRealDespachos = result.realDespachos.filter(d => !d.isAnulado).length;
+              
+              return result;
+            });
+
+          enrichPedidosForDate(fullPedidos);
+
+          // Construir mapa local de grupos despacho para filtrar
+          const localGrupos = {};
+          Object.entries(window.plantasData).forEach(([code, p]) => {
+            const g = p.grupo_despacho;
+            if (g) {
+              if (!localGrupos[g]) localGrupos[g] = [];
+              localGrupos[g].push(code);
+            }
+          });
+
+          // Resolver códigos de plantas permitidos según el filtro de Planta / Grupo seleccionado
+          let permitidas = [];
+          if (this.selectedPlanta) {
+            const filterParts = this.selectedPlanta.split(':');
+            const filterType = filterParts[0];
+            const filterVal = filterParts[1];
+            if (filterType === 'Grupo') {
+              permitidas = localGrupos[filterVal] || [];
+            } else {
+              permitidas = [filterVal];
+            }
+          }
+
+          // Filtrar colección de pedidos
+          const baseOrders = fullPedidos.filter(p => p["Fecha Pedido"] === date && (permitidas.length === 0 || permitidas.includes(p.Planta)));
+
+          // Construir parejas de despachos teóricos y reales para el scatter plot
+          const pairedData = [];
+          baseOrders.forEach(p => {
+            const teos = p.despachos || [];
+            const reals = p.realDespachos || [];
+            reals.forEach(r => {
+              if (r.isAnulado) return;
+              const t = teos.find(td => td.despachoIndex === r.despachoIndex);
+              if (t) {
+                let xVal, teoVal, realVal;
+                if (this.teoricoRealType === 'viaje_ida') {
+                  const rawT = r.rawTicket || {};
+                  const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
+                  const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
+                  const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (p.TiempoCarga || 0));
+                  const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
+                  const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (p.TiempoViaje || 0));
+
+                  xVal = t.HoraInicioMin; // Hora inicio viaje teórica
+                  teoVal = Number(p.TiempoViaje) || 0;
+                  realVal = pEnObra - pFinCarga;
+                } else if (this.teoricoRealType === 'viaje_regreso') {
+                  const rawT = r.rawTicket || {};
+                  const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
+                  const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
+                  const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (p.TiempoCarga || 0));
+                  const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
+                  const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (p.TiempoViaje || 0));
+                  const pInicioDescarga = (rawT.InicioDescarga && rawT.InicioDescarga !== "0") ? safeHhmmssToMin(rawT.InicioDescarga) : pEnObra;
+                  const pAplanta = (rawT.Aplanta && rawT.Aplanta !== "0") ? safeHhmmssToMin(rawT.Aplanta) : (pEnObra + (p.Frecuencia || 0));
+                  const pEnplanta = (rawT.Enplanta && rawT.Enplanta !== "0") ? safeHhmmssToMin(rawT.Enplanta) : (pAplanta + (p.TiempoViaje || 0));
+
+                  const teoTravelTime = Number(p.TiempoViaje) || 0; // Tiempo de regreso teórico es igual al de ida
+                  xVal = t.HoraFinalMin - teoTravelTime; // Hora de inicio de regreso teórica (Salida de Obra)
+                  teoVal = teoTravelTime;
+                  realVal = pEnplanta - pAplanta; // Tiempo de regreso real (En planta - A planta)
+                } else if (this.teoricoRealType === 'estadia') {
+                  const rawT = r.rawTicket || {};
+                  const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
+                  const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
+                  const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (p.TiempoCarga || 0));
+                  const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
+                  const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (p.TiempoViaje || 0));
+                  const pInicioDescarga = (rawT.InicioDescarga && rawT.InicioDescarga !== "0") ? safeHhmmssToMin(rawT.InicioDescarga) : pEnObra;
+                  const pAplanta = (rawT.Aplanta && rawT.Aplanta !== "0") ? safeHhmmssToMin(rawT.Aplanta) : (pEnObra + (p.Frecuencia || 0));
+
+                  xVal = t.HoraInicioMin; // Llegada a Obra teórica
+                  teoVal = (t.HoraFinalMin - (Number(p.TiempoViaje) || 0)) - t.HoraInicioMin;
+                  realVal = pAplanta - pEnObra; // Salida de Obra real - Llegada a Obra real
+                } else if (this.teoricoRealType === 'carga') {
+                  const rawT = r.rawTicket || {};
+                  const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
+                  const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : (pImpreso + (p.TiempoCarga || 0));
+
+                  xVal = t.HoraAsignacionMin; // Hora asignación teórica
+                  teoVal = Number(p.TiempoCarga) || 0; // Tiempo carga teórico
+                  realVal = pAObra - pImpreso; // Salida hacia obra - Impresión ticket
+                } else if (this.teoricoRealType === 'ciclo') {
+                  const rawT = r.rawTicket || {};
+                  const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
+                  const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
+                  const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (p.TiempoCarga || 0));
+                  const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
+                  const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (p.TiempoViaje || 0));
+                  const pInicioDescarga = (rawT.InicioDescarga && rawT.InicioDescarga !== "0") ? safeHhmmssToMin(rawT.InicioDescarga) : pEnObra;
+                  const pAplanta = (rawT.Aplanta && rawT.Aplanta !== "0") ? safeHhmmssToMin(rawT.Aplanta) : (pEnObra + (p.Frecuencia || 0));
+                  const pEnplanta = (rawT.Enplanta && rawT.Enplanta !== "0") ? safeHhmmssToMin(rawT.Enplanta) : (pAplanta + (p.TiempoViaje || 0));
+
+                  xVal = t.HoraAsignacionMin; // Hora asignación teórica
+                  teoVal = Number(p.TiempoCiclo) || 0; // Tiempo ciclo teórico
+                  realVal = pEnplanta - pImpreso; // Regreso planta - Impresión ticket
+                } else {
+                  xVal = t.HoraAsignacionMin;
+                  teoVal = t.HoraAsignacionMin;
+                  realVal = r.HoraAsignacionMin;
+                }
+
+                pairedData.push({
+                  pedido: p,
+                  teo: t,
+                  real: r,
+                  x: xVal,
+                  teoVal: teoVal,
+                  realVal: realVal
+                });
+              }
+            });
+          });
+
+          // Asignar métricas de volumen totales
+          const totalVolTeorico = d3.sum(baseOrders, p => p.CantProgramada || 0);
+          const totalVolReal = d3.sum(baseOrders, p => p.CantDespachada || 0);
+          
+          this.metrics = {
+            volumenT: Math.round(totalVolReal), // Volumen real despachado
+            volConfirmado: Math.round(totalVolTeorico) // Volumen programado total (Pedidos)
+          };
+
+          // Reconstruir grupos y actualizar dropdown de plantas
+          window.grupos = {};
+          Object.entries(window.plantasData).forEach(([code, p]) => {
+            const g = p.grupo_despacho;
+            if (g) {
+              if (!window.grupos[g]) window.grupos[g] = [];
+              window.grupos[g].push(code);
+            }
+          });
+          this.fullPedidos = fullPedidos;
+          this.updatePlantasOptions(date);
+
+          // Redibujar gráfico SVG tipo Scatter Plot y gráfico de barras de atrasos
+          this.$nextTick(() => {
+            drawScatterTeoricoReal("#chart-global", "#chart-container-global", pairedData, granularidadMin, this.teoricoRealType);
+            drawAtrasosBarChart("#chart-atrasos", "#chart-container-atrasos", pairedData, granularidadMin);
           });
 
         } else {

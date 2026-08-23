@@ -1,15 +1,14 @@
 function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, activeSuffixes, formattedLabels, granularidadMin, colorTheme, globalYMax) {
   const container = d3.select(containerSelector);
-  const svg = d3.select(svgSelector);
-  svg.selectAll("*").remove(); // Limpiar gráfico anterior
-
-  // Obtener dimensiones reales del SVG o contenedor
-  const width = +svg.attr("width") || container.node()?.clientWidth || 1260;
-  const height = +svg.attr("height") || container.node()?.clientHeight || 490;
+  container.selectAll("*").remove(); // Limpiar gráfico anterior del contenedor
+  const svg = container.append("svg")
+    .attr("id", svgSelector.replace("#", ""))
+    .attr("width", 1260)
+    .attr("height", 490);
 
   const margin = { top: 25, right: 20, bottom: 40, left: 50 };
-  const innerW = width - margin.left - margin.right;
-  const innerH = height - margin.top - margin.bottom;
+  const innerW = 1260 - margin.left - margin.right;
+  const innerH = 490 - margin.top - margin.bottom;
 
   const g = svg.append("g")
     .attr("transform", `translate(${margin.left}, ${margin.top})`);
@@ -96,7 +95,7 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
   // 5. Dibujar cada una de las curvas envolventes superpuestas
   const colors = colorTheme === 'anulaciones'
     ? ["#0066cc", "#777777", "#9c27b0", "#0066cc", "#2e7d32", "#2e7d32", "#d32f2f", "#d32f2f"]
-    : (colorTheme === 'tickets'
+    : (colorTheme === 'tickets' || colorTheme === 'teorico_real'
       ? (activeSuffixes.length === 3
         ? ["#0066cc", "#475569", "#2e7d32"] // Pedidos Actual (Blue), Pedidos Anterior (Slate), Despachos Reales (Green)
         : ["#0066cc", "#2e7d32"]) // Pedidos (Blue), Despachos (Green)
@@ -105,12 +104,12 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
         : ["#2e7d32", "#4caf50", "#81c784", "#a5d6a7"]));
   const strokeWidths = colorTheme === 'anulaciones'
     ? [2.5, 1.8, 2.5, 1.5, 2.0, 1.5, 2.0, 1.5]
-    : (colorTheme === 'tickets'
+    : (colorTheme === 'tickets' || colorTheme === 'teorico_real'
       ? (activeSuffixes.length === 3 ? [2.5, 1.8, 2.5] : [2.5, 2.5])
       : [2.5, 1.8, 1.5, 1.2]);
   const dashArrays = colorTheme === 'anulaciones'
     ? [null, null, null, "4,4", null, "4,4", null, "4,4"]
-    : (colorTheme === 'tickets'
+    : (colorTheme === 'tickets' || colorTheme === 'teorico_real'
       ? (activeSuffixes.length === 3 ? [null, "4,4", null] : [null, null])
       : [null, null, "4,4", "2,2"]);
 
@@ -252,7 +251,7 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
         const sign = totVol > 0 ? '+' : '';
         labelSuffix = `(${sign}${totVol} m³)`;
       } else {
-        const unitStr = (suffix === 'tickets' || colorTheme === 'green') ? 'tck.' : 'ped.';
+        const unitStr = (suffix === 'tickets' || suffix === 'real' || suffix === 'teorico' || colorTheme === 'green') ? 'tck.' : 'ped.';
         if (totOrders !== 0 || totVol !== 0) {
           labelSuffix = `(${totOrders} ${unitStr}, ${totVol} m³)`;
         }
@@ -379,7 +378,7 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
               ? `font-weight: ${isCloseToCurve ? '700' : '500'}; color: ${colors[index]};`
               : (index === 0 ? `font-weight: bold; color: ${colors[index]};` : `color: #555;`);
             
-            const cantStr = (suffix === 'tickets' || colorTheme === 'green') ? 'tck.' : 'ped.';
+            const cantStr = (suffix === 'tickets' || suffix === 'real' || suffix === 'teorico' || colorTheme === 'green') ? 'tck.' : 'ped.';
             
             // Calcular cantidad de pedidos y volumen activos en el slot t
             let activeCount = 0;
@@ -507,6 +506,538 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
     .on("mouseleave", () => {
       cursorLine.style("opacity", 0);
       circles.forEach(c => c.style("opacity", 0));
+      tooltip.style("display", "none");
+    });
+}
+
+/**
+ * Dibuja un gráfico de dispersión (Scatter Plot) amplio que compara:
+ * - Eje X: Hora de Asignación Teórica (Pedidos) de 06:00 a 20:00.
+ * - Eje Y: Retraso / Adelanto en minutos (fijo entre -60 y +60, con outliers acotados arriba/abajo).
+ */
+function drawScatterTeoricoReal(containerId, containerParentId, pairedData, granularidadMin, type = 'asignacion') {
+  const container = d3.select(containerParentId);
+  container.selectAll("*").remove(); // Limpiar todo
+
+  const width = 1260;
+  const height = 430;
+  const margin = { top: 55, right: 30, bottom: 45, left: 60 };
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  const svg = container.append("svg")
+    .attr("id", containerId.replace("#", ""))
+    .attr("width", width)
+    .attr("height", height)
+    .style("display", "block")
+    .style("margin", "0 auto");
+
+  const g = svg.append("g")
+    .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+  // Escalas de hora del día (X) y desviación (Y) unificadas para todos los modos
+  const xScale = d3.scaleLinear().domain([360, 1200]).range([0, innerW]);
+  const yScale = d3.scaleLinear().domain([-65, 65]).range([innerH, 0]);
+
+  const ticks = [360, 420, 480, 540, 600, 660, 720, 780, 840, 900, 960, 1020, 1080, 1140, 1200];
+  const yTicks = [-60, -45, -30, -15, 0, 15, 30, 45, 60];
+
+  const formatTime = min => {
+    const hh = String(Math.floor(min / 60)).padStart(2, '0');
+    const mm = String(min % 60).padStart(2, '0');
+    return `${hh}:${mm}`;
+  };
+
+  // Cuadrícula y líneas de guía
+  const gridG = g.append("g").attr("class", "grid");
+  ticks.forEach(t => {
+    gridG.append("line")
+      .attr("x1", xScale(t)).attr("x2", xScale(t)).attr("y1", 0).attr("y2", innerH)
+      .attr("stroke", "#eee").attr("stroke-dasharray", "2,2");
+  });
+  
+  yTicks.forEach(val => {
+    gridG.append("line")
+      .attr("x1", 0).attr("x2", innerW).attr("y1", yScale(val)).attr("y2", yScale(val))
+      .attr("stroke", val === 0 ? "#94a3b8" : "#eee")
+      .attr("stroke-width", val === 0 ? 1.5 : 1)
+      .attr("stroke-dasharray", val === 0 ? null : "2,2");
+  });
+
+  // Ejes
+  g.append("g")
+    .attr("transform", `translate(0, ${innerH})`)
+    .call(d3.axisBottom(xScale).tickValues(ticks).tickFormat(formatTime))
+    .style("font-family", "sans-serif").style("font-size", "10px");
+
+  g.append("g")
+    .call(d3.axisLeft(yScale).tickValues(yTicks).tickFormat(d => {
+      if (d > 0) return `-${d}`;
+      if (d < 0) return `+${Math.abs(d)}`;
+      return "0";
+    }))
+    .style("font-family", "sans-serif").style("font-size", "10px");
+
+  // Etiquetas de los ejes
+  const xLabel = type === 'viaje_ida' 
+    ? "Hora de Inicio del Viaje Teórica (Pedidos)" 
+    : (type === 'viaje_regreso' ? "Hora de Salida de Obra Teórica (Pedidos)" : (type === 'estadia' ? "Hora de Llegada a Obra Teórica (Pedidos)" : (type === 'carga' || type === 'ciclo' ? "Hora de Asignación Teórica (Pedidos)" : "Hora de Asignación Teórica (Pedidos)")));
+
+  const yLabel = type === 'viaje_ida'
+    ? "Adelanto / Atraso en Tiempo de Viaje (Minutos)"
+    : (type === 'viaje_regreso' ? "Adelanto / Atraso en Tiempo de Regreso (Minutos)" : (type === 'estadia' ? "Adelanto / Atraso en Estadía (Minutos)" : (type === 'carga' ? "Adelanto / Atraso en Tiempo de Carga (Minutos)" : (type === 'ciclo' ? "Adelanto / Atraso en Tiempo de Ciclo (Minutos)" : "Adelanto / Atraso (Minutos)"))));
+
+  const chartTitleText = type === 'viaje_ida'
+    ? "Desviación de Tiempo de Viaje (Ida): Adelanto (arriba) / Atraso (abajo)"
+    : (type === 'viaje_regreso' ? "Desviación de Tiempo de Regreso (Retorno): Adelanto (arriba) / Atraso (abajo)" : (type === 'estadia' ? "Desviación de Estadía (En Obra): Adelanto (arriba) / Atraso (abajo)" : (type === 'carga' ? "Desviación de Tiempo de Carga: Adelanto (arriba) / Atraso (abajo)" : (type === 'ciclo' ? "Desviación de Tiempo de Ciclo Completo: Adelanto (arriba) / Atraso (abajo)" : "Desviación de Asignaciones: Adelanto (arriba) / Atraso (abajo)"))));
+
+  svg.append("text")
+    .attr("x", margin.left + innerW / 2).attr("y", height - 15)
+    .attr("text-anchor", "middle").attr("fill", "#334155")
+    .style("font-size", "12px").style("font-weight", "600").style("font-family", "sans-serif")
+    .text(xLabel);
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(margin.top + innerH / 2)).attr("y", 20)
+    .attr("text-anchor", "middle").attr("fill", "#334155")
+    .style("font-size", "12px").style("font-weight", "600").style("font-family", "sans-serif")
+    .text(yLabel);
+
+  // Título del gráfico
+  svg.append("text")
+    .attr("x", margin.left + innerW / 2).attr("y", 42)
+    .attr("text-anchor", "middle").attr("fill", "#1e293b")
+    .style("font-size", "14px").style("font-weight", "bold").style("font-family", "sans-serif")
+    .text(chartTitleText);
+
+  // Tooltip flotante global
+  let tooltip = d3.select(".tooltip");
+  if (tooltip.empty()) {
+    tooltip = d3.select("body").append("div")
+      .attr("class", "tooltip")
+      .style("display", "none");
+  }
+
+  // Dibujar puntos del scatter plot
+  const dots = g.selectAll(".dot")
+    .data(pairedData)
+    .enter()
+    .append("circle")
+    .attr("class", "dot")
+    .attr("cx", d => xScale(d.x))
+    .attr("cy", d => {
+      const dev = d.teoVal - d.realVal;
+      const clampedDev = dev > 60 ? 62 : (dev < -60 ? -62 : dev);
+      return yScale(clampedDev);
+    })
+    .attr("r", 6)
+    .attr("fill", d => {
+      const dev = d.teoVal - d.realVal;
+      return dev < 0 ? "rgba(220, 38, 38, 0.55)" : (dev > 0 ? "rgba(22, 163, 74, 0.55)" : "rgba(100, 116, 139, 0.55)");
+    })
+    .attr("stroke", d => {
+      const dev = d.teoVal - d.realVal;
+      return dev < 0 ? "#dc2626" : (dev > 0 ? "#16a34a" : "#64748b");
+    })
+    .attr("stroke-width", 1.5)
+    .style("cursor", "pointer")
+    .style("transition", "all 0.15s ease");
+
+  dots.on("mouseover", function(ev, d) {
+    const dev = d.teoVal - d.realVal;
+    const isAtraso = dev < 0;
+    const isAdelanto = dev > 0;
+
+    d3.select(this)
+      .attr("r", 9)
+      .attr("fill", isAtraso ? "#ef4444" : (isAdelanto ? "#22c55e" : "#475569"))
+      .attr("stroke", isAtraso ? "#ef4444" : (isAdelanto ? "#22c55e" : "#475569"))
+      .attr("stroke-width", 2.5);
+
+    const rawT = d.real.rawTicket || {};
+    const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : d.pedido.HoraAsignacionMin;
+    const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
+    const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (d.pedido.TiempoCarga || 0));
+    const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
+    const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (d.pedido.TiempoViaje || 0));
+    const pInicioDescarga = (rawT.InicioDescarga && rawT.InicioDescarga !== "0") ? safeHhmmssToMin(rawT.InicioDescarga) : pEnObra;
+    const pAplanta = (rawT.Aplanta && rawT.Aplanta !== "0") ? safeHhmmssToMin(rawT.Aplanta) : (pEnObra + (d.pedido.Frecuencia || 0));
+    const pEnplanta = (rawT.Enplanta && rawT.Enplanta !== "0") ? safeHhmmssToMin(rawT.Enplanta) : (pAplanta + (d.pedido.TiempoViaje || 0));
+
+    let timeDetailsHtml = "";
+    let diffText = "";
+    let diffColor = "#333";
+
+    if (type === 'viaje_ida') {
+      const teoDuration = d.pedido.TiempoViaje || 0;
+      const realDuration = pEnObra - pFinCarga;
+      const diffMin = realDuration - teoDuration; // positivo = atrasado, negativo = adelantado
+
+      if (diffMin > 0) {
+        diffText = `+${diffMin} min. (Atrasado)`;
+        diffColor = "#d32f2f";
+      } else if (diffMin < 0) {
+        diffText = `${diffMin} min. (Adelantado)`;
+        diffColor = "#2e7d32";
+      } else {
+        diffText = "Sin desviación";
+        diffColor = "#4b5563";
+      }
+
+      timeDetailsHtml = `
+        <strong>Salida Teórica (Inicio):</strong> ${formatTime(d.teo.HoraInicioMin)}<br/>
+        <strong>Salida Real (Inicio):</strong> ${formatTime(pFinCarga)}<br/>
+        <strong>Duración Teórica:</strong> ${teoDuration} min.<br/>
+        <strong>Duración Real:</strong> ${realDuration} min.<br/>
+      `;
+    } else if (type === 'viaje_regreso') {
+      const teoDuration = d.pedido.TiempoViaje || 0;
+      const realDuration = pEnplanta - pAplanta;
+      const diffMin = realDuration - teoDuration; // positivo = atrasado, negativo = adelantado
+
+      if (diffMin > 0) {
+        diffText = `+${diffMin} min. (Atrasado)`;
+        diffColor = "#d32f2f";
+      } else if (diffMin < 0) {
+        diffText = `${diffMin} min. (Adelantado)`;
+        diffColor = "#2e7d32";
+      } else {
+        diffText = "Sin desviación";
+        diffColor = "#4b5563";
+      }
+
+      const teoStart = d.teo.HoraFinalMin - teoDuration;
+
+      timeDetailsHtml = `
+        <strong>Salida Obra Teórica (Regreso):</strong> ${formatTime(teoStart)}<br/>
+        <strong>Salida Obra Real (Regreso):</strong> ${formatTime(pAplanta)}<br/>
+        <strong>Duración Teórica:</strong> ${teoDuration} min.<br/>
+        <strong>Duración Real:</strong> ${realDuration} min.<br/>
+      `;
+    } else if (type === 'estadia') {
+      const teoDuration = (d.teo.HoraFinalMin - (d.pedido.TiempoViaje || 0)) - d.teo.HoraInicioMin;
+      const realDuration = pAplanta - pEnObra;
+      const diffMin = realDuration - teoDuration; // positivo = atrasado, negativo = adelantado
+
+      if (diffMin > 0) {
+        diffText = `+${diffMin} min. (Atrasado)`;
+        diffColor = "#d32f2f";
+      } else if (diffMin < 0) {
+        diffText = `${diffMin} min. (Adelantado)`;
+        diffColor = "#2e7d32";
+      } else {
+        diffText = "Sin desviación";
+        diffColor = "#4b5563";
+      }
+
+      timeDetailsHtml = `
+        <strong>Llegada Obra Teórica (Estadía):</strong> ${formatTime(d.teo.HoraInicioMin)}<br/>
+        <strong>Llegada Obra Real (Estadía):</strong> ${formatTime(pEnObra)}<br/>
+        <strong>Duración Estadía Teórica:</strong> ${teoDuration} min.<br/>
+        <strong>Duración Estadía Real:</strong> ${realDuration} min.<br/>
+      `;
+    } else if (type === 'carga') {
+      const teoDuration = d.pedido.TiempoCarga || 0;
+      const realDuration = pAObra - pImpreso;
+      const diffMin = realDuration - teoDuration; // positivo = atrasado, negativo = adelantado
+
+      if (diffMin > 0) {
+        diffText = `+${diffMin} min. (Atrasado)`;
+        diffColor = "#d32f2f";
+      } else if (diffMin < 0) {
+        diffText = `${diffMin} min. (Adelantado)`;
+        diffColor = "#2e7d32";
+      } else {
+        diffText = "Sin desviación";
+        diffColor = "#4b5563";
+      }
+
+      timeDetailsHtml = `
+        <strong>Asignación Teórica (Impreso):</strong> ${formatTime(d.teo.HoraAsignacionMin)}<br/>
+        <strong>Asignación Real (Impreso):</strong> ${formatTime(pImpreso)}<br/>
+        <strong>Duración Carga Teórica:</strong> ${teoDuration} min.<br/>
+        <strong>Duración Carga Real:</strong> ${realDuration} min.<br/>
+      `;
+    } else if (type === 'ciclo') {
+      const teoDuration = d.pedido.TiempoCiclo || 0;
+      const realDuration = pEnplanta - pImpreso;
+      const diffMin = realDuration - teoDuration; // positivo = atrasado, negativo = adelantado
+
+      if (diffMin > 0) {
+        diffText = `+${diffMin} min. (Atrasado)`;
+        diffColor = "#d32f2f";
+      } else if (diffMin < 0) {
+        diffText = `${diffMin} min. (Adelantado)`;
+        diffColor = "#2e7d32";
+      } else {
+        diffText = "Sin desviación";
+        diffColor = "#4b5563";
+      }
+
+      timeDetailsHtml = `
+        <strong>Asignación Teórica (Impreso):</strong> ${formatTime(d.teo.HoraAsignacionMin)}<br/>
+        <strong>Asignación Real (Impreso):</strong> ${formatTime(pImpreso)}<br/>
+        <strong>Duración Ciclo Teórica:</strong> ${teoDuration} min.<br/>
+        <strong>Duración Ciclo Real:</strong> ${realDuration} min.<br/>
+      `;
+    } else {
+      const diffMin = d.real.HoraAsignacionMin - d.teo.HoraAsignacionMin; // positivo = atrasado, negativo = adelantado
+
+      if (diffMin > 0) {
+        diffText = `+${diffMin} min. (Atrasado)`;
+        diffColor = "#d32f2f";
+      } else if (diffMin < 0) {
+        diffText = `${diffMin} min. (Adelantado)`;
+        diffColor = "#2e7d32";
+      } else {
+        diffText = "Sin desviación";
+        diffColor = "#4b5563";
+      }
+
+      timeDetailsHtml = `
+        <strong>Hora Teórica (Asignación):</strong> ${formatTime(d.teo.HoraAsignacionMin)}<br/>
+        <strong>Hora Real (Asignación):</strong> ${formatTime(d.real.HoraAsignacionMin)}<br/>
+      `;
+    }
+
+    const html = `
+      <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px;">
+        <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">
+          ${d.pedido.Obra || 'Obra no especificada'}
+        </div>
+        <strong>Obra:</strong> ${d.pedido.Obra || ''}<br/>
+        <strong>Producto:</strong> ${d.pedido.Producto || ''}<br/>
+        <strong>Volumen:</strong> ${d.pedido.CantProgramada || 0} m³<br/>
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 4px 0;"/>
+        <strong>Despacho:</strong> Viaje #${d.real.despachoIndex}<br/>
+        ${timeDetailsHtml}
+        <strong>Desviación:</strong> <span style="font-weight: bold; color: ${diffColor};">${diffText}</span>
+      </div>
+    `;
+
+    tooltip.html(html).style("display", "block");
+
+    // Posicionar tooltip con límites
+    const tooltipNode = tooltip.node();
+    const tooltipW = tooltipNode.offsetWidth;
+    const tooltipH = tooltipNode.offsetHeight;
+    
+    let leftPos = ev.pageX + 15;
+    let topPos = ev.pageY - 15;
+
+    const pageW = window.innerWidth;
+    const pageH = window.innerHeight;
+
+    if (leftPos + tooltipW > pageW) {
+      leftPos = ev.pageX - tooltipW - 15;
+    }
+    if (topPos + tooltipH > pageH) {
+      topPos = pageH - tooltipH - 15;
+    }
+    if (topPos < 0) {
+      topPos = 10;
+    }
+
+    tooltip
+      .style("left", `${leftPos}px`)
+      .style("top", `${topPos}px`)
+      .style("transform", "none");
+  })
+  .on("mousemove", function(ev) {
+    const tooltipNode = tooltip.node();
+    const tooltipW = tooltipNode.offsetWidth;
+    const tooltipH = tooltipNode.offsetHeight;
+
+    let leftPos = ev.pageX + 15;
+    let topPos = ev.pageY - 15;
+
+    const pageW = window.innerWidth;
+    const pageH = window.innerHeight;
+
+    if (leftPos + tooltipW > pageW) {
+      leftPos = ev.pageX - tooltipW - 15;
+    }
+    if (topPos + tooltipH > pageH) {
+      topPos = pageH - tooltipH - 15;
+    }
+    if (topPos < 0) {
+      topPos = 10;
+    }
+
+    tooltip
+      .style("left", `${leftPos}px`)
+      .style("top", `${topPos}px`);
+  })
+  .on("mouseleave", function(ev, d) {
+    const dev = d.teoVal - d.realVal;
+    const isAtraso = dev < 0;
+    const isAdelanto = dev > 0;
+
+    d3.select(this)
+      .attr("r", 6)
+      .attr("fill", isAtraso ? "rgba(220, 38, 38, 0.55)" : (isAdelanto ? "rgba(22, 163, 74, 0.55)" : "rgba(100, 116, 139, 0.55)"))
+      .attr("stroke", isAtraso ? "#dc2626" : (isAdelanto ? "#16a34a" : "#64748b"))
+      .attr("stroke-width", 1.5);
+
+    tooltip.style("display", "none");
+  });
+}
+
+function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granularidadMin) {
+  const container = d3.select(containerSelector);
+  container.selectAll("*").remove(); // Limpiar anterior
+
+  const width = 1260;
+  const height = 190;
+  const margin = { top: 20, right: 30, bottom: 35, left: 60 };
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  const svg = container.append("svg")
+    .attr("id", svgSelector.replace("#", ""))
+    .attr("width", width)
+    .attr("height", height)
+    .style("display", "block")
+    .style("margin", "0 auto");
+
+  const g = svg.append("g")
+    .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+  // Escalas
+  const xScale = d3.scaleLinear().domain([360, 1200]).range([0, innerW]);
+  const yScale = d3.scaleLinear().domain([0, 100]).range([innerH, 0]);
+
+  // Generar bins de 30 minutos (media hora) de 06:00 (360) a 20:00 (1200)
+  const bins = [];
+  for (let min = 360; min < 1200; min += 30) {
+    const nextMin = min + 30;
+    
+    // Filtrar puntos en este intervalo
+    const pointsInBin = pairedData.filter(d => d.x >= min && d.x < nextMin);
+    const totalCount = pointsInBin.length;
+    const atrasadosCount = pointsInBin.filter(d => (d.teoVal - d.realVal) < 0).length;
+    const percentage = totalCount > 0 ? (atrasadosCount / totalCount) * 100 : 0;
+
+    bins.push({
+      startMin: min,
+      endMin: nextMin,
+      totalCount,
+      atrasadosCount,
+      percentage
+    });
+  }
+
+  // Cuadrícula y guías
+  const ticks = [360, 420, 480, 540, 600, 660, 720, 780, 840, 900, 960, 1020, 1080, 1140, 1200];
+  const yTicks = [0, 25, 50, 75, 100];
+
+  const gridG = g.append("g").attr("class", "grid");
+  ticks.forEach(t => {
+    gridG.append("line")
+      .attr("x1", xScale(t)).attr("x2", xScale(t)).attr("y1", 0).attr("y2", innerH)
+      .attr("stroke", "#eee").attr("stroke-dasharray", "2,2");
+  });
+
+  yTicks.forEach(val => {
+    gridG.append("line")
+      .attr("x1", 0).attr("x2", innerW).attr("y1", yScale(val)).attr("y2", yScale(val))
+      .attr("stroke", "#eee").attr("stroke-dasharray", "2,2");
+  });
+
+  const formatTime = min => {
+    const hh = String(Math.floor(min / 60)).padStart(2, '0');
+    const mm = String(min % 60).padStart(2, '0');
+    return `${hh}:${mm}`;
+  };
+
+  // Ejes
+  g.append("g")
+    .attr("transform", `translate(0, ${innerH})`)
+    .call(d3.axisBottom(xScale).tickValues(ticks).tickFormat(formatTime))
+    .style("font-family", "sans-serif").style("font-size", "10px");
+
+  g.append("g")
+    .call(d3.axisLeft(yScale).tickValues(yTicks).tickFormat(d => `${d}%`))
+    .style("font-family", "sans-serif").style("font-size", "10px");
+
+  // Etiquetas
+  svg.append("text")
+    .attr("x", margin.left + innerW / 2).attr("y", height - 5)
+    .attr("text-anchor", "middle").attr("fill", "#475569")
+    .style("font-size", "11px").style("font-weight", "600").style("font-family", "sans-serif")
+    .text("Intervalo de Tiempo (Hora de Inicio)");
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(margin.top + innerH / 2)).attr("y", 15)
+    .attr("text-anchor", "middle").attr("fill", "#475569")
+    .style("font-size", "11px").style("font-weight", "600").style("font-family", "sans-serif")
+    .text("% Atrasados");
+
+  // Título secundario
+  svg.append("text")
+    .attr("x", margin.left + innerW / 2).attr("y", 12)
+    .attr("text-anchor", "middle").attr("fill", "#334155")
+    .style("font-size", "12px").style("font-weight", "bold").style("font-family", "sans-serif")
+    .text("% de Despachos Atrasados por Media Hora");
+
+  // Tooltip flotante global
+  let tooltip = d3.select(".tooltip");
+  if (tooltip.empty()) {
+    tooltip = d3.select("body").append("div")
+      .attr("class", "tooltip")
+      .style("display", "none");
+  }
+
+  // Dibujar las barras
+  g.selectAll(".bar")
+    .data(bins)
+    .enter()
+    .append("rect")
+    .attr("class", "bar")
+    .attr("x", d => xScale(d.startMin) + 1)
+    .attr("y", d => yScale(d.percentage))
+    .attr("width", d => Math.max(1, xScale(d.endMin) - xScale(d.startMin) - 2))
+    .attr("height", d => innerH - yScale(d.percentage))
+    .attr("fill", "#ef4444")
+    .attr("opacity", 0.7)
+    .attr("rx", 2)
+    .style("cursor", "pointer")
+    .style("transition", "all 0.15s ease")
+    .on("mouseover", function(ev, d) {
+      d3.select(this).attr("opacity", 1.0);
+      
+      const html = `
+        <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px;">
+          <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">
+            Intervalo: ${formatTime(d.startMin)} - ${formatTime(d.endMin)}
+          </div>
+          <strong>Total Despachos:</strong> ${d.totalCount}<br/>
+          <strong>Atrasados:</strong> ${d.atrasadosCount}<br/>
+          <strong>Porcentaje:</strong> <span style="font-weight: bold; color: #ef4444;">${d.percentage.toFixed(1)}%</span>
+        </div>
+      `;
+      tooltip.html(html).style("display", "block");
+
+      const tooltipNode = tooltip.node();
+      const tooltipW = tooltipNode.offsetWidth;
+      const tooltipH = tooltipNode.offsetHeight;
+
+      tooltip
+        .style("left", `${ev.pageX - tooltipW / 2}px`)
+        .style("top", `${ev.pageY - tooltipH - 15}px`);
+    })
+    .on("mousemove", function(ev) {
+      const tooltipNode = tooltip.node();
+      const tooltipW = tooltipNode.offsetWidth;
+      const tooltipH = tooltipNode.offsetHeight;
+      tooltip
+        .style("left", `${ev.pageX - tooltipW / 2}px`)
+        .style("top", `${ev.pageY - tooltipH - 15}px`);
+    })
+    .on("mouseleave", function() {
+      d3.select(this).attr("opacity", 0.7);
       tooltip.style("display", "none");
     });
 }

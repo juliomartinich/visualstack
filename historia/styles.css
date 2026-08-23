@@ -42,6 +42,12 @@ svg text {
   border: 1px solid #c8e6c9;
 }
 
+.badge.teorico_real {
+  background: #e3f2fd;
+  color: #0d47a1;
+  border: 1px solid #bbdefb;
+}
+
 /* Tooltip premium estilo glassmorphism */
 .tooltip {
   position: absolute;
