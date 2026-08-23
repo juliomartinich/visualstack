@@ -130,12 +130,46 @@ document.addEventListener('alpine:init', () => {
         const index = await fetchSafeJson(`data/index.json?v=${Date.now()}`);
         this.capturaDates = index.sort().reverse();
 
+        // 3. Inyectar datos del día de hoy (desde el directorio raíz de datos)
+        try {
+          const todayPedidos = await fetchSafeJson(`../data/Pedidos.json?v=${Date.now()}`);
+          if (todayPedidos && todayPedidos.DiaReporte) {
+            const todayDateStr = String(todayPedidos.DiaReporte);
+            const todaySuffix = todayDateStr.slice(2);
+            const todayTickets = await fetchSafeJson(`../data/Tick.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }));
+            
+            // Filtrar solo los pedidos del DiaReporte
+            const filteredPedidos = {};
+            if (todayPedidos.pedidos) {
+              for (const [id, pedido] of Object.entries(todayPedidos.pedidos)) {
+                if (pedido["Fecha Pedido"] === todayDateStr) {
+                  filteredPedidos[id] = pedido;
+                }
+              }
+            }
+            todayPedidos.pedidos = filteredPedidos;
+
+            // Pre-cache the current day's data so the app doesn't attempt to load data/Pedidos_{todaySuffix}.json
+            this.rawCapturas[todaySuffix] = {
+              pedidosRaw: todayPedidos,
+              ticketsRaw: todayTickets
+            };
+            
+            // Add to the list of available dates if not already present
+            if (!this.capturaDates.includes(todaySuffix)) {
+              this.capturaDates.unshift(todaySuffix); // Adds to the beginning (most recent)
+            }
+          }
+        } catch (e) {
+          console.warn("No se pudo cargar Pedidos.json del día de hoy", e);
+        }
+
         if (this.capturaDates.length === 0) {
           this.loading = false;
           return;
         }
 
-        // 3. Convertir sufijos YYMMDD a formato de fecha YYYYMMDD para selectores
+        // 4. Convertir sufijos YYMMDD a formato de fecha YYYYMMDD para selectores
         this.orderDates = this.capturaDates.map(suffix => `20${suffix.slice(0,2)}${suffix.slice(2,4)}${suffix.slice(4,6)}`).sort().reverse();
         this.ticketDates = [...this.orderDates];
 

@@ -1095,7 +1095,7 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     const html = `
       <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px; min-width: 285px; max-width: 330px;">
         <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">
-          ${d.pedido.Obra || 'Obra no especificada'}
+          ${d.pedido.Cliente || 'Cliente no especificado'}
         </div>
         <strong>Obra:</strong> ${d.pedido.Obra || ''}<br/>
         <strong>Producto:</strong> ${d.pedido.Producto || ''}<br/>
