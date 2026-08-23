@@ -557,11 +557,11 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     .attr("y", yScale(65)).attr("height", yScale(0) - yScale(65))
     .attr("fill", "rgba(22, 163, 74, 0.02)");
 
-  // Atraso <= 5 min (y entre 0 y -5): verde lima suave
+  // Atraso <= 5 min (y entre 0 y -5): azul/gris suave
   bandG.append("rect")
     .attr("x", 0).attr("width", innerW)
     .attr("y", yScale(0)).attr("height", yScale(-5) - yScale(0))
-    .attr("fill", "rgba(101, 163, 13, 0.05)");
+    .attr("fill", "rgba(100, 116, 139, 0.05)");
 
   // Atraso entre 5 y 30 min (y entre -5 y -30): amarillo suave
   bandG.append("rect")
@@ -664,7 +664,7 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
       if (dev === 0) return "rgba(100, 116, 139, 0.55)";
       if (dev > 0) return "rgba(22, 163, 74, 0.55)"; // Adelanto (verde)
       const atraso = -dev;
-      if (atraso <= 5) return "rgba(101, 163, 13, 0.55)"; // Atraso <= 5 (verde lima)
+      if (atraso <= 5) return "rgba(100, 116, 139, 0.55)"; // Atraso <= 5 (azul/gris cero diferencia)
       if (atraso <= 30) return "rgba(254, 240, 138, 0.7)"; // Atraso 5 a 30 (amarillo)
       return "rgba(220, 38, 38, 0.55)"; // Atraso > 30 (rojo)
     })
@@ -673,7 +673,7 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
       if (dev === 0) return "#64748b";
       if (dev > 0) return "#16a34a"; // verde
       const atraso = -dev;
-      if (atraso <= 5) return "#65a30d"; // verde lima
+      if (atraso <= 5) return "#64748b"; // Atraso <= 5 (azul/gris cero diferencia)
       if (atraso <= 30) return "#f97316"; // naranja (borde para amarillo)
       return "#dc2626"; // rojo
     })
@@ -692,7 +692,7 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     } else {
       const atraso = -dev;
       if (atraso <= 5) {
-        mFill = "#84cc16"; mStroke = "#84cc16";
+        mFill = "#475569"; mStroke = "#475569";
       } else if (atraso <= 30) {
         mFill = "#fef08a"; mStroke = "#f97316";
       } else {
@@ -872,49 +872,127 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
       `;
     }
 
+    const teoCarga = d.pedido.TiempoCarga || 0;
+    const realCarga = pAObra - pImpreso;
     const teoEstadia = (d.teo.HoraFinalMin - (d.pedido.TiempoViaje || 0)) - d.teo.HoraInicioMin;
     const realEstadia = pAplanta - pEnObra;
     const teoIda = d.pedido.TiempoViaje || 0;
-    const realIda = pEnObra - pFinCarga;
+    const realIda = pEnObra - pAObra;
     const teoRegreso = d.pedido.TiempoViaje || 0;
     const realRegreso = pEnplanta - pAplanta;
+    const teoCiclo = d.pedido.TiempoCiclo || 0;
+    const realCiclo = pEnplanta - pImpreso;
+
+    const diffAsignacion = d.real.HoraAsignacionMin - d.teo.HoraAsignacionMin;
+    const diffCarga = realCarga - teoCarga;
+    const diffIda = realIda - teoIda;
+    const diffPuntualidad = pEnObra - d.teo.HoraInicioMin;
+    const diffEstadia = realEstadia - teoEstadia;
+    const diffRegreso = realRegreso - teoRegreso;
+    const diffCiclo = realCiclo - teoCiclo;
+
+    const formatDiffVal = (diff) => {
+      if (diff > 0) return `<span style="color: #dc2626; font-weight: bold;">+${diff}</span>`;
+      if (diff < 0) return `<span style="color: #16a34a; font-weight: bold;">${diff}</span>`;
+      return `<span style="color: #64748b;">0</span>`;
+    };
 
     const tableHtml = `
-      <table style="width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10px; border-top: 1.5px solid #cbd5e1; padding-top: 4px;">
+      <table style="width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10.5px; border-top: 1.5px solid #cbd5e1; padding-top: 4px;">
         <thead>
-          <tr style="color: #475569; font-weight: bold; text-align: left;">
+          <tr style="color: #334155; font-weight: bold; text-align: left; font-size: 11.5px;">
             <th style="padding: 4px 0 2px 0;">Etapa</th>
             <th style="padding: 4px 0 2px 0; text-align: right;">Teórico</th>
             <th style="padding: 4px 0 2px 0; text-align: right;">Real</th>
+            <th style="padding: 4px 0 2px 0; text-align: right;">Dif.</th>
           </tr>
         </thead>
         <tbody>
           <tr style="border-bottom: 1px solid #f1f5f9;">
             <td style="padding: 3px 0; color: #334155;">Hora Asignación</td>
             <td style="padding: 3px 0; text-align: right; color: #64748b;">${formatTime(d.teo.HoraAsignacionMin)}</td>
-            <td style="padding: 3px 0; text-align: right; font-weight: bold; color: #1e293b;">${formatTime(d.real.HoraAsignacionMin)}</td>
+            <td style="padding: 3px 0; text-align: right; color: #1e293b;">${formatTime(d.real.HoraAsignacionMin)}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffAsignacion)}</td>
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 3px 0; color: #334155;">Viaje Ida</td>
-            <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoIda} min.</td>
-            <td style="padding: 3px 0; text-align: right; font-weight: bold; color: #1e293b;">${realIda} min.</td>
+            <td style="padding: 3px 0; color: #334155;">Carga [min]</td>
+            <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoCarga}</td>
+            <td style="padding: 3px 0; text-align: right; color: #1e293b;">${realCarga}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffCarga)}</td>
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 3px 0; color: #334155;">Estadía</td>
-            <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoEstadia} min.</td>
-            <td style="padding: 3px 0; text-align: right; font-weight: bold; color: #1e293b;">${realEstadia} min.</td>
+            <td style="padding: 3px 0; color: #334155;">Viaje Ida [min]</td>
+            <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoIda}</td>
+            <td style="padding: 3px 0; text-align: right; color: #1e293b;">${realIda}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffIda)}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9; font-weight: bold;">
+            <td style="padding: 3px 0; color: #1e293b; font-weight: bold;">Puntualidad</td>
+            <td style="padding: 3px 0; text-align: right; color: #1e293b; font-weight: bold;">${formatTime(d.teo.HoraInicioMin)}</td>
+            <td style="padding: 3px 0; text-align: right; color: #1e293b; font-weight: bold;">${formatTime(pEnObra)}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffPuntualidad)}</td>
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 3px 0; color: #334155;">Regreso</td>
-            <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoRegreso} min.</td>
-            <td style="padding: 3px 0; text-align: right; font-weight: bold; color: #1e293b;">${realRegreso} min.</td>
+            <td style="padding: 3px 0; color: #334155;">Estadía [min]</td>
+            <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoEstadia}</td>
+            <td style="padding: 3px 0; text-align: right; color: #1e293b;">${realEstadia}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffEstadia)}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 3px 0; color: #334155;">Regreso [min]</td>
+            <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoRegreso}</td>
+            <td style="padding: 3px 0; text-align: right; color: #1e293b;">${realRegreso}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffRegreso)}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9; font-weight: bold;">
+            <td style="padding: 3px 0; color: #1e293b; font-weight: bold;">Ciclo Completo [min]</td>
+            <td style="padding: 3px 0; text-align: right; color: #1e293b; font-weight: bold;">${teoCiclo}</td>
+            <td style="padding: 3px 0; text-align: right; color: #1e293b; font-weight: bold;">${realCiclo}</td>
+            <td style="padding: 3px 0; text-align: right;">${formatDiffVal(diffCiclo)}</td>
           </tr>
         </tbody>
       </table>
     `;
 
+    let rawTicketHtml = "";
+    if (rawT && Object.keys(rawT).length > 0) {
+      rawTicketHtml = `
+        <div style="margin-top: 8px; border-top: 1px dashed #cbd5e1; padding-top: 6px; text-align: left;">
+          <span style="font-size: 10px; font-weight: 700; color: #475569;">Datos Ticket Real Originales:</span>
+          <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px; margin-top: 4px; overflow-x: auto;">
+            <table style="width: 320px; border-collapse: collapse; font-size: 8.5px; color: #64748b; text-align: center; table-layout: fixed;">
+              <thead>
+                <tr style="border-bottom: 1px solid #f1f5f9; background-color: #f8fafc;">
+                  <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Impreso">Impreso</th>
+                  <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="InicioCarga">Ini.Carga</th>
+                  <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="FinCarga">FinCarga</th>
+                  <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="AObra">AObra</th>
+                  <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="EnObra">EnObra</th>
+                  <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="InicioDescarga">Ini.Des.</th>
+                  <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Aplanta">APlanta</th>
+                  <th style="font-weight: 600; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Enplanta">EnPlanta</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="padding: 3px 1px; border-bottom: 1px solid #f1f5f9;">${rawT.Impreso || '-'}</td>
+                  <td style="padding: 3px 1px; border-bottom: 1px solid #f1f5f9;">${rawT.InicioCarga || '-'}</td>
+                  <td style="padding: 3px 1px; border-bottom: 1px solid #f1f5f9;">${rawT.FinCarga || '-'}</td>
+                  <td style="padding: 3px 1px; border-bottom: 1px solid #f1f5f9;">${rawT.AObra || '-'}</td>
+                  <td style="padding: 3px 1px; border-bottom: 1px solid #f1f5f9;">${rawT.EnObra || '-'}</td>
+                  <td style="padding: 3px 1px; border-bottom: 1px solid #f1f5f9;">${rawT.InicioDescarga || '-'}</td>
+                  <td style="padding: 3px 1px; border-bottom: 1px solid #f1f5f9;">${rawT.Aplanta || '-'}</td>
+                  <td style="padding: 3px 1px; border-bottom: 1px solid #f1f5f9;">${rawT.Enplanta || '-'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
     const html = `
-      <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px; min-width: 220px;">
+      <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px; min-width: 285px; max-width: 330px;">
         <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">
           ${d.pedido.Obra || 'Obra no especificada'}
         </div>
@@ -923,64 +1001,86 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
         <strong>Volumen:</strong> ${d.pedido.CantProgramada || 0} m³<br/>
         <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 4px 0;"/>
         <strong>Despacho:</strong> Viaje #${d.real.despachoIndex}<br/>
-        ${timeDetailsHtml}
-        <strong>Desviación:</strong> <span style="font-weight: bold; color: ${diffColor};">${diffText}</span>
+        <strong>Camión:</strong> #${rawT.Camion || 'N/A'}<br/>
         ${tableHtml}
+        ${rawTicketHtml}
       </div>
     `;
 
     tooltip.html(html).style("display", "block");
 
-    // Posicionar tooltip con límites
+    // Posicionar tooltip con límites relativos al viewport y al contenedor padre (#chart-container)
+    const container = d3.select("#chart-container");
+    const containerBounds = container.node().getBoundingClientRect();
+
     const tooltipNode = tooltip.node();
     const tooltipW = tooltipNode.offsetWidth;
     const tooltipH = tooltipNode.offsetHeight;
-    
-    let leftPos = ev.pageX + 15;
-    let topPos = ev.pageY - 15;
 
     const pageW = window.innerWidth;
     const pageH = window.innerHeight;
 
+    // Calcular posición óptima en viewport (clientX / clientY)
+    let leftPos = ev.clientX + 15;
+    let topPos = ev.clientY - 15;
+
     if (leftPos + tooltipW > pageW) {
-      leftPos = ev.pageX - tooltipW - 15;
+      leftPos = ev.clientX - tooltipW - 15;
     }
+    if (leftPos < 10) {
+      leftPos = 10;
+    }
+
     if (topPos + tooltipH > pageH) {
-      topPos = pageH - tooltipH - 15;
+      topPos = ev.clientY - tooltipH - 15;
     }
-    if (topPos < 0) {
+    if (topPos < 10) {
       topPos = 10;
     }
 
+    // Convertir de coordenadas viewport a relativas del contenedor parent
+    const leftPosRelative = leftPos - containerBounds.left;
+    const topPosRelative = topPos - containerBounds.top;
+
     tooltip
-      .style("left", `${leftPos}px`)
-      .style("top", `${topPos}px`)
+      .style("left", `${leftPosRelative}px`)
+      .style("top", `${topPosRelative}px`)
       .style("transform", "none");
   })
   .on("mousemove", function(ev) {
+    const container = d3.select("#chart-container");
+    const containerBounds = container.node().getBoundingClientRect();
+
     const tooltipNode = tooltip.node();
     const tooltipW = tooltipNode.offsetWidth;
     const tooltipH = tooltipNode.offsetHeight;
 
-    let leftPos = ev.pageX + 15;
-    let topPos = ev.pageY - 15;
-
     const pageW = window.innerWidth;
     const pageH = window.innerHeight;
 
+    let leftPos = ev.clientX + 15;
+    let topPos = ev.clientY - 15;
+
     if (leftPos + tooltipW > pageW) {
-      leftPos = ev.pageX - tooltipW - 15;
+      leftPos = ev.clientX - tooltipW - 15;
     }
+    if (leftPos < 10) {
+      leftPos = 10;
+    }
+
     if (topPos + tooltipH > pageH) {
-      topPos = pageH - tooltipH - 15;
+      topPos = ev.clientY - tooltipH - 15;
     }
-    if (topPos < 0) {
+    if (topPos < 10) {
       topPos = 10;
     }
 
+    const leftPosRelative = leftPos - containerBounds.left;
+    const topPosRelative = topPos - containerBounds.top;
+
     tooltip
-      .style("left", `${leftPos}px`)
-      .style("top", `${topPos}px`);
+      .style("left", `${leftPosRelative}px`)
+      .style("top", `${topPosRelative}px`);
   })
   .on("mouseleave", function(ev, d) {
     const dev = d.teoVal - d.realVal;
@@ -993,7 +1093,7 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     } else {
       const atraso = -dev;
       if (atraso <= 5) {
-        mFill = "rgba(101, 163, 13, 0.55)"; mStroke = "#65a30d";
+        mFill = "rgba(100, 116, 139, 0.55)"; mStroke = "#64748b";
       } else if (atraso <= 30) {
         mFill = "rgba(254, 240, 138, 0.7)"; mStroke = "#f97316";
       } else {

@@ -63,7 +63,6 @@ svg text {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   backdrop-filter: blur(4px);
   line-height: 1.5;
-  white-space: nowrap !important;
-  min-width: 480px;
-  max-width: none !important;
+  white-space: normal;
+  max-width: 90vw;
 }

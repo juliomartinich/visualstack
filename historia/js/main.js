@@ -764,83 +764,46 @@ document.addEventListener('alpine:init', () => {
               if (r.isAnulado) return;
               const t = teos.find(td => td.despachoIndex === r.despachoIndex);
               if (t) {
+                const rawT = r.rawTicket || {};
+                const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
+                const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
+                const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (p.TiempoCarga || 0));
+                const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
+                const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (p.TiempoViaje || 0));
+                const pInicioDescarga = (rawT.InicioDescarga && rawT.InicioDescarga !== "0") ? safeHhmmssToMin(rawT.InicioDescarga) : pEnObra;
+                const pAplanta = (rawT.Aplanta && rawT.Aplanta !== "0") ? safeHhmmssToMin(rawT.Aplanta) : (pEnObra + (p.Frecuencia || 0));
+                const pEnplanta = (rawT.Enplanta && rawT.Enplanta !== "0") ? safeHhmmssToMin(rawT.Enplanta) : (pAplanta + (p.TiempoViaje || 0));
+
                 let xVal, teoVal, realVal;
                 if (this.teoricoRealType === 'viaje_ida') {
-                  const rawT = r.rawTicket || {};
-                  const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
-                  const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
-                  const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (p.TiempoCarga || 0));
-                  const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
-                  const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (p.TiempoViaje || 0));
-
                   xVal = t.HoraInicioMin; // Hora inicio viaje teórica
                   teoVal = Number(p.TiempoViaje) || 0;
-                  realVal = pEnObra - pFinCarga;
+                  realVal = pEnObra - pAObra;
                 } else if (this.teoricoRealType === 'viaje_regreso') {
-                  const rawT = r.rawTicket || {};
-                  const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
-                  const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
-                  const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (p.TiempoCarga || 0));
-                  const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
-                  const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (p.TiempoViaje || 0));
-                  const pInicioDescarga = (rawT.InicioDescarga && rawT.InicioDescarga !== "0") ? safeHhmmssToMin(rawT.InicioDescarga) : pEnObra;
-                  const pAplanta = (rawT.Aplanta && rawT.Aplanta !== "0") ? safeHhmmssToMin(rawT.Aplanta) : (pEnObra + (p.Frecuencia || 0));
-                  const pEnplanta = (rawT.Enplanta && rawT.Enplanta !== "0") ? safeHhmmssToMin(rawT.Enplanta) : (pAplanta + (p.TiempoViaje || 0));
-
-                  const teoTravelTime = Number(p.TiempoViaje) || 0; // Tiempo de regreso teórico es igual al de ida
-                  xVal = t.HoraFinalMin - teoTravelTime; // Hora de inicio de regreso teórica (Salida de Obra)
+                  const teoTravelTime = Number(p.TiempoViaje) || 0;
+                  xVal = t.HoraFinalMin - teoTravelTime; // Salida de Obra teórica
                   teoVal = teoTravelTime;
-                  realVal = pEnplanta - pAplanta; // Tiempo de regreso real (En planta - A planta)
+                  realVal = pEnplanta - pAplanta;
                 } else if (this.teoricoRealType === 'estadia') {
-                  const rawT = r.rawTicket || {};
-                  const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
-                  const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
-                  const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (p.TiempoCarga || 0));
-                  const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
-                  const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (p.TiempoViaje || 0));
-                  const pInicioDescarga = (rawT.InicioDescarga && rawT.InicioDescarga !== "0") ? safeHhmmssToMin(rawT.InicioDescarga) : pEnObra;
-                  const pAplanta = (rawT.Aplanta && rawT.Aplanta !== "0") ? safeHhmmssToMin(rawT.Aplanta) : (pEnObra + (p.Frecuencia || 0));
-
                   xVal = t.HoraInicioMin; // Llegada a Obra teórica
                   teoVal = (t.HoraFinalMin - (Number(p.TiempoViaje) || 0)) - t.HoraInicioMin;
-                  realVal = pAplanta - pEnObra; // Salida de Obra real - Llegada a Obra real
+                  realVal = pAplanta - pEnObra;
                 } else if (this.teoricoRealType === 'carga') {
-                  const rawT = r.rawTicket || {};
-                  const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
-                  const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : (pImpreso + (p.TiempoCarga || 0));
-
                   xVal = t.HoraAsignacionMin; // Hora asignación teórica
-                  teoVal = Number(p.TiempoCarga) || 0; // Tiempo carga teórico
-                  realVal = pAObra - pImpreso; // Salida hacia obra - Impresión ticket
+                  teoVal = Number(p.TiempoCarga) || 0;
+                  realVal = pAObra - pImpreso;
                 } else if (this.teoricoRealType === 'llegada_obra') {
-                  const rawT = r.rawTicket || {};
-                  const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
-                  const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
-                  const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (p.TiempoCarga || 0));
-                  const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
-                  const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (p.TiempoViaje || 0));
-
                   xVal = t.HoraInicioMin; // Hora teórica de descarga
-                  teoVal = t.HoraInicioMin; // Hora teórica de descarga
-                  realVal = pEnObra; // Hora de llegada real a la obra
+                  teoVal = t.HoraInicioMin;
+                  realVal = pEnObra;
                 } else if (this.teoricoRealType === 'ciclo') {
-                  const rawT = r.rawTicket || {};
-                  const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
-                  const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
-                  const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (p.TiempoCarga || 0));
-                  const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
-                  const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (p.TiempoViaje || 0));
-                  const pInicioDescarga = (rawT.InicioDescarga && rawT.InicioDescarga !== "0") ? safeHhmmssToMin(rawT.InicioDescarga) : pEnObra;
-                  const pAplanta = (rawT.Aplanta && rawT.Aplanta !== "0") ? safeHhmmssToMin(rawT.Aplanta) : (pEnObra + (p.Frecuencia || 0));
-                  const pEnplanta = (rawT.Enplanta && rawT.Enplanta !== "0") ? safeHhmmssToMin(rawT.Enplanta) : (pAplanta + (p.TiempoViaje || 0));
-
                   xVal = t.HoraAsignacionMin; // Hora asignación teórica
-                  teoVal = Number(p.TiempoCiclo) || 0; // Tiempo ciclo teórico
-                  realVal = pEnplanta - pImpreso; // Regreso planta - Impresión ticket
+                  teoVal = Number(p.TiempoCiclo) || 0;
+                  realVal = pEnplanta - pImpreso;
                 } else {
                   xVal = t.HoraAsignacionMin;
                   teoVal = t.HoraAsignacionMin;
-                  realVal = r.HoraAsignacionMin;
+                  realVal = pImpreso; // Hora real de asignación
                 }
 
                 pairedData.push({
