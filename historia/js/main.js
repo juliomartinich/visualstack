@@ -20,7 +20,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('appState', () => ({
     loading: true, // Indica si la aplicación está procesando carga de datos o redibujando
     activeMode: localStorage.getItem("historiaFilterModo") || 'pedidos', // Filtro Modo: 'pedidos', 'tickets' (Despachos), o 'anulaciones'
-    teoricoRealType: 'asignacion', // Tipo comparación Teórico vs Real ('asignacion' o 'viaje_ida')
+    teoricoRealType: 'llegada_obra', // Tipo comparación Teórico vs Real ('llegada_obra', 'asignacion', etc)
     
     // Selectores del Encabezado
     selectedPedidosDate: '', // Fecha elegida para consulta (formato YYYYMMDD)
@@ -812,6 +812,17 @@ document.addEventListener('alpine:init', () => {
                   xVal = t.HoraAsignacionMin; // Hora asignación teórica
                   teoVal = Number(p.TiempoCarga) || 0; // Tiempo carga teórico
                   realVal = pAObra - pImpreso; // Salida hacia obra - Impresión ticket
+                } else if (this.teoricoRealType === 'llegada_obra') {
+                  const rawT = r.rawTicket || {};
+                  const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;
+                  const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
+                  const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (p.TiempoCarga || 0));
+                  const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
+                  const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (p.TiempoViaje || 0));
+
+                  xVal = t.HoraInicioMin; // Hora teórica de descarga
+                  teoVal = t.HoraInicioMin; // Hora teórica de descarga
+                  realVal = pEnObra; // Hora de llegada real a la obra
                 } else if (this.teoricoRealType === 'ciclo') {
                   const rawT = r.rawTicket || {};
                   const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : p.HoraAsignacionMin;

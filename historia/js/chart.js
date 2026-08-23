@@ -548,6 +548,33 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     return `${hh}:${mm}`;
   };
 
+  // Bandas de puntualidad de fondo (para todos los gráficos)
+  const bandG = g.append("g").attr("class", "punctuality-bands");
+  
+  // Adelanto / A tiempo (y >= 0): verde muy suave
+  bandG.append("rect")
+    .attr("x", 0).attr("width", innerW)
+    .attr("y", yScale(65)).attr("height", yScale(0) - yScale(65))
+    .attr("fill", "rgba(22, 163, 74, 0.02)");
+
+  // Atraso <= 5 min (y entre 0 y -5): verde lima suave
+  bandG.append("rect")
+    .attr("x", 0).attr("width", innerW)
+    .attr("y", yScale(0)).attr("height", yScale(-5) - yScale(0))
+    .attr("fill", "rgba(101, 163, 13, 0.05)");
+
+  // Atraso entre 5 y 30 min (y entre -5 y -30): amarillo suave
+  bandG.append("rect")
+    .attr("x", 0).attr("width", innerW)
+    .attr("y", yScale(-5)).attr("height", yScale(-30) - yScale(-5))
+    .attr("fill", "rgba(234, 179, 8, 0.04)");
+
+  // Atraso > 30 min (y entre -30 y -65): rojo suave
+  bandG.append("rect")
+    .attr("x", 0).attr("width", innerW)
+    .attr("y", yScale(-30)).attr("height", yScale(-65) - yScale(-30))
+    .attr("fill", "rgba(220, 38, 38, 0.03)");
+
   // Cuadrícula y líneas de guía
   const gridG = g.append("g").attr("class", "grid");
   ticks.forEach(t => {
@@ -581,15 +608,15 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
   // Etiquetas de los ejes
   const xLabel = type === 'viaje_ida' 
     ? "Hora de Inicio del Viaje Teórica (Pedidos)" 
-    : (type === 'viaje_regreso' ? "Hora de Salida de Obra Teórica (Pedidos)" : (type === 'estadia' ? "Hora de Llegada a Obra Teórica (Pedidos)" : (type === 'carga' || type === 'ciclo' ? "Hora de Asignación Teórica (Pedidos)" : "Hora de Asignación Teórica (Pedidos)")));
+    : (type === 'viaje_regreso' ? "Hora de Salida de Obra Teórica (Pedidos)" : (type === 'estadia' ? "Hora de Llegada a Obra Teórica (Pedidos)" : (type === 'llegada_obra' ? "Hora Teórica de Descarga (Pedidos)" : (type === 'carga' || type === 'ciclo' ? "Hora de Asignación Teórica (Pedidos)" : "Hora de Asignación Teórica (Pedidos)"))));
 
   const yLabel = type === 'viaje_ida'
     ? "Adelanto / Atraso en Tiempo de Viaje (Minutos)"
-    : (type === 'viaje_regreso' ? "Adelanto / Atraso en Tiempo de Regreso (Minutos)" : (type === 'estadia' ? "Adelanto / Atraso en Estadía (Minutos)" : (type === 'carga' ? "Adelanto / Atraso en Tiempo de Carga (Minutos)" : (type === 'ciclo' ? "Adelanto / Atraso en Tiempo de Ciclo (Minutos)" : "Adelanto / Atraso (Minutos)"))));
+    : (type === 'viaje_regreso' ? "Adelanto / Atraso en Tiempo de Regreso (Minutos)" : (type === 'estadia' ? "Adelanto / Atraso en Estadía (Minutos)" : (type === 'llegada_obra' ? "Adelanto / Atraso en Llegada a Obra (Minutos)" : (type === 'carga' ? "Adelanto / Atraso en Tiempo de Carga (Minutos)" : (type === 'ciclo' ? "Adelanto / Atraso en Tiempo de Ciclo (Minutos)" : "Adelanto / Atraso (Minutos)")))));
 
   const chartTitleText = type === 'viaje_ida'
     ? "Desviación de Tiempo de Viaje (Ida): Adelanto (arriba) / Atraso (abajo)"
-    : (type === 'viaje_regreso' ? "Desviación de Tiempo de Regreso (Retorno): Adelanto (arriba) / Atraso (abajo)" : (type === 'estadia' ? "Desviación de Estadía (En Obra): Adelanto (arriba) / Atraso (abajo)" : (type === 'carga' ? "Desviación de Tiempo de Carga: Adelanto (arriba) / Atraso (abajo)" : (type === 'ciclo' ? "Desviación de Tiempo de Ciclo Completo: Adelanto (arriba) / Atraso (abajo)" : "Desviación de Asignaciones: Adelanto (arriba) / Atraso (abajo)"))));
+    : (type === 'viaje_regreso' ? "Desviación de Tiempo de Regreso (Retorno): Adelanto (arriba) / Atraso (abajo)" : (type === 'estadia' ? "Desviación de Estadía (En Obra): Adelanto (arriba) / Atraso (abajo)" : (type === 'llegada_obra' ? "Desviación de Llegada a Obra: Adelanto (arriba) / Atraso (abajo)" : (type === 'carga' ? "Desviación de Tiempo de Carga: Adelanto (arriba) / Atraso (abajo)" : (type === 'ciclo' ? "Desviación de Tiempo de Ciclo Completo: Adelanto (arriba) / Atraso (abajo)" : "Desviación de Asignaciones: Adelanto (arriba) / Atraso (abajo)")))));
 
   svg.append("text")
     .attr("x", margin.left + innerW / 2).attr("y", height - 15)
@@ -634,11 +661,21 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     .attr("r", 6)
     .attr("fill", d => {
       const dev = d.teoVal - d.realVal;
-      return dev < 0 ? "rgba(220, 38, 38, 0.55)" : (dev > 0 ? "rgba(22, 163, 74, 0.55)" : "rgba(100, 116, 139, 0.55)");
+      if (dev === 0) return "rgba(100, 116, 139, 0.55)";
+      if (dev > 0) return "rgba(22, 163, 74, 0.55)"; // Adelanto (verde)
+      const atraso = -dev;
+      if (atraso <= 5) return "rgba(101, 163, 13, 0.55)"; // Atraso <= 5 (verde lima)
+      if (atraso <= 30) return "rgba(254, 240, 138, 0.7)"; // Atraso 5 a 30 (amarillo)
+      return "rgba(220, 38, 38, 0.55)"; // Atraso > 30 (rojo)
     })
     .attr("stroke", d => {
       const dev = d.teoVal - d.realVal;
-      return dev < 0 ? "#dc2626" : (dev > 0 ? "#16a34a" : "#64748b");
+      if (dev === 0) return "#64748b";
+      if (dev > 0) return "#16a34a"; // verde
+      const atraso = -dev;
+      if (atraso <= 5) return "#65a30d"; // verde lima
+      if (atraso <= 30) return "#f97316"; // naranja (borde para amarillo)
+      return "#dc2626"; // rojo
     })
     .attr("stroke-width", 1.5)
     .style("cursor", "pointer")
@@ -646,13 +683,27 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
 
   dots.on("mouseover", function(ev, d) {
     const dev = d.teoVal - d.realVal;
-    const isAtraso = dev < 0;
-    const isAdelanto = dev > 0;
+    let mFill, mStroke;
+
+    if (dev === 0) {
+      mFill = "#475569"; mStroke = "#475569";
+    } else if (dev > 0) {
+      mFill = "#22c55e"; mStroke = "#22c55e";
+    } else {
+      const atraso = -dev;
+      if (atraso <= 5) {
+        mFill = "#84cc16"; mStroke = "#84cc16";
+      } else if (atraso <= 30) {
+        mFill = "#fef08a"; mStroke = "#f97316";
+      } else {
+        mFill = "#ef4444"; mStroke = "#ef4444";
+      }
+    }
 
     d3.select(this)
       .attr("r", 9)
-      .attr("fill", isAtraso ? "#ef4444" : (isAdelanto ? "#22c55e" : "#475569"))
-      .attr("stroke", isAtraso ? "#ef4444" : (isAdelanto ? "#22c55e" : "#475569"))
+      .attr("fill", mFill)
+      .attr("stroke", mStroke)
       .attr("stroke-width", 2.5);
 
     const rawT = d.real.rawTicket || {};
@@ -759,6 +810,26 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
         <strong>Duración Carga Teórica:</strong> ${teoDuration} min.<br/>
         <strong>Duración Carga Real:</strong> ${realDuration} min.<br/>
       `;
+    } else if (type === 'llegada_obra') {
+      const teoLlegada = d.teo.HoraInicioMin;
+      const realLlegada = pEnObra;
+      const diffMin = realLlegada - teoLlegada; // positivo = atrasado, negativo = adelantado
+
+      if (diffMin > 0) {
+        diffText = `+${diffMin} min. (Atrasado)`;
+        diffColor = "#d32f2f";
+      } else if (diffMin < 0) {
+        diffText = `${diffMin} min. (Adelantado)`;
+        diffColor = "#2e7d32";
+      } else {
+        diffText = "Sin desviación";
+        diffColor = "#4b5563";
+      }
+
+      timeDetailsHtml = `
+        <strong>Descarga Teórica (Inicio):</strong> ${formatTime(teoLlegada)}<br/>
+        <strong>Llegada Obra Real:</strong> ${formatTime(realLlegada)}<br/>
+      `;
     } else if (type === 'ciclo') {
       const teoDuration = d.pedido.TiempoCiclo || 0;
       const realDuration = pEnplanta - pImpreso;
@@ -801,8 +872,49 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
       `;
     }
 
+    const teoEstadia = (d.teo.HoraFinalMin - (d.pedido.TiempoViaje || 0)) - d.teo.HoraInicioMin;
+    const realEstadia = pAplanta - pEnObra;
+    const teoIda = d.pedido.TiempoViaje || 0;
+    const realIda = pEnObra - pFinCarga;
+    const teoRegreso = d.pedido.TiempoViaje || 0;
+    const realRegreso = pEnplanta - pAplanta;
+
+    const tableHtml = `
+      <table style="width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10px; border-top: 1.5px solid #cbd5e1; padding-top: 4px;">
+        <thead>
+          <tr style="color: #475569; font-weight: bold; text-align: left;">
+            <th style="padding: 4px 0 2px 0;">Etapa</th>
+            <th style="padding: 4px 0 2px 0; text-align: right;">Teórico</th>
+            <th style="padding: 4px 0 2px 0; text-align: right;">Real</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 3px 0; color: #334155;">Hora Asignación</td>
+            <td style="padding: 3px 0; text-align: right; color: #64748b;">${formatTime(d.teo.HoraAsignacionMin)}</td>
+            <td style="padding: 3px 0; text-align: right; font-weight: bold; color: #1e293b;">${formatTime(d.real.HoraAsignacionMin)}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 3px 0; color: #334155;">Viaje Ida</td>
+            <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoIda} min.</td>
+            <td style="padding: 3px 0; text-align: right; font-weight: bold; color: #1e293b;">${realIda} min.</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 3px 0; color: #334155;">Estadía</td>
+            <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoEstadia} min.</td>
+            <td style="padding: 3px 0; text-align: right; font-weight: bold; color: #1e293b;">${realEstadia} min.</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 3px 0; color: #334155;">Regreso</td>
+            <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoRegreso} min.</td>
+            <td style="padding: 3px 0; text-align: right; font-weight: bold; color: #1e293b;">${realRegreso} min.</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+
     const html = `
-      <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px;">
+      <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px; min-width: 220px;">
         <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">
           ${d.pedido.Obra || 'Obra no especificada'}
         </div>
@@ -813,6 +925,7 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
         <strong>Despacho:</strong> Viaje #${d.real.despachoIndex}<br/>
         ${timeDetailsHtml}
         <strong>Desviación:</strong> <span style="font-weight: bold; color: ${diffColor};">${diffText}</span>
+        ${tableHtml}
       </div>
     `;
 
@@ -871,13 +984,27 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
   })
   .on("mouseleave", function(ev, d) {
     const dev = d.teoVal - d.realVal;
-    const isAtraso = dev < 0;
-    const isAdelanto = dev > 0;
+    let mFill, mStroke;
+
+    if (dev === 0) {
+      mFill = "rgba(100, 116, 139, 0.55)"; mStroke = "#64748b";
+    } else if (dev > 0) {
+      mFill = "rgba(22, 163, 74, 0.55)"; mStroke = "#16a34a";
+    } else {
+      const atraso = -dev;
+      if (atraso <= 5) {
+        mFill = "rgba(101, 163, 13, 0.55)"; mStroke = "#65a30d";
+      } else if (atraso <= 30) {
+        mFill = "rgba(254, 240, 138, 0.7)"; mStroke = "#f97316";
+      } else {
+        mFill = "rgba(220, 38, 38, 0.55)"; mStroke = "#dc2626";
+      }
+    }
 
     d3.select(this)
       .attr("r", 6)
-      .attr("fill", isAtraso ? "rgba(220, 38, 38, 0.55)" : (isAdelanto ? "rgba(22, 163, 74, 0.55)" : "rgba(100, 116, 139, 0.55)"))
-      .attr("stroke", isAtraso ? "#dc2626" : (isAdelanto ? "#16a34a" : "#64748b"))
+      .attr("fill", mFill)
+      .attr("stroke", mStroke)
       .attr("stroke-width", 1.5);
 
     tooltip.style("display", "none");
@@ -916,15 +1043,29 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
     // Filtrar puntos en este intervalo
     const pointsInBin = pairedData.filter(d => d.x >= min && d.x < nextMin);
     const totalCount = pointsInBin.length;
-    const atrasadosCount = pointsInBin.filter(d => (d.teoVal - d.realVal) < 0).length;
-    const percentage = totalCount > 0 ? (atrasadosCount / totalCount) * 100 : 0;
+    
+    // Clasificar atrasos
+    const redCount = pointsInBin.filter(d => {
+      const atraso = d.realVal - d.teoVal;
+      return atraso > 30;
+    }).length;
+
+    const yellowCount = pointsInBin.filter(d => {
+      const atraso = d.realVal - d.teoVal;
+      return atraso > 5 && atraso <= 30;
+    }).length;
+
+    const redPercentage = totalCount > 0 ? (redCount / totalCount) * 100 : 0;
+    const yellowPercentage = totalCount > 0 ? (yellowCount / totalCount) * 100 : 0;
 
     bins.push({
       startMin: min,
       endMin: nextMin,
       totalCount,
-      atrasadosCount,
-      percentage
+      redCount,
+      yellowCount,
+      redPercentage,
+      yellowPercentage
     });
   }
 
@@ -973,14 +1114,14 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
     .attr("x", -(margin.top + innerH / 2)).attr("y", 15)
     .attr("text-anchor", "middle").attr("fill", "#475569")
     .style("font-size", "11px").style("font-weight", "600").style("font-family", "sans-serif")
-    .text("% Atrasados");
+    .text("% Atrasados (>5 min)");
 
   // Título secundario
   svg.append("text")
     .attr("x", margin.left + innerW / 2).attr("y", 12)
     .attr("text-anchor", "middle").attr("fill", "#334155")
     .style("font-size", "12px").style("font-weight", "bold").style("font-family", "sans-serif")
-    .text("% de Despachos Atrasados por Media Hora");
+    .text("Distribución de Atrasos Críticos (>30 min) y Moderados (5-30 min) cada Media Hora");
 
   // Tooltip flotante global
   let tooltip = d3.select(".tooltip");
@@ -990,32 +1131,28 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
       .style("display", "none");
   }
 
-  // Dibujar las barras
-  g.selectAll(".bar")
+  // Dibujar las barras apiladas mediante grupos por bin
+  const binGroups = g.selectAll(".bin-group")
     .data(bins)
     .enter()
-    .append("rect")
-    .attr("class", "bar")
-    .attr("x", d => xScale(d.startMin) + 1)
-    .attr("y", d => yScale(d.percentage))
-    .attr("width", d => Math.max(1, xScale(d.endMin) - xScale(d.startMin) - 2))
-    .attr("height", d => innerH - yScale(d.percentage))
-    .attr("fill", "#ef4444")
-    .attr("opacity", 0.7)
-    .attr("rx", 2)
+    .append("g")
+    .attr("class", "bin-group")
     .style("cursor", "pointer")
-    .style("transition", "all 0.15s ease")
     .on("mouseover", function(ev, d) {
-      d3.select(this).attr("opacity", 1.0);
+      d3.select(this).selectAll("rect").attr("opacity", 1.0);
       
       const html = `
-        <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px;">
+        <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px; min-width: 180px;">
           <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">
             Intervalo: ${formatTime(d.startMin)} - ${formatTime(d.endMin)}
           </div>
           <strong>Total Despachos:</strong> ${d.totalCount}<br/>
-          <strong>Atrasados:</strong> ${d.atrasadosCount}<br/>
-          <strong>Porcentaje:</strong> <span style="font-weight: bold; color: #ef4444;">${d.percentage.toFixed(1)}%</span>
+          <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 4px 0;"/>
+          <span style="display:inline-block; width:8px; height:8px; background:#dc2626; margin-right:4px; border-radius:2px;"></span>
+          <strong>Crítico (>30 min):</strong> ${d.redCount} (${d.redPercentage.toFixed(1)}%)<br/>
+          <span style="display:inline-block; width:8px; height:8px; background:#f59e0b; margin-right:4px; border-radius:2px;"></span>
+          <strong>Moderado (5-30 min):</strong> ${d.yellowCount} (${d.yellowPercentage.toFixed(1)}%)<br/>
+          <strong>Total Atrasos (>5 min):</strong> ${(d.redCount + d.yellowCount)} (${(d.redPercentage + d.yellowPercentage).toFixed(1)}%)
         </div>
       `;
       tooltip.html(html).style("display", "block");
@@ -1026,7 +1163,8 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
 
       tooltip
         .style("left", `${ev.pageX - tooltipW / 2}px`)
-        .style("top", `${ev.pageY - tooltipH - 15}px`);
+        .style("top", `${ev.pageY - tooltipH - 15}px`)
+        .style("transform", "none");
     })
     .on("mousemove", function(ev) {
       const tooltipNode = tooltip.node();
@@ -1037,7 +1175,29 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
         .style("top", `${ev.pageY - tooltipH - 15}px`);
     })
     .on("mouseleave", function() {
-      d3.select(this).attr("opacity", 0.7);
+      d3.select(this).selectAll("rect").attr("opacity", 0.75);
       tooltip.style("display", "none");
     });
+
+  // 1. Segmento Rojo (Atraso Crítico >30 min) en la parte inferior de la pila
+  binGroups.append("rect")
+    .attr("x", d => xScale(d.startMin) + 1)
+    .attr("y", d => yScale(d.redPercentage))
+    .attr("width", d => Math.max(1, xScale(d.endMin) - xScale(d.startMin) - 2))
+    .attr("height", d => innerH - yScale(d.redPercentage))
+    .attr("fill", "#dc2626")
+    .attr("opacity", 0.75)
+    .attr("rx", 1);
+
+  // 2. Segmento Amarillo/Naranja (Atraso Moderado 5-30 min) en la parte superior de la pila
+  binGroups.append("rect")
+    .attr("x", d => xScale(d.startMin) + 1)
+    .attr("y", d => yScale(d.redPercentage + d.yellowPercentage))
+    .attr("width", d => Math.max(1, xScale(d.endMin) - xScale(d.startMin) - 2))
+    .attr("height", d => yScale(d.redPercentage) - yScale(d.redPercentage + d.yellowPercentage))
+    .attr("fill", "#f59e0b")
+    .attr("stroke", "#d97706")
+    .attr("stroke-width", 0.5)
+    .attr("opacity", 0.75)
+    .attr("rx", 1);
 }
