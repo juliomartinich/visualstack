@@ -548,6 +548,39 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     return `${hh}:${mm}`;
   };
 
+  const getPuntualidadCulpritColor = d => {
+    const dev = d.teoVal - d.realVal;
+    const delay = -dev;
+    if (delay <= 0) return null;
+
+    const rawT = d.real.rawTicket || {};
+    const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : d.pedido.HoraAsignacionMin;
+    const pInicioCarga = (rawT.InicioCarga && rawT.InicioCarga !== "0") ? safeHhmmssToMin(rawT.InicioCarga) : pImpreso;
+    const pFinCarga = (rawT.FinCarga && rawT.FinCarga !== "0") ? safeHhmmssToMin(rawT.FinCarga) : (pInicioCarga + (d.pedido.TiempoCarga || 0));
+    const pAObra = (rawT.AObra && rawT.AObra !== "0") ? safeHhmmssToMin(rawT.AObra) : pFinCarga;
+    const pEnObra = (rawT.EnObra && rawT.EnObra !== "0") ? safeHhmmssToMin(rawT.EnObra) : (pAObra + (d.pedido.TiempoViaje || 0));
+
+    const teoCarga = d.pedido.TiempoCarga || 0;
+    const realCarga = pAObra - pImpreso;
+    const teoIda = d.pedido.TiempoViaje || 0;
+    const realIda = pEnObra - pAObra;
+
+    const diffAsignacion = d.real.HoraAsignacionMin - d.teo.HoraAsignacionMin;
+    const diffCarga = realCarga - teoCarga;
+    const diffIda = realIda - teoIda;
+
+    const posAsig = Math.max(0, diffAsignacion);
+    const posCarga = Math.max(0, diffCarga);
+    const posIda = Math.max(0, diffIda);
+    const maxPos = Math.max(posAsig, posCarga, posIda);
+
+    if (maxPos <= 0) return null;
+
+    if (posAsig === maxPos) return "#6366f1"; // Azul (Asignación)
+    if (posCarga === maxPos) return "#f59e0b"; // Naranjo (Carga)
+    return "#991b1b"; // Rojo oscuro/Granate (Viaje Ida)
+  };
+
   // Bandas de puntualidad de fondo (para todos los gráficos)
   const bandG = g.append("g").attr("class", "punctuality-bands");
   
@@ -669,6 +702,10 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
       return "rgba(220, 38, 38, 0.55)"; // Atraso > 30 (rojo)
     })
     .attr("stroke", d => {
+      if (type === 'llegada_obra') {
+        const culpritColor = getPuntualidadCulpritColor(d);
+        if (culpritColor) return culpritColor;
+      }
       const dev = d.teoVal - d.realVal;
       if (dev === 0) return "#64748b";
       if (dev > 0) return "#16a34a"; // verde
@@ -677,7 +714,12 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
       if (atraso <= 30) return "#f97316"; // naranja (borde para amarillo)
       return "#dc2626"; // rojo
     })
-    .attr("stroke-width", 1.5)
+    .attr("stroke-width", d => {
+      if (type === 'llegada_obra' && getPuntualidadCulpritColor(d)) {
+        return 2.5; // Borde más grueso para resaltar
+      }
+      return 1.5;
+    })
     .style("cursor", "pointer")
     .style("transition", "all 0.15s ease");
 
@@ -700,11 +742,21 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
       }
     }
 
+    let hoverStroke = mStroke;
+    let hoverStrokeWidth = 2.5;
+    if (type === 'llegada_obra') {
+      const culpritColor = getPuntualidadCulpritColor(d);
+      if (culpritColor) {
+        hoverStroke = culpritColor;
+        hoverStrokeWidth = 3.2; // Más notorio al pasar el mouse
+      }
+    }
+
     d3.select(this)
       .attr("r", 9)
       .attr("fill", mFill)
-      .attr("stroke", mStroke)
-      .attr("stroke-width", 2.5);
+      .attr("stroke", hoverStroke)
+      .attr("stroke-width", hoverStrokeWidth);
 
     const rawT = d.real.rawTicket || {};
     const pImpreso = (rawT.Impreso && rawT.Impreso !== "0") ? safeHhmmssToMin(rawT.Impreso) : d.pedido.HoraAsignacionMin;
@@ -942,7 +994,7 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9;">
             <td style="padding: 3px 0; color: #334155;">
-              <span style="display: inline-block; width: 6px; height: 6px; background-color: #0d9488; border-radius: 50%; margin-right: 5px; vertical-align: middle;"></span>
+              <span style="display: inline-block; width: 6px; height: 6px; background-color: #991b1b; border-radius: 50%; margin-right: 5px; vertical-align: middle;"></span>
               Viaje Ida [min]
             </td>
             <td style="padding: 3px 0; text-align: right; color: #64748b;">${teoIda}</td>
@@ -991,12 +1043,12 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
             <div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 4px; background-color: #f1f5f9;">
               ${posAsig > 0 ? `<div style="width: ${pctAsig}%; background-color: #6366f1;" title="Asignación: +${posAsig} min (${pctAsig.toFixed(0)}%)"></div>` : ''}
               ${posCarga > 0 ? `<div style="width: ${pctCarga}%; background-color: #f59e0b;" title="Carga: +${posCarga} min (${pctCarga.toFixed(0)}%)"></div>` : ''}
-              ${posIda > 0 ? `<div style="width: ${pctIda}%; background-color: #0d9488;" title="Viaje Ida: +${posIda} min (${pctIda.toFixed(0)}%)"></div>` : ''}
+              ${posIda > 0 ? `<div style="width: ${pctIda}%; background-color: #991b1b;" title="Viaje Ida: +${posIda} min (${pctIda.toFixed(0)}%)"></div>` : ''}
             </div>
             <div style="display: flex; gap: 8px; font-size: 8.5px; color: #64748b; margin-top: 4px; font-weight: 600;">
               ${posAsig > 0 ? `<span><span style="color: #6366f1; margin-right: 2px;">●</span>Asig. ${pctAsig.toFixed(0)}%</span>` : ''}
               ${posCarga > 0 ? `<span><span style="color: #f59e0b; margin-right: 2px;">●</span>Carga ${pctCarga.toFixed(0)}%</span>` : ''}
-              ${posIda > 0 ? `<span><span style="color: #0d9488; margin-right: 2px;">●</span>Ida ${pctIda.toFixed(0)}%</span>` : ''}
+              ${posIda > 0 ? `<span><span style="color: #991b1b; margin-right: 2px;">●</span>Ida ${pctIda.toFixed(0)}%</span>` : ''}
             </div>
           </div>
         `;
@@ -1151,11 +1203,21 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
       }
     }
 
+    let leaveStroke = mStroke;
+    let leaveStrokeWidth = 1.5;
+    if (type === 'llegada_obra') {
+      const culpritColor = getPuntualidadCulpritColor(d);
+      if (culpritColor) {
+        leaveStroke = culpritColor;
+        leaveStrokeWidth = 2.5;
+      }
+    }
+
     d3.select(this)
       .attr("r", 6)
       .attr("fill", mFill)
-      .attr("stroke", mStroke)
-      .attr("stroke-width", 1.5);
+      .attr("stroke", leaveStroke)
+      .attr("stroke-width", leaveStrokeWidth);
 
     tooltip.style("display", "none");
   });
