@@ -1221,6 +1221,81 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
 
     tooltip.style("display", "none");
   });
+
+  // --- INICIO LEYENDA PIE CHART PARA PUNTUALIDAD ---
+  if (type === 'llegada_obra') {
+    let countAsig = 0;
+    let countCarga = 0;
+    let countIda = 0;
+
+    pairedData.forEach(d => {
+      const color = getPuntualidadCulpritColor(d);
+      if (color === "#6366f1") countAsig++;
+      else if (color === "#f59e0b") countCarga++;
+      else if (color === "#991b1b") countIda++;
+    });
+
+    const totalAtrasos = countAsig + countCarga + countIda;
+    if (totalAtrasos > 0) {
+      const pieData = [
+        { label: "Asignación", count: countAsig, color: "#6366f1" },
+        { label: "Carga", count: countCarga, color: "#f59e0b" },
+        { label: "Viaje Ida", count: countIda, color: "#991b1b" }
+      ].filter(d => d.count > 0);
+
+      const pieRadius = 28;
+      // Posición esquina superior derecha
+      const pieX = margin.left + innerW - 130;
+      const pieY = margin.top + 25;
+
+      const pieChartG = svg.append("g")
+        .attr("transform", `translate(${pieX}, ${pieY})`);
+        
+      const pie = d3.pie().value(d => d.count).sort(null);
+      const arc = d3.arc().innerRadius(0).outerRadius(pieRadius);
+
+      pieChartG.selectAll("path")
+        .data(pie(pieData))
+        .enter()
+        .append("path")
+        .attr("d", arc)
+        .attr("fill", d => d.data.color)
+        .attr("stroke", "#fff")
+        .attr("stroke-width", "1px");
+
+      // Título de la leyenda
+      pieChartG.append("text")
+        .attr("x", 0)
+        .attr("y", -pieRadius - 8)
+        .attr("text-anchor", "middle")
+        .attr("fill", "#475569")
+        .style("font-size", "10px")
+        .style("font-weight", "bold")
+        .style("font-family", "sans-serif")
+        .text("Causas de Atrasos");
+
+      // Leyenda de colores al lado del gráfico de torta
+      const legendGroup = pieChartG.append("g")
+        .attr("transform", `translate(${pieRadius + 10}, ${-pieRadius + 10})`);
+      
+      let yOffset = 0;
+      pieData.forEach(d => {
+        const pct = ((d.count / totalAtrasos) * 100).toFixed(0);
+        legendGroup.append("circle")
+          .attr("cx", 0).attr("cy", yOffset - 3)
+          .attr("r", 4).attr("fill", d.color);
+        
+        legendGroup.append("text")
+          .attr("x", 8).attr("y", yOffset)
+          .attr("fill", "#333")
+          .style("font-size", "9.5px")
+          .style("font-family", "sans-serif")
+          .text(`${d.label}: ${pct}%`);
+        yOffset += 12;
+      });
+    }
+  }
+  // --- FIN LEYENDA PIE CHART ---
 }
 
 function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granularidadMin, type) {
