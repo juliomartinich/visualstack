@@ -127,7 +127,7 @@ document.addEventListener('alpine:init', () => {
         window.plantasData = await fetchSafeJson(`../data/plantas.json?v=${Date.now()}`).catch(() => ({}));
 
         // 2. Cargar el index.json de capturas existentes
-        const index = await fetchSafeJson(`data/index.json?v=${Date.now()}`);
+        const index = await fetchSafeJson(`../data/historia/index.json?v=${Date.now()}`);
         this.capturaDates = index.sort().reverse();
 
         // 3. Inyectar datos del día de hoy (desde el directorio raíz de datos)
@@ -326,8 +326,8 @@ document.addEventListener('alpine:init', () => {
             if (!this.rawCapturas[suffix]) {
               try {
                 const [pedRaw, tickRaw] = await Promise.all([
-                  fetchSafeJson(`data/Pedidos_${suffix}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
-                  fetchSafeJson(`data/Tickets_${suffix}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
+                  fetchSafeJson(`../data/historia/Pedidos_${suffix}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
+                  fetchSafeJson(`../data/historia/Tickets_${suffix}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
                 ]);
                 this.rawCapturas[suffix] = { pedidosRaw: pedRaw, ticketsRaw: tickRaw };
               } catch (err) {
@@ -555,8 +555,8 @@ document.addEventListener('alpine:init', () => {
             if (!this.rawCapturas[suffix]) {
               try {
                 const [pedRaw, tickRaw] = await Promise.all([
-                  fetchSafeJson(`data/Pedidos_${suffix}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
-                  fetchSafeJson(`data/Tickets_${suffix}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
+                  fetchSafeJson(`../data/historia/Pedidos_${suffix}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
+                  fetchSafeJson(`../data/historia/Tickets_${suffix}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
                 ]);
                 this.rawCapturas[suffix] = { pedidosRaw: pedRaw, ticketsRaw: tickRaw };
               } catch (err) {
@@ -728,8 +728,8 @@ document.addEventListener('alpine:init', () => {
           if (!this.rawCapturas[suffixA]) {
             try {
               const [pedRaw, tickRaw] = await Promise.all([
-                fetchSafeJson(`data/Pedidos_${suffixA}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
-                fetchSafeJson(`data/Tickets_${suffixA}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
+                fetchSafeJson(`../data/historia/Pedidos_${suffixA}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
+                fetchSafeJson(`../data/historia/Tickets_${suffixA}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
               ]);
               this.rawCapturas[suffixA] = { pedidosRaw: pedRaw, ticketsRaw: tickRaw };
             } catch (err) {
@@ -894,8 +894,8 @@ document.addEventListener('alpine:init', () => {
             if (!this.rawCapturas[suffix]) {
               try {
                 const [pedRaw, tickRaw] = await Promise.all([
-                  fetchSafeJson(`data/Pedidos_${suffix}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
-                  fetchSafeJson(`data/Tickets_${suffix}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
+                  fetchSafeJson(`../data/historia/Pedidos_${suffix}.json?v=${Date.now()}`).catch(() => ({ pedidos: {} })),
+                  fetchSafeJson(`../data/historia/Tickets_${suffix}.json?v=${Date.now()}`).catch(() => ({ Ticket: {} }))
                 ]);
                 this.rawCapturas[suffix] = { pedidosRaw: pedRaw, ticketsRaw: tickRaw };
               } catch (err) {
