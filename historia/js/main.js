@@ -269,23 +269,17 @@ document.addEventListener('alpine:init', () => {
         }
       });
 
-      // 5. Validar que la planta o grupo seleccionado persista y moverlo al principio.
+      this.plantasOptions = options;
+
+      // 5. Validar que la planta o grupo seleccionado persista sin alterar el orden del selector.
       if (options.length > 0) {
-        const existsIndex = options.findIndex(o => o.id === this.selectedPlanta);
-        if (existsIndex === -1) {
-          // Si no existe, usamos la primera disponible
+        const exists = options.some(o => o.id === this.selectedPlanta);
+        if (!exists) {
           this.selectedPlanta = options[0].id;
-        } else if (existsIndex > 0) {
-          // Si existe pero no es la primera, la movemos a la primera posición
-          const selectedOption = options.splice(existsIndex, 1)[0];
-          options.unshift(selectedOption);
         }
       } else {
         this.selectedPlanta = '';
       }
-      
-      // Asignar opciones ya reordenadas
-      this.plantasOptions = options;
 
       // Guardar filtro de planta en localStorage para persistencia cruzada
       localStorage.setItem("filterPlantaGrupo", this.selectedPlanta);
