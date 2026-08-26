@@ -679,19 +679,35 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
       .style("display", "none");
   }
 
-  // Dibujar puntos del scatter plot
+  const isPointAnulado = d => {
+    const rawT = d.real.rawTicket || {};
+    const codAnul = (rawT.CodAnulacion !== undefined && rawT.CodAnulacion !== null && rawT.CodAnulacion !== "") 
+      ? rawT.CodAnulacion 
+      : (d.pedido.CodigoAnulacion || '0');
+    return (codAnul && codAnul !== "0" && codAnul !== 0);
+  };
+
+  const getSymbolPath = (d, sizeMultiplier = 1) => {
+    const isAnul = isPointAnulado(d);
+    const symType = isAnul ? d3.symbolCross : d3.symbolCircle;
+    const baseSize = isAnul ? 100 : 75;
+    return d3.symbol().type(symType).size(baseSize * sizeMultiplier)();
+  };
+
+  // Dibujar puntos del scatter plot (cruz si está anulado, círculo de lo contrario)
   const dots = g.selectAll(".dot")
     .data(pairedData)
     .enter()
-    .append("circle")
+    .append("path")
     .attr("class", "dot")
-    .attr("cx", d => xScale(d.x))
-    .attr("cy", d => {
+    .attr("transform", d => {
+      const cx = xScale(d.x);
       const dev = d.teoVal - d.realVal;
       const clampedDev = dev > 60 ? 62 : (dev < -60 ? -62 : dev);
-      return yScale(clampedDev);
+      const cy = yScale(clampedDev);
+      return `translate(${cx}, ${cy})`;
     })
-    .attr("r", 6)
+    .attr("d", d => getSymbolPath(d, 1))
     .attr("fill", d => {
       const dev = d.teoVal - d.realVal;
       if (dev === 0) return "rgba(100, 116, 139, 0.55)";
@@ -753,7 +769,7 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     }
 
     d3.select(this)
-      .attr("r", 9)
+      .attr("d", getSymbolPath(d, 2.2))
       .attr("fill", mFill)
       .attr("stroke", hoverStroke)
       .attr("stroke-width", hoverStrokeWidth);
@@ -1092,6 +1108,14 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
       `;
     }
 
+    const codAnulRaw = (rawT.CodAnulacion !== undefined && rawT.CodAnulacion !== null && rawT.CodAnulacion !== "") 
+      ? rawT.CodAnulacion 
+      : (d.pedido.CodigoAnulacion || '0');
+
+    const codAnulHtml = (codAnulRaw && codAnulRaw !== "0" && codAnulRaw !== 0)
+      ? `<span style="color: #dc2626; font-weight: bold;">${codAnulRaw} (ANULADO)</span>`
+      : `${codAnulRaw}`;
+
     const html = `
       <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px; min-width: 285px; max-width: 330px;">
         <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">
@@ -1103,6 +1127,7 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
         <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 4px 0;"/>
         <strong>Despacho:</strong> Viaje #${d.real.despachoIndex}<br/>
         <strong>Camión:</strong> #${rawT.Camion || 'N/A'}<br/>
+        <strong>Cod. Anulación:</strong> ${codAnulHtml}<br/>
         ${tableHtml}
         ${breakdownBarHtml}
         ${rawTicketHtml}
@@ -1214,7 +1239,7 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     }
 
     d3.select(this)
-      .attr("r", 6)
+      .attr("d", getSymbolPath(d, 1))
       .attr("fill", mFill)
       .attr("stroke", leaveStroke)
       .attr("stroke-width", leaveStrokeWidth);
