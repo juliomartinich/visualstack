@@ -994,11 +994,11 @@ function setupDashboardScales(currentGraphView, currentMetrics, totalBocas, glob
       .range([innerH, innerH * 0.55]);
       
     scales.yAsignaciones = d3.scaleLinear()
-      .domain([0, Math.max(totalBocas + 2, Math.ceil(curOcupacionMaxAsignaciones / 2) * 2 + 2)])
+      .domain([0, Math.max(5, totalBocas + 2, Math.ceil(curOcupacionMaxAsignaciones / 2) * 2 + 2)])
       .range([innerH * 0.55, innerH * 0.35]);
 
     scales.yColas = d3.scaleLinear()
-      .domain([0, Math.max(totalBocas + 2, Math.ceil(curOcupacionMaxColas / 2) * 2 + 2)])
+      .domain([0, Math.max(5, totalBocas + 2, Math.ceil(curOcupacionMaxColas / 2) * 2 + 2)])
       .range([innerH * 0.35, innerH * 0.12]);
       
     const maxDelayMin = Math.max(

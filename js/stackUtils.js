@@ -372,7 +372,6 @@ function buildColasStack(pedidos, totalBocas, granularidadMin) {
     else totalM3NoConfirmados += cant;
 
     p.STK_COLAS = { bloquesXY: [] };
-    p.STK_PLANTAS = { bloquesXY: [] };
     const numViajes = p.CantCargas || 1;
     const freqSlots = Math.floor((p.Frecuencia || 0) / granularidadMin);
     for (let i = 0; i < numViajes; i++) {
@@ -408,7 +407,6 @@ function buildColasStack(pedidos, totalBocas, granularidadMin) {
         v.boca = b;
         bocas[b] = t + 1; // 1 slot de carga
         v.pedido.STK_COLAS.bloquesXY.push({ x: t, y0: b, y1: b + 1, v: 1, type: 'serve', voyageId: v.id });
-        v.pedido.STK_PLANTAS.bloquesXY.push({ x: t, y0: b, y1: b + 1, v: 1 });
         globalOcupacion[t] = Math.max(globalOcupacion[t], b + 1);
       }
     }

@@ -422,7 +422,38 @@ function getDashboardData(selectedDate, filterKey, currentGraphView, currentGant
     }
   } else if (currentGraphView === 'recursos') {
     const stackRec = buildStack(tempPedidos);
-    const stackAsig = buildPlantLoadStack(tempPedidos, CFG.granularidadMin);
+    
+    // Calcular asignaciones por planta individualmente para mantener consistencia con la vista Asignaciones
+    const activePlantsAsig = [...new Set(tempPedidos.map(p => p.Planta))].filter(Boolean).sort();
+    let stackAsig;
+    if (activePlantsAsig.length > 1) {
+      const plantStacks = {};
+      let horaMaxAsig = 0;
+      activePlantsAsig.forEach(pCode => {
+        const plantPedidos = tempPedidos.filter(p => p.Planta === pCode);
+        const st = buildPlantLoadStack(plantPedidos, CFG.granularidadMin);
+        plantStacks[pCode] = st;
+        if (st.horaMax > horaMaxAsig) horaMaxAsig = st.horaMax;
+      });
+
+      const xMaxAsig = horaMaxAsig || (CFG.horaFin * (60 / CFG.granularidadMin));
+      const envolventeAsig = Array(xMaxAsig + 1).fill(0);
+      for (let t = 0; t <= xMaxAsig; t++) {
+        envolventeAsig[t] = d3.max(activePlantsAsig, pCode => plantStacks[pCode].metrics.envolvente[t] || 0) || 0;
+      }
+      const ocupacionMaxAsig = d3.max(activePlantsAsig, pCode => plantStacks[pCode].ocupacionMax) || 0;
+
+      stackAsig = {
+        horaMax: horaMaxAsig,
+        ocupacionMax: ocupacionMaxAsig,
+        metrics: {
+          envolvente: envolventeAsig
+        }
+      };
+    } else {
+      stackAsig = buildPlantLoadStack(tempPedidos, CFG.granularidadMin);
+    }
+
     const stackCol = buildColasStack(tempPedidos, totalBocas, CFG.granularidadMin);
 
     stackResult = {
