@@ -831,6 +831,11 @@ document.addEventListener('alpine:init', () => {
                   xVal = t.HoraInicioMin; // Hora teórica de descarga
                   teoVal = t.HoraInicioMin;
                   realVal = pEnObra;
+                } else if (this.teoricoRealType === 'espera_carga_real') {
+                  xVal = pImpreso; // Hora de Impresión (Real)
+                  const esperaMin = Math.max(0, pInicioCarga - pImpreso);
+                  teoVal = 0;
+                  realVal = esperaMin;
                 } else if (this.teoricoRealType === 'ciclo') {
                   xVal = t.HoraAsignacionMin; // Hora asignación teórica
                   teoVal = Number(p.TiempoCiclo) || 0;

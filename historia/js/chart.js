@@ -515,13 +515,42 @@ function drawMultiTruckChart(svgSelector, containerSelector, resultsBySuffix, ac
  * - Eje X: Hora de Asignación Teórica (Pedidos) de 06:00 a 20:00.
  * - Eje Y: Retraso / Adelanto en minutos (fijo entre -60 y +60, con outliers acotados arriba/abajo).
  */
+/**
+ * Cálculo de Coeficiente de Correlación de Pearson (r) y Regresión Lineal
+ */
+function calcPearsonCorrelation(xArr, yArr) {
+  if (!xArr || !yArr || xArr.length < 2 || xArr.length !== yArr.length) return { r: 0, slope: 0, intercept: 0 };
+  const n = xArr.length;
+  const meanX = d3.mean(xArr);
+  const meanY = d3.mean(yArr);
+
+  let num = 0;
+  let denX = 0;
+  let denY = 0;
+
+  for (let i = 0; i < n; i++) {
+    const dx = xArr[i] - meanX;
+    const dy = yArr[i] - meanY;
+    num += dx * dy;
+    denX += dx * dx;
+    denY += dy * dy;
+  }
+
+  const den = Math.sqrt(denX * denY);
+  const r = den === 0 ? 0 : num / den;
+  const slope = denX === 0 ? 0 : num / denX;
+  const intercept = meanY - slope * meanX;
+
+  return { r, slope, intercept };
+}
+
 function drawScatterTeoricoReal(containerId, containerParentId, pairedData, granularidadMin, type = 'asignacion') {
   const container = d3.select(containerParentId);
   container.selectAll("*").remove(); // Limpiar todo
 
   const width = 1260;
-  const height = 430;
-  const margin = { top: 55, right: 30, bottom: 45, left: 60 };
+  const height = 310;
+  const margin = { top: 40, right: 30, bottom: 40, left: 60 };
   const innerW = width - margin.left - margin.right;
   const innerH = height - margin.top - margin.bottom;
 
@@ -535,12 +564,17 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
   const g = svg.append("g")
     .attr("transform", `translate(${margin.left}, ${margin.top})`);
 
-  // Escalas de hora del día (X) y desviación (Y) unificadas para todos los modos
+  // Escalas de hora del día (X) y desviación (Y)
+  const isEspera = (type === 'espera_carga_real');
   const xScale = d3.scaleLinear().domain([360, 1200]).range([0, innerW]);
-  const yScale = d3.scaleLinear().domain([-65, 65]).range([innerH, 0]);
+  const yScale = isEspera
+    ? d3.scaleLinear().domain([0, 65]).range([0, innerH])
+    : d3.scaleLinear().domain([-65, 65]).range([innerH, 0]);
 
   const ticks = [360, 420, 480, 540, 600, 660, 720, 780, 840, 900, 960, 1020, 1080, 1140, 1200];
-  const yTicks = [-60, -45, -30, -15, 0, 15, 30, 45, 60];
+  const yTicks = isEspera
+    ? [0, 10, 20, 30, 40, 50, 60]
+    : [-60, -45, -30, -15, 0, 15, 30, 45, 60];
 
   const formatTime = min => {
     const hh = String(Math.floor(min / 60)).padStart(2, '0');
@@ -584,29 +618,49 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
   // Bandas de puntualidad de fondo (para todos los gráficos)
   const bandG = g.append("g").attr("class", "punctuality-bands");
   
-  // Adelanto / A tiempo (y >= 0): verde muy suave
-  bandG.append("rect")
-    .attr("x", 0).attr("width", innerW)
-    .attr("y", yScale(65)).attr("height", yScale(0) - yScale(65))
-    .attr("fill", "rgba(22, 163, 74, 0.02)");
+  if (isEspera) {
+    // Espera <= 5 min (y entre 0 y 5): verde suave
+    bandG.append("rect")
+      .attr("x", 0).attr("width", innerW)
+      .attr("y", yScale(0)).attr("height", yScale(5) - yScale(0))
+      .attr("fill", "rgba(22, 163, 74, 0.05)");
 
-  // Atraso <= 5 min (y entre 0 y -5): azul/gris suave
-  bandG.append("rect")
-    .attr("x", 0).attr("width", innerW)
-    .attr("y", yScale(0)).attr("height", yScale(-5) - yScale(0))
-    .attr("fill", "rgba(100, 116, 139, 0.05)");
+    // Espera 5 a 10 min (y entre 5 y 10): amarillo suave
+    bandG.append("rect")
+      .attr("x", 0).attr("width", innerW)
+      .attr("y", yScale(5)).attr("height", yScale(10) - yScale(5))
+      .attr("fill", "rgba(234, 179, 8, 0.05)");
 
-  // Atraso entre 5 y 30 min (y entre -5 y -30): amarillo suave
-  bandG.append("rect")
-    .attr("x", 0).attr("width", innerW)
-    .attr("y", yScale(-5)).attr("height", yScale(-30) - yScale(-5))
-    .attr("fill", "rgba(234, 179, 8, 0.04)");
+    // Espera > 10 min (y entre 10 y 65): rojo suave
+    bandG.append("rect")
+      .attr("x", 0).attr("width", innerW)
+      .attr("y", yScale(10)).attr("height", yScale(65) - yScale(10))
+      .attr("fill", "rgba(220, 38, 38, 0.04)");
+  } else {
+    // Adelanto / A tiempo (y >= 0): verde muy suave
+    bandG.append("rect")
+      .attr("x", 0).attr("width", innerW)
+      .attr("y", yScale(65)).attr("height", yScale(0) - yScale(65))
+      .attr("fill", "rgba(22, 163, 74, 0.02)");
 
-  // Atraso > 30 min (y entre -30 y -65): rojo suave
-  bandG.append("rect")
-    .attr("x", 0).attr("width", innerW)
-    .attr("y", yScale(-30)).attr("height", yScale(-65) - yScale(-30))
-    .attr("fill", "rgba(220, 38, 38, 0.03)");
+    // Atraso <= 5 min (y entre 0 y -5): azul/gris suave
+    bandG.append("rect")
+      .attr("x", 0).attr("width", innerW)
+      .attr("y", yScale(0)).attr("height", yScale(-5) - yScale(0))
+      .attr("fill", "rgba(100, 116, 139, 0.05)");
+
+    // Atraso entre 5 y 30 min (y entre -5 y -30): amarillo suave
+    bandG.append("rect")
+      .attr("x", 0).attr("width", innerW)
+      .attr("y", yScale(-5)).attr("height", yScale(-30) - yScale(-5))
+      .attr("fill", "rgba(234, 179, 8, 0.04)");
+
+    // Atraso > 30 min (y entre -30 y -65): rojo suave
+    bandG.append("rect")
+      .attr("x", 0).attr("width", innerW)
+      .attr("y", yScale(-30)).attr("height", yScale(-65) - yScale(-30))
+      .attr("fill", "rgba(220, 38, 38, 0.03)");
+  }
 
   // Cuadrícula y líneas de guía
   const gridG = g.append("g").attr("class", "grid");
@@ -632,6 +686,7 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
 
   g.append("g")
     .call(d3.axisLeft(yScale).tickValues(yTicks).tickFormat(d => {
+      if (isEspera) return `${d} min`;
       if (d > 0) return `-${d}`;
       if (d < 0) return `+${Math.abs(d)}`;
       return "0";
@@ -639,17 +694,23 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     .style("font-family", "sans-serif").style("font-size", "10px");
 
   // Etiquetas de los ejes
-  const xLabel = type === 'viaje_ida' 
-    ? "Hora de Inicio del Viaje Teórica (Pedidos)" 
-    : (type === 'viaje_regreso' ? "Hora de Salida de Obra Teórica (Pedidos)" : (type === 'estadia' ? "Hora de Llegada a Obra Teórica (Pedidos)" : (type === 'llegada_obra' ? "Hora Teórica de Descarga (Pedidos)" : (type === 'carga' || type === 'ciclo' ? "Hora de Asignación Teórica (Pedidos)" : "Hora de Asignación Teórica (Pedidos)"))));
+  const xLabel = type === 'espera_carga_real'
+    ? "Hora de Impresión del Ticket (Real)"
+    : (type === 'viaje_ida' 
+      ? "Hora de Inicio del Viaje Teórica (Pedidos)" 
+      : (type === 'viaje_regreso' ? "Hora de Salida de Obra Teórica (Pedidos)" : (type === 'estadia' ? "Hora de Llegada a Obra Teórica (Pedidos)" : (type === 'llegada_obra' ? "Hora Teórica de Descarga (Pedidos)" : (type === 'carga' || type === 'ciclo' ? "Hora de Asignación Teórica (Pedidos)" : "Hora de Asignación Teórica (Pedidos)")))));
 
-  const yLabel = type === 'viaje_ida'
-    ? "Adelanto / Demora en Tiempo de Viaje (Minutos)"
-    : (type === 'viaje_regreso' ? "Adelanto / Demora en Tiempo de Regreso (Minutos)" : (type === 'estadia' ? "Adelanto / Demora en Estadía (Minutos)" : (type === 'llegada_obra' ? "Adelanto / Atraso en Llegada a Obra (Minutos)" : (type === 'carga' ? "Adelanto / Demora en Tiempo de Carga (Minutos)" : (type === 'ciclo' ? "Adelanto / Demora en Tiempo de Ciclo (Minutos)" : "Adelanto / Atraso (Minutos)")))));
+  const yLabel = type === 'espera_carga_real'
+    ? "Tiempo de Espera de Carga (Minutos)"
+    : (type === 'viaje_ida'
+      ? "Adelanto / Demora en Tiempo de Viaje (Minutos)"
+      : (type === 'viaje_regreso' ? "Adelanto / Demora en Tiempo de Regreso (Minutos)" : (type === 'estadia' ? "Adelanto / Demora en Estadía (Minutos)" : (type === 'llegada_obra' ? "Adelanto / Atraso en Llegada a Obra (Minutos)" : (type === 'carga' ? "Adelanto / Demora en Tiempo de Carga (Minutos)" : (type === 'ciclo' ? "Adelanto / Demora en Tiempo de Ciclo (Minutos)" : "Adelanto / Atraso (Minutos)"))))));
 
-  const chartTitleText = type === 'viaje_ida'
-    ? "Desviación de Tiempo de Viaje (Ida): Adelanto (arriba) / Demora (abajo)"
-    : (type === 'viaje_regreso' ? "Desviación de Tiempo de Regreso (Retorno): Adelanto (arriba) / Demora (abajo)" : (type === 'estadia' ? "Desviación de Estadía (En Obra): Adelanto (arriba) / Demora (abajo)" : (type === 'llegada_obra' ? "Desviación de Llegada a Obra: Adelanto (arriba) / Atraso (abajo)" : (type === 'carga' ? "Desviación de Tiempo de Carga: Adelanto (arriba) / Demora (abajo)" : (type === 'ciclo' ? "Desviación de Tiempo de Ciclo Completo: Adelanto (arriba) / Demora (abajo)" : "Desviación de Asignaciones: Adelanto (arriba) / Atraso (abajo)")))));
+  const chartTitleText = type === 'espera_carga_real'
+    ? "Espera de Carga Real (Inicio Carga - Impreso): 0 min (arriba) / 60+ min (abajo)"
+    : (type === 'viaje_ida'
+      ? "Desviación de Tiempo de Viaje (Ida): Adelanto (arriba) / Demora (abajo)"
+      : (type === 'viaje_regreso' ? "Desviación de Tiempo de Regreso (Retorno): Adelanto (arriba) / Demora (abajo)" : (type === 'estadia' ? "Desviación de Estadía (En Obra): Adelanto (arriba) / Demora (abajo)" : (type === 'llegada_obra' ? "Desviación de Llegada a Obra: Adelanto (arriba) / Atraso (abajo)" : (type === 'carga' ? "Desviación de Tiempo de Carga: Adelanto (arriba) / Demora (abajo)" : (type === 'ciclo' ? "Desviación de Tiempo de Ciclo Completo: Adelanto (arriba) / Demora (abajo)" : "Desviación de Asignaciones: Adelanto (arriba) / Atraso (abajo)"))))));
 
   svg.append("text")
     .attr("x", margin.left + innerW / 2).attr("y", height - 15)
@@ -666,9 +727,9 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
 
   // Título del gráfico
   svg.append("text")
-    .attr("x", margin.left + innerW / 2).attr("y", 42)
+    .attr("x", margin.left + innerW / 2).attr("y", 22)
     .attr("text-anchor", "middle").attr("fill", "#1e293b")
-    .style("font-size", "14px").style("font-weight", "bold").style("font-family", "sans-serif")
+    .style("font-size", "13px").style("font-weight", "bold").style("font-family", "sans-serif")
     .text(chartTitleText);
 
   // Tooltip flotante global
@@ -702,13 +763,26 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     .attr("class", "dot")
     .attr("transform", d => {
       const cx = xScale(d.x);
-      const dev = d.teoVal - d.realVal;
-      const clampedDev = dev > 60 ? 62 : (dev < -60 ? -62 : dev);
-      const cy = yScale(clampedDev);
+      let cy;
+      if (isEspera) {
+        const val = d.realVal;
+        const clampedVal = val > 60 ? 62 : (val < 0 ? 0 : val);
+        cy = yScale(clampedVal);
+      } else {
+        const dev = d.teoVal - d.realVal;
+        const clampedDev = dev > 60 ? 62 : (dev < -60 ? -62 : dev);
+        cy = yScale(clampedDev);
+      }
       return `translate(${cx}, ${cy})`;
     })
     .attr("d", d => getSymbolPath(d, 1))
     .attr("fill", d => {
+      if (type === 'espera_carga_real') {
+        const espera = d.realVal;
+        if (espera <= 5) return "rgba(22, 163, 74, 0.65)"; // Verde
+        if (espera <= 10) return "rgba(234, 179, 8, 0.75)"; // Amarillo
+        return "rgba(220, 38, 38, 0.65)"; // Rojo
+      }
       const dev = d.teoVal - d.realVal;
       if (dev === 0) return "rgba(100, 116, 139, 0.55)";
       if (dev > 0) return "rgba(22, 163, 74, 0.55)"; // Adelanto (verde)
@@ -718,6 +792,12 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
       return "rgba(220, 38, 38, 0.55)"; // Atraso > 30 (rojo)
     })
     .attr("stroke", d => {
+      if (type === 'espera_carga_real') {
+        const espera = d.realVal;
+        if (espera <= 5) return "#16a34a"; // Verde
+        if (espera <= 10) return "#d97706"; // Naranja / Amarillo
+        return "#dc2626"; // Rojo
+      }
       if (type === 'llegada_obra') {
         const culpritColor = getPuntualidadCulpritColor(d);
         if (culpritColor) return culpritColor;
@@ -743,7 +823,16 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     const dev = d.teoVal - d.realVal;
     let mFill, mStroke;
 
-    if (dev === 0) {
+    if (type === 'espera_carga_real') {
+      const espera = d.realVal;
+      if (espera <= 5) {
+        mFill = "#22c55e"; mStroke = "#16a34a";
+      } else if (espera <= 10) {
+        mFill = "#fde047"; mStroke = "#d97706";
+      } else {
+        mFill = "#ef4444"; mStroke = "#dc2626";
+      }
+    } else if (dev === 0) {
       mFill = "#475569"; mStroke = "#475569";
     } else if (dev > 0) {
       mFill = "#22c55e"; mStroke = "#22c55e";
@@ -855,6 +944,24 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
         <strong>Llegada Obra Real (Estadía):</strong> ${formatTime(pEnObra)}<br/>
         <strong>Duración Estadía Teórica:</strong> ${teoDuration} min.<br/>
         <strong>Duración Estadía Real:</strong> ${realDuration} min.<br/>
+      `;
+    } else if (type === 'espera_carga_real') {
+      const esperaMin = d.realVal;
+      if (esperaMin <= 5) {
+        diffText = `${esperaMin} min. (Normal: ≤5 min)`;
+        diffColor = "#16a34a";
+      } else if (esperaMin <= 10) {
+        diffText = `${esperaMin} min. (Moderado: 5-10 min)`;
+        diffColor = "#d97706";
+      } else {
+        diffText = `${esperaMin} min. (Crítico: >10 min)`;
+        diffColor = "#dc2626";
+      }
+
+      timeDetailsHtml = `
+        <strong>Hora de Impresión (Impreso):</strong> ${formatTime(pImpreso)}<br/>
+        <strong>Hora de Inicio Carga:</strong> ${formatTime(pInicioCarga)}<br/>
+        <strong>Espera de Carga Real:</strong> ${esperaMin} min.<br/>
       `;
     } else if (type === 'carga') {
       const teoDuration = d.pedido.TiempoCarga || 0;
@@ -1213,7 +1320,16 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     const dev = d.teoVal - d.realVal;
     let mFill, mStroke;
 
-    if (dev === 0) {
+    if (type === 'espera_carga_real') {
+      const espera = d.realVal;
+      if (espera <= 5) {
+        mFill = "rgba(22, 163, 74, 0.65)"; mStroke = "#16a34a";
+      } else if (espera <= 10) {
+        mFill = "rgba(234, 179, 8, 0.75)"; mStroke = "#d97706";
+      } else {
+        mFill = "rgba(220, 38, 38, 0.65)"; mStroke = "#dc2626";
+      }
+    } else if (dev === 0) {
       mFill = "rgba(100, 116, 139, 0.55)"; mStroke = "#64748b";
     } else if (dev > 0) {
       mFill = "rgba(22, 163, 74, 0.55)"; mStroke = "#16a34a";
@@ -1322,14 +1438,32 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
   }
   // --- FIN LEYENDA PIE CHART ---
 
-  // --- INICIO LEYENDA TIEMPO PROMEDIO REAL Y DESVIACION ESTANDAR DIA COMPLETO (CARGA) ---
-  if (type === 'carga' && pairedData.length > 0) {
+  // --- INICIO LEYENDA TIEMPO PROMEDIO REAL Y DESVIACION ESTANDAR DIA COMPLETO (CARGA Y ESPERA CARGA REAL) ---
+  if ((type === 'carga' || type === 'espera_carga_real') && pairedData.length > 0) {
     const realVals = pairedData.map(d => d.realVal);
     const dailyAvg = d3.mean(realVals);
     const dailyStd = realVals.length > 1 ? d3.deviation(realVals) : 0;
 
-    const legendX = margin.left + innerW - 170;
+    // Calcular bins de 5 minutos para Pearson
+    const bins5 = [];
+    for (let min = 360; min < 1200; min += 5) {
+      const pts = pairedData.filter(d => d.x >= min && d.x < min + 5);
+      if (pts.length > 0) {
+        const count = pts.length;
+        const maxVal = d3.max(pts, d => d.realVal) || 0;
+        bins5.push({ count, maxVal });
+      }
+    }
+    const pearson = calcPearsonCorrelation(bins5.map(b => b.count), bins5.map(b => b.maxVal));
+    const rFormatted = (pearson.r >= 0 ? "+" : "") + pearson.r.toFixed(2);
+
+    const cardTitle = type === 'espera_carga_real' 
+      ? "Espera Carga Real del Día" 
+      : "Pre + C + P Real del Día";
+
+    const legendX = margin.left + innerW - 185;
     const legendY = margin.top + 10;
+    const cardHeight = type === 'espera_carga_real' ? 60 : 45;
 
     const cargaLegendG = svg.append("g")
       .attr("transform", `translate(${legendX}, ${legendY})`);
@@ -1338,8 +1472,8 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     cargaLegendG.append("rect")
       .attr("x", 0)
       .attr("y", 0)
-      .attr("width", 155)
-      .attr("height", 45)
+      .attr("width", 175)
+      .attr("height", cardHeight)
       .attr("fill", "#ffffff")
       .attr("stroke", "#cbd5e1")
       .attr("stroke-width", "1px")
@@ -1349,27 +1483,44 @@ function drawScatterTeoricoReal(containerId, containerParentId, pairedData, gran
     // Título de la leyenda
     cargaLegendG.append("text")
       .attr("x", 10)
-      .attr("y", 16)
+      .attr("y", 15)
       .attr("fill", "#475569")
       .style("font-size", "10px")
       .style("font-weight", "bold")
       .style("font-family", "sans-serif")
-      .text("Pre + C + P Real del Día");
+      .text(cardTitle);
 
     // Promedio y Desviación Estándar
     cargaLegendG.append("text")
       .attr("x", 10)
-      .attr("y", 33)
+      .attr("y", 30)
       .attr("fill", "#1e293b")
-      .style("font-size", "12px")
+      .style("font-size", "11px")
       .style("font-weight", "bold")
       .style("font-family", "sans-serif")
       .text(`${dailyAvg.toFixed(1)} min `)
       .append("tspan")
       .attr("fill", "#64748b")
-      .style("font-size", "10px")
+      .style("font-size", "9.5px")
       .style("font-weight", "normal")
       .text(`(±${dailyStd.toFixed(1)} min)`);
+
+    if (type === 'espera_carga_real') {
+      // Coeficiente de Correlación Pearson
+      cargaLegendG.append("text")
+        .attr("x", 10)
+        .attr("y", 48)
+        .attr("fill", "#0284c7")
+        .style("font-size", "10.5px")
+        .style("font-weight", "bold")
+        .style("font-family", "sans-serif")
+        .text(`Correlación r: ${rFormatted}`)
+        .append("tspan")
+        .attr("fill", "#475569")
+        .style("font-size", "9.5px")
+        .style("font-weight", "normal")
+        .text(pearson.r > 0.6 ? " (Fuerte)" : (pearson.r > 0.3 ? " (Moderada)" : " (Débil)"));
+    }
   }
   // --- FIN LEYENDA CARGA ---
 }
@@ -1378,20 +1529,20 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
   const container = d3.select(containerSelector);
   container.selectAll("*").remove(); // Limpiar anterior
 
-  const isDemora = ['carga', 'viaje_ida', 'estadia', 'viaje_regreso', 'ciclo'].includes(type);
-  const termAtrasos = isDemora ? "Demoras" : "Atrasos";
-  const termAtrasados = isDemora ? "Demoradas" : "Atrasados";
-  const termCriticas = isDemora ? "Críticas" : "Críticos";
-  const termModeradas = isDemora ? "Moderadas" : "Moderados";
-  const termCritica = isDemora ? "Crítica" : "Crítico";
-  const termModerada = isDemora ? "Moderada" : "Moderado";
+  const isDemora = ['carga', 'viaje_ida', 'estadia', 'viaje_regreso', 'ciclo', 'espera_carga_real'].includes(type);
+  const isEspera = (type === 'espera_carga_real');
+  const termAtrasos = isEspera ? "Esperas" : (isDemora ? "Demoras" : "Atrasos");
+  const termAtrasados = isEspera ? "Esperas" : (isDemora ? "Demoradas" : "Atrasados");
+  const termCriticas = isEspera ? "Críticas" : (isDemora ? "Críticas" : "Críticos");
+  const termModeradas = isEspera ? "Moderadas" : (isDemora ? "Moderadas" : "Moderados");
+  const termCritica = isEspera ? "Crítica" : (isDemora ? "Crítica" : "Crítico");
+  const termModerada = isEspera ? "Moderada" : (isDemora ? "Moderada" : "Moderado");
 
   const width = 1260;
-  const height = 190;
-  const margin = { top: 20, right: 30, bottom: 35, left: 60 };
+  const height = 260;
+  const margin = { top: 25, right: 30, bottom: 35, left: 60 };
   const innerW = width - margin.left - margin.right;
   const innerH = height - margin.top - margin.bottom;
-
   const svg = container.append("svg")
     .attr("id", svgSelector.replace("#", ""))
     .attr("width", width)
@@ -1402,26 +1553,26 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
   const g = svg.append("g")
     .attr("transform", `translate(${margin.left}, ${margin.top})`);
 
-  // Escalas
-  const xScale = d3.scaleLinear().domain([360, 1200]).range([0, innerW]);
-  const yScale = d3.scaleLinear().domain([0, 100]).range([innerH, 0]);
-
-  // Generar bins de 30 minutos (media hora) de 06:00 (360) a 20:00 (1200)
+  // Generar bins (pasos de 5 min con ventana de acumulación de 30 min [media hora] para Espera, 30 min para los demás)
+  const stepMin = isEspera ? 5 : 30;
+  const windowMin = 30;
   const bins = [];
-  for (let min = 360; min < 1200; min += 30) {
-    const nextMin = min + 30;
+  for (let min = 360; min < 1200; min += stepMin) {
+    const nextMin = min + windowMin;
     
-    // Filtrar puntos en este intervalo
+    // Filtrar puntos en la ventana de acumulación (30 minutos siguientes desde min)
     const pointsInBin = pairedData.filter(d => d.x >= min && d.x < nextMin);
     const totalCount = pointsInBin.length;
     
-    // Clasificar atrasos
+    // Clasificar atrasos / esperas
     const redCount = pointsInBin.filter(d => {
+      if (isEspera) return d.realVal > 10;
       const atraso = d.realVal - d.teoVal;
       return atraso > 30;
     }).length;
 
     const yellowCount = pointsInBin.filter(d => {
+      if (isEspera) return d.realVal > 5 && d.realVal <= 10;
       const atraso = d.realVal - d.teoVal;
       return atraso > 5 && atraso <= 30;
     }).length;
@@ -1440,10 +1591,19 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
     });
   }
 
+  // Escalas
+  const xScale = d3.scaleLinear().domain([360, 1200]).range([0, innerW]);
+  let yScale;
+  if (isEspera) {
+    const maxCount = d3.max(bins.map(b => b.totalCount)) || 5;
+    const yMaxCount = Math.max(5, Math.ceil(maxCount / 2) * 2 + 1);
+    yScale = d3.scaleLinear().domain([0, yMaxCount]).range([innerH, 0]);
+  } else {
+    yScale = d3.scaleLinear().domain([0, 100]).range([innerH, 0]);
+  }
+
   // Cuadrícula y guías
   const ticks = [360, 420, 480, 540, 600, 660, 720, 780, 840, 900, 960, 1020, 1080, 1140, 1200];
-  const yTicks = [0, 25, 50, 75, 100];
-
   const gridG = g.append("g").attr("class", "grid");
   ticks.forEach(t => {
     gridG.append("line")
@@ -1451,11 +1611,20 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
       .attr("stroke", "#eee").attr("stroke-dasharray", "2,2");
   });
 
-  yTicks.forEach(val => {
-    gridG.append("line")
-      .attr("x1", 0).attr("x2", innerW).attr("y1", yScale(val)).attr("y2", yScale(val))
-      .attr("stroke", "#eee").attr("stroke-dasharray", "2,2");
-  });
+  if (isEspera) {
+    const countTicks = yScale.ticks(5);
+    countTicks.forEach(val => {
+      gridG.append("line")
+        .attr("x1", 0).attr("x2", innerW).attr("y1", yScale(val)).attr("y2", yScale(val))
+        .attr("stroke", "#eee").attr("stroke-dasharray", "2,2");
+    });
+  } else {
+    [0, 25, 50, 75, 100].forEach(val => {
+      gridG.append("line")
+        .attr("x1", 0).attr("x2", innerW).attr("y1", yScale(val)).attr("y2", yScale(val))
+        .attr("stroke", "#eee").attr("stroke-dasharray", "2,2");
+    });
+  }
 
   const formatTime = min => {
     const hh = String(Math.floor(min / 60)).padStart(2, '0');
@@ -1469,34 +1638,42 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
     .call(d3.axisBottom(xScale).tickValues(ticks).tickFormat(formatTime))
     .style("font-family", "sans-serif").style("font-size", "10px");
 
-  g.append("g")
-    .call(d3.axisLeft(yScale).tickValues(yTicks).tickFormat(d => `${d}%`))
-    .style("font-family", "sans-serif").style("font-size", "10px");
+  if (isEspera) {
+    g.append("g")
+      .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format("d")))
+      .style("font-family", "sans-serif").style("font-size", "10px")
+      .attr("color", "#2563eb");
+  } else {
+    g.append("g")
+      .call(d3.axisLeft(yScale).tickValues([0, 25, 50, 75, 100]).tickFormat(d => `${d}%`))
+      .style("font-family", "sans-serif").style("font-size", "10px");
+  }
 
   // Etiquetas
   svg.append("text")
     .attr("x", margin.left + innerW / 2).attr("y", height - 5)
     .attr("text-anchor", "middle").attr("fill", "#475569")
     .style("font-size", "11px").style("font-weight", "600").style("font-family", "sans-serif")
-    .text("Intervalo de Tiempo (Hora de Inicio)");
+    .text("Intervalo de Tiempo (Hora de Impresión)");
 
   svg.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -(margin.top + innerH / 2)).attr("y", 15)
-    .attr("text-anchor", "middle").attr("fill", "#475569")
+    .attr("text-anchor", "middle").attr("fill", isEspera ? "#2563eb" : "#475569")
     .style("font-size", "11px").style("font-weight", "600").style("font-family", "sans-serif")
-    .text(`% ${termAtrasados} (>5 min)`);
+    .text(isEspera ? "Cantidad de Tickets (acumulado 30 min)" : `% ${termAtrasados} (>5 min)`);
 
   // Título secundario
   const isPuntualidad = (type === 'llegada_obra');
-  const secondaryTitleSuffix = isPuntualidad
-    ? ` / Promedio de atraso (eje secundario)`
-    : ` / Tiempo promedio real (eje secundario)`;
+  const secondaryTitle = isEspera
+    ? `Cantidad de Tickets en 30 min (azul), Espera Promedio (naranjo) y Bigote a Máximo (rojo) - Pasos cada 5 Minutos`
+    : `Distribución de ${termAtrasos} ${isEspera ? 'Críticas (>10 min) y Moderadas (5-10 min)' : `${termCriticas} (>30 min) y ${termModeradas} (5-30 min)`} cada Media Hora${isPuntualidad ? ' / Promedio de atraso (eje secundario)' : ' / Tiempo promedio real (eje secundario)'}`;
+  
   svg.append("text")
     .attr("x", margin.left + innerW / 2).attr("y", 12)
     .attr("text-anchor", "middle").attr("fill", "#334155")
     .style("font-size", "12px").style("font-weight", "bold").style("font-family", "sans-serif")
-    .text(`Distribución de ${termAtrasos} ${termCriticas} (>30 min) y ${termModeradas} (5-30 min) cada Media Hora${secondaryTitleSuffix}`);
+    .text(secondaryTitle);
 
   // Tooltip flotante global
   let tooltip = d3.select(".tooltip");
@@ -1506,7 +1683,36 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
       .style("display", "none");
   }
 
-  // Dibujar las barras apiladas mediante grupos por bin
+  // Helper para generar tooltip de 3 valores en Espera de Carga Real / Scatter Plot
+  const getEsperaTooltipHtml = (startMin, endMin) => {
+    const bin = bins.find(b => b.startMin === startMin) || { totalCount: 0 };
+    const ld = lineData.find(l => l.startMin === startMin) || { y: 0, maxVal: 0 };
+    const count = bin.totalCount || 0;
+    const avgText = count > 0 ? `${ld.y.toFixed(1)} min` : "0 min";
+    const maxText = count > 0 ? `${ld.maxVal.toFixed(0)} min` : "0 min";
+
+    return `
+      <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px; min-width: 180px;">
+        <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px; color: #1e293b;">
+          Ventana (30 min): ${formatTime(startMin)} - ${formatTime(endMin)}
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;">
+          <span style="display:inline-block; width:8px; height:8px; background:#2563eb; border-radius:1px;"></span>
+          <strong>Tickets en 30 min:</strong> ${count}
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;">
+          <span style="display:inline-block; width:8px; height:8px; background:#f97316; border-radius:50%;"></span>
+          <strong>Espera Promedio en 30 min:</strong> ${avgText}
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="display:inline-block; width:8px; height:8px; background:#dc2626; border-radius:50%;"></span>
+          <strong>Espera Máxima en 30 min:</strong> ${maxText}
+        </div>
+      </div>
+    `;
+  };
+
+  // Dibujar grupos por bin (zonas interactivas)
   const binGroups = g.selectAll(".bin-group")
     .data(bins)
     .enter()
@@ -1514,9 +1720,9 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
     .attr("class", "bin-group")
     .style("cursor", "pointer")
     .on("mouseover", function(ev, d) {
-      d3.select(this).selectAll("rect").attr("opacity", 1.0);
+      if (!isEspera) d3.select(this).selectAll("rect").attr("opacity", 1.0);
       
-      const html = `
+      const html = isEspera ? getEsperaTooltipHtml(d.startMin, d.endMin) : `
         <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px; min-width: 180px;">
           <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">
             Intervalo: ${formatTime(d.startMin)} - ${formatTime(d.endMin)}
@@ -1550,36 +1756,72 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
         .style("top", `${ev.pageY - tooltipH - 15}px`);
     })
     .on("mouseleave", function() {
-      d3.select(this).selectAll("rect").attr("opacity", 0.75);
+      if (!isEspera) d3.select(this).selectAll("rect").attr("opacity", 0.75);
       tooltip.style("display", "none");
     });
 
-  // 1. Segmento Rojo (Atraso Crítico >30 min) en la parte inferior de la pila
-  binGroups.append("rect")
-    .attr("x", d => xScale(d.startMin) + 1)
-    .attr("y", d => yScale(d.redPercentage))
-    .attr("width", d => Math.max(1, xScale(d.endMin) - xScale(d.startMin) - 2))
-    .attr("height", d => innerH - yScale(d.redPercentage))
-    .attr("fill", "#dc2626")
-    .attr("opacity", 0.75)
-    .attr("rx", 1);
+  if (!isEspera) {
+    // 1. Segmento Rojo (Atraso Crítico >30 min)
+    binGroups.append("rect")
+      .attr("x", d => xScale(d.startMin) + 1)
+      .attr("y", d => yScale(d.redPercentage))
+      .attr("width", d => Math.max(1, xScale(d.endMin) - xScale(d.startMin) - 2))
+      .attr("height", d => innerH - yScale(d.redPercentage))
+      .attr("fill", "#dc2626")
+      .attr("opacity", 0.75)
+      .attr("rx", 1);
 
-  // 2. Segmento Amarillo/Naranja (Atraso Moderado 5-30 min) en la parte superior de la pila
-  binGroups.append("rect")
-    .attr("x", d => xScale(d.startMin) + 1)
-    .attr("y", d => yScale(d.redPercentage + d.yellowPercentage))
-    .attr("width", d => Math.max(1, xScale(d.endMin) - xScale(d.startMin) - 2))
-    .attr("height", d => yScale(d.redPercentage) - yScale(d.redPercentage + d.yellowPercentage))
-    .attr("fill", "#f59e0b")
-    .attr("stroke", "#d97706")
-    .attr("stroke-width", 0.5)
-    .attr("opacity", 0.75)
-    .attr("rx", 1);
+    // 2. Segmento Amarillo/Naranja (Atraso Moderado 5-30 min)
+    binGroups.append("rect")
+      .attr("x", d => xScale(d.startMin) + 1)
+      .attr("y", d => yScale(d.redPercentage + d.yellowPercentage))
+      .attr("width", d => Math.max(1, xScale(d.endMin) - xScale(d.startMin) - 2))
+      .attr("height", d => yScale(d.redPercentage) - yScale(d.redPercentage + d.yellowPercentage))
+      .attr("fill", "#f59e0b")
+      .attr("stroke", "#d97706")
+      .attr("stroke-width", 0.5)
+      .attr("opacity", 0.75)
+      .attr("rx", 1);
+  } else {
+    // Para Espera de Carga Real: agregar zonas de captura transparentes para interacción
+    binGroups.append("rect")
+      .attr("x", d => xScale(d.startMin))
+      .attr("y", 0)
+      .attr("width", d => Math.max(1, xScale(d.endMin) - xScale(d.startMin)))
+      .attr("height", innerH)
+      .attr("fill", "transparent");
 
-  // Dibujar promedio de tiempo real (o atraso) en el gráfico inferior
+    // Dibujar línea de Cantidad de Tickets (Azul)
+    const countLineGen = d3.line()
+      .x(d => xScale(d.startMin + stepMin / 2))
+      .y(d => yScale(d.totalCount))
+      .curve(d3.curveMonotoneX);
+
+    g.append("path")
+      .datum(bins)
+      .attr("class", "count-tickets-line")
+      .attr("d", countLineGen)
+      .attr("fill", "none")
+      .attr("stroke", "#2563eb")
+      .attr("stroke-width", 2);
+
+    g.selectAll(".count-ticket-dot")
+      .data(bins.filter(d => d.totalCount > 0))
+      .enter()
+      .append("rect")
+      .attr("class", "count-ticket-dot")
+      .attr("x", d => xScale(d.startMin + stepMin / 2) - 2.5)
+      .attr("y", d => yScale(d.totalCount) - 2.5)
+      .attr("width", 5)
+      .attr("height", 5)
+      .attr("fill", "#2563eb")
+      .attr("rx", 1);
+  }
+
+  // Dibujar promedio y máximo de tiempo real en el gráfico inferior
   const lineData = [];
-  for (let min = 360; min < 1200; min += 30) {
-    const nextMin = min + 30;
+  for (let min = 360; min < 1200; min += stepMin) {
+    const nextMin = min + windowMin;
     const pointsInBin = pairedData.filter(d => d.x >= min && d.x < nextMin);
     
     if (isPuntualidad) {
@@ -1591,7 +1833,7 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
         const stdDev = values.length > 1 ? d3.deviation(values) : 0;
 
         lineData.push({
-          x: min + 15,
+          x: min + stepMin / 2,
           y: avgVal,
           stdDev: stdDev,
           delayedCount: delayedPoints.length,
@@ -1601,15 +1843,17 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
         });
       }
     } else {
-      // Para Carga / otros: promedio del tiempo real sobre TODOS los despachos
+      // Para Carga / Espera de Carga Real / otros: promedio y máximo del tiempo real sobre TODOS los despachos en la ventana
       if (pointsInBin.length > 0) {
         const values = pointsInBin.map(d => d.realVal);
         const avgVal = d3.mean(values);
+        const maxVal = d3.max(values) || 0;
         const stdDev = values.length > 1 ? d3.deviation(values) : 0;
 
         lineData.push({
-          x: min + 15,
+          x: min + stepMin / 2,
           y: avgVal,
+          maxVal: maxVal,
           stdDev: stdDev,
           totalCount: pointsInBin.length,
           startMin: min,
@@ -1621,127 +1865,184 @@ function drawAtrasosBarChart(svgSelector, containerSelector, pairedData, granula
 
   if (lineData.length > 0) {
     const yScaleRight = d3.scaleLinear().domain([0, 60]).range([innerH, 0]);
+    const rightColor = isEspera ? "#dc2626" : "#7f1d1d";
 
     // Eje Y derecho (escala secundaria de tiempo) - Ticks fijos 0 a 60 min
     g.append("g")
       .attr("transform", `translate(${innerW}, 0)`)
       .call(d3.axisRight(yScaleRight).tickValues([0, 15, 30, 45, 60]).tickFormat(d => isPuntualidad ? `+${d} min` : `${d} min`))
       .style("font-family", "sans-serif").style("font-size", "10px")
-      .attr("color", "#7f1d1d");
+      .attr("color", rightColor);
 
-    // 1. Dibujar Caja y Bigote (Box and Whisker) para Desviación Estándar
-    g.selectAll(".avg-std-whisker")
-      .data(lineData)
-      .enter()
-      .append("line")
-      .attr("class", "avg-std-whisker")
-      .attr("x1", d => xScale(d.x))
-      .attr("x2", d => xScale(d.x))
-      .attr("y1", d => yScaleRight(Math.max(0, d.y - d.stdDev)))
-      .attr("y2", d => yScaleRight(d.y + d.stdDev))
-      .attr("stroke", "#7f1d1d")
-      .attr("stroke-width", 1.2)
-      .style("opacity", 0.6);
+    if (!isEspera) {
+      // 1. Dibujar Caja y Bigote (Box and Whisker) para Desviación Estándar (solo si no es Espera)
+      g.selectAll(".avg-std-whisker")
+        .data(lineData)
+        .enter()
+        .append("line")
+        .attr("class", "avg-std-whisker")
+        .attr("x1", d => xScale(d.x))
+        .attr("x2", d => xScale(d.x))
+        .attr("y1", d => yScaleRight(Math.max(0, d.y - d.stdDev)))
+        .attr("y2", d => yScaleRight(d.y + d.stdDev))
+        .attr("stroke", "#7f1d1d")
+        .attr("stroke-width", 1.2)
+        .style("opacity", 0.6);
 
-    // Tapa superior del bigote
-    g.selectAll(".avg-std-cap-top")
-      .data(lineData)
-      .enter()
-      .append("line")
-      .attr("class", "avg-std-cap-top")
-      .attr("x1", d => xScale(d.x) - 4)
-      .attr("x2", d => xScale(d.x) + 4)
-      .attr("y1", d => yScaleRight(d.y + d.stdDev))
-      .attr("y2", d => yScaleRight(d.y + d.stdDev))
-      .attr("stroke", "#7f1d1d")
-      .attr("stroke-width", 1.2)
-      .style("opacity", 0.6);
+      // Tapa superior del bigote
+      g.selectAll(".avg-std-cap-top")
+        .data(lineData)
+        .enter()
+        .append("line")
+        .attr("class", "avg-std-cap-top")
+        .attr("x1", d => xScale(d.x) - 4)
+        .attr("x2", d => xScale(d.x) + 4)
+        .attr("y1", d => yScaleRight(d.y + d.stdDev))
+        .attr("y2", d => yScaleRight(d.y + d.stdDev))
+        .attr("stroke", "#7f1d1d")
+        .attr("stroke-width", 1.2)
+        .style("opacity", 0.6);
 
-    // Tapa inferior del bigote
-    g.selectAll(".avg-std-cap-bottom")
-      .data(lineData)
-      .enter()
-      .append("line")
-      .attr("class", "avg-std-cap-bottom")
-      .attr("x1", d => xScale(d.x) - 4)
-      .attr("x2", d => xScale(d.x) + 4)
-      .attr("y1", d => yScaleRight(Math.max(0, d.y - d.stdDev)))
-      .attr("y2", d => yScaleRight(Math.max(0, d.y - d.stdDev)))
-      .attr("stroke", "#7f1d1d")
-      .attr("stroke-width", 1.2)
-      .style("opacity", 0.6);
+      // Tapa inferior del bigote
+      g.selectAll(".avg-std-cap-bottom")
+        .data(lineData)
+        .enter()
+        .append("line")
+        .attr("class", "avg-std-cap-bottom")
+        .attr("x1", d => xScale(d.x) - 4)
+        .attr("x2", d => xScale(d.x) + 4)
+        .attr("y1", d => yScaleRight(Math.max(0, d.y - d.stdDev)))
+        .attr("y2", d => yScaleRight(Math.max(0, d.y - d.stdDev)))
+        .attr("stroke", "#7f1d1d")
+        .attr("stroke-width", 1.2)
+        .style("opacity", 0.6);
 
-    // 2. Generador de línea promedio
-    const lineGen = d3.line()
-      .x(d => xScale(d.x))
-      .y(d => yScaleRight(d.y))
-      .curve(d3.curveMonotoneX);
+      // 2. Generador de línea promedio (para modos estándar)
+      const lineGen = d3.line()
+        .x(d => xScale(d.x))
+        .y(d => yScaleRight(d.y))
+        .curve(d3.curveMonotoneX);
 
-    // Línea de promedio
-    g.append("path")
-      .datum(lineData)
-      .attr("class", "avg-delay-line")
-      .attr("d", lineGen)
-      .attr("fill", "none")
-      .attr("stroke", "#7f1d1d")
-      .attr("stroke-width", 2.5)
-      .attr("stroke-dasharray", "4,4");
+      // Línea de promedio
+      g.append("path")
+        .datum(lineData)
+        .attr("class", "avg-delay-line")
+        .attr("d", lineGen)
+        .attr("fill", "none")
+        .attr("stroke", "#7f1d1d")
+        .attr("stroke-width", 2.5)
+        .attr("stroke-dasharray", "4,4");
 
-    // Nodos del promedio
-    g.selectAll(".avg-delay-node-bottom")
-      .data(lineData)
-      .enter()
-      .append("circle")
-      .attr("class", "avg-delay-node-bottom")
-      .attr("cx", d => xScale(d.x))
-      .attr("cy", d => yScaleRight(d.y))
-      .attr("r", 4.5)
-      .attr("fill", "#ffffff")
-      .attr("stroke", "#7f1d1d")
-      .attr("stroke-width", 2.0)
-      .style("cursor", "pointer")
-      .on("mouseover", function(ev, d) {
-        d3.select(this).attr("r", 7).attr("fill", "#7f1d1d");
+      // Nodos del promedio (solo si no es Espera)
+      g.selectAll(".avg-delay-node-bottom")
+        .data(lineData)
+        .enter()
+        .append("circle")
+        .attr("class", "avg-delay-node-bottom")
+        .attr("cx", d => xScale(d.x))
+        .attr("cy", d => yScaleRight(d.y))
+        .attr("r", 4.5)
+        .attr("fill", "#ffffff")
+        .attr("stroke", "#7f1d1d")
+        .attr("stroke-width", 2.0)
+        .style("cursor", "pointer")
+        .on("mouseover", function(ev, d) {
+          d3.select(this).attr("r", 7).attr("fill", "#7f1d1d");
 
-        const titleText = isPuntualidad ? 'Resumen de Atraso' : 'Tiempo Real Promedio';
-        const labelProm = isPuntualidad ? 'Promedio' : 'Promedio Real';
-        const detailText = isPuntualidad
-          ? `<strong>Despachos con Atraso:</strong> ${d.delayedCount} de ${d.totalCount}`
-          : `<strong>Total Despachos:</strong> ${d.totalCount}`;
+          const titleText = isPuntualidad ? 'Resumen de Atraso' : 'Tiempo Real Promedio';
+          const labelProm = isPuntualidad ? 'Promedio' : 'Promedio Real';
+          const detailText = isPuntualidad
+            ? `<strong>Despachos con Atraso:</strong> ${d.delayedCount} de ${d.totalCount}`
+            : `<strong>Total Despachos:</strong> ${d.totalCount}`;
 
-        const html = `
-          <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px; min-width: 170px;">
-            <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px; color: #7f1d1d;">
-              ${titleText}
+          const html = `
+            <div style="font-family: system-ui, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; padding: 4px; min-width: 170px;">
+              <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px; color: #7f1d1d;">
+                ${titleText}
+              </div>
+              <strong>Intervalo:</strong> ${formatTime(d.startMin)} - ${formatTime(d.endMin)}<br/>
+              <strong>${labelProm}:</strong> ${d.y.toFixed(1)} min<br/>
+              <strong>Desv. Estándar:</strong> ±${d.stdDev.toFixed(1)} min<br/>
+              ${detailText}
             </div>
-            <strong>Intervalo:</strong> ${formatTime(d.startMin)} - ${formatTime(d.endMin)}<br/>
-            <strong>${labelProm}:</strong> ${d.y.toFixed(1)} min<br/>
-            <strong>Desv. Estándar:</strong> ±${d.stdDev.toFixed(1)} min<br/>
-            ${detailText}
-          </div>
-        `;
-        tooltip.html(html).style("display", "block");
+          `;
+          tooltip.html(html).style("display", "block");
 
-        const tooltipNode = tooltip.node();
-        const tooltipW = tooltipNode.offsetWidth;
-        const tooltipH = tooltipNode.offsetHeight;
+          const tooltipNode = tooltip.node();
+          const tooltipW = tooltipNode.offsetWidth;
+          const tooltipH = tooltipNode.offsetHeight;
 
-        tooltip
-          .style("left", `${ev.pageX - tooltipW / 2}px`)
-          .style("top", `${ev.pageY - tooltipH - 15}px`)
-          .style("transform", "none");
-      })
-      .on("mousemove", function(ev) {
-        const tooltipNode = tooltip.node();
-        const tooltipW = tooltipNode.offsetWidth;
-        const tooltipH = tooltipNode.offsetHeight;
-        tooltip
-          .style("left", `${ev.pageX - tooltipW / 2}px`)
-          .style("top", `${ev.pageY - tooltipH - 15}px`);
-      })
-      .on("mouseleave", function() {
-        d3.select(this).attr("r", 4.5).attr("fill", "#ffffff");
-        tooltip.style("display", "none");
-      });
+          tooltip
+            .style("left", `${ev.pageX - tooltipW / 2}px`)
+            .style("top", `${ev.pageY - tooltipH - 15}px`)
+            .style("transform", "none");
+        })
+        .on("mousemove", function(ev) {
+          const tooltipNode = tooltip.node();
+          const tooltipW = tooltipNode.offsetWidth;
+          const tooltipH = tooltipNode.offsetHeight;
+          tooltip
+            .style("left", `${ev.pageX - tooltipW / 2}px`)
+            .style("top", `${ev.pageY - tooltipH - 15}px`);
+        })
+        .on("mouseleave", function() {
+          d3.select(this).attr("r", 4.5).attr("fill", "#ffffff");
+          tooltip.style("display", "none");
+        });
+    } else {
+      // Para Espera de Carga Real / Scatter Plot:
+      // 1. Bigote vertical desde el promedio (punto en línea naranja) hasta la espera máxima
+      g.selectAll(".espera-max-whisker")
+        .data(lineData)
+        .enter()
+        .append("line")
+        .attr("class", "espera-max-whisker")
+        .attr("x1", d => xScale(d.x))
+        .attr("x2", d => xScale(d.x))
+        .attr("y1", d => yScaleRight(Math.min(60, d.y)))
+        .attr("y2", d => yScaleRight(Math.min(60, d.maxVal)))
+        .attr("stroke", "#dc2626")
+        .attr("stroke-width", 1.2)
+        .style("opacity", 0.75);
+
+      // Tapa superior del bigote (en el punto de la espera máxima)
+      g.selectAll(".espera-max-cap")
+        .data(lineData)
+        .enter()
+        .append("line")
+        .attr("class", "espera-max-cap")
+        .attr("x1", d => xScale(d.x) - 3)
+        .attr("x2", d => xScale(d.x) + 3)
+        .attr("y1", d => yScaleRight(Math.min(60, d.maxVal)))
+        .attr("y2", d => yScaleRight(Math.min(60, d.maxVal)))
+        .attr("stroke", "#dc2626")
+        .attr("stroke-width", 1.2)
+        .style("opacity", 0.75);
+
+      // 2. Curva de Espera Promedio de 15 minutos (Línea Naranjo)
+      const avgLineGen = d3.line()
+        .x(d => xScale(d.x))
+        .y(d => yScaleRight(Math.min(60, d.y)))
+        .curve(d3.curveMonotoneX);
+
+      g.append("path")
+        .datum(lineData)
+        .attr("class", "avg-espera-line-orange")
+        .attr("d", avgLineGen)
+        .attr("fill", "none")
+        .attr("stroke", "#f97316")
+        .attr("stroke-width", 2.0);
+
+      // Puntos en el promedio (punto rojo sobre la línea naranja)
+      g.selectAll(".avg-espera-dot-red")
+        .data(lineData)
+        .enter()
+        .append("circle")
+        .attr("class", "avg-espera-dot-red")
+        .attr("cx", d => xScale(d.x))
+        .attr("cy", d => yScaleRight(Math.min(60, d.y)))
+        .attr("r", 3)
+        .attr("fill", "#dc2626");
+    }
   }
 }
